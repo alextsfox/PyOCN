@@ -116,12 +116,6 @@ void add_Arr2D(Arr2D a, Arr2D b, Arr2D *result) {
         result->data[i] = a.data[i] + b.data[i];
     }
 }
-void add_Arr2D_by_ref(Arr2D *a, Arr2D *b, Arr2D *result) {
-    assert_binary_op_compatible(*a, *b, result);
-    for (int32_t i = 0; i < a->rows * a->cols; i++) {
-        result->data[i] = a->data[i] + b->data[i];
-    }
-}
 void sub_Arr2D(Arr2D a, Arr2D b, Arr2D *result) {
     assert_binary_op_compatible(a, b, result);
     for (int32_t i = 0; i < a.rows * a.cols; i++) {

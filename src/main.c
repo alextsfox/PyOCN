@@ -9,7 +9,7 @@
 
 #define M 255
 #define N 255
-#define REPS 30
+#define REPS 100
 
 int main(){
     const double dRAND_MAX = (double)RAND_MAX;
@@ -49,10 +49,10 @@ int main(){
         free_Arr2D(&arr2);
         free_Arr2D(&result);
     );
-    TIMEIT("Adding Arrays By Reference", REPS,
+    TIMEIT("Powing Arrays", REPS,
         Arr2D arr2 = copy_Arr2D(arr1);
         Arr2D result = empty_Arr2D(M, N);
-        add_Arr2D_by_ref(&arr1, &arr2, &result);
+        pow_Arr2D(arr1, arr2, &result);
         free_Arr2D(&arr2);
         free_Arr2D(&result);
     );

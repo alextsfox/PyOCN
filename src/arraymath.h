@@ -15,7 +15,6 @@
  * @param result Output array (must be allocated, same shape as a and b)
  */
 void add_Arr2D(Arr2D a, Arr2D b, Arr2D *result);
-void add_Arr2D_by_ref(Arr2D *a, Arr2D *b, Arr2D *result);
 
 /**
  * @brief Element-wise subtraction: result = a - b
