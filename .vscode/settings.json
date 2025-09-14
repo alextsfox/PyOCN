@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "*.eddypro": "ini",
+        "neighbormatrix.c": "cpp"
+    }
+}
