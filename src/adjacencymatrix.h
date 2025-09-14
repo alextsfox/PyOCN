@@ -9,11 +9,15 @@
  * @brief Definition of adjacency matrix and related operations.
  */
 
+typedef int16_t Idx; // for indexing rows and columns
+typedef uint16_t Vertex; // 16-bit unsigned int representing edges to 8 neighbors. Values over 255 are used as return codes.
+typedef uint8_t Clockhand; // 0-7
+
 /**
- * @brief Adjacency matrix structure.
+ * @brief Neighbor matrix structure.
  * 
- * The adjacency matrix is a 2D array where each element indicates the presence
- * (1) or absence (0) of an edge between nodes in a graph. Each element A[i,j] 
+ * The neighbor matrix is a 2D array where each element indicates the presence
+ * (1) or absence (0) of an edge between nodes in a graph. Each element N[i,j] 
  * represents the edges connecting the node at row i, column j to its
  * 8 immediate neighbors as an 8 bit unsigned int. The least significant bit 
  * represents the topmost neighbor, and the bits proceed clockwise from there.
@@ -31,10 +35,10 @@
  * 2 (right), 6 (left), and 7 (top left), so A[1,1] = 0b11000111 = 0xc7
  */
 typedef struct {
-    int32_t rows;
-    int32_t cols;
-    uint8_t *data;
-} AdjMat;
+    Idx rows;
+    Idx cols;
+    Vertex *data;
+} NeighborMat;
 
 /**
  * @brief Contains the row and column indices of neighboring vertices.
@@ -43,13 +47,13 @@ typedef struct {
  * @param col array of column indices of neighbors
  */
 typedef struct{
-    uint8_t n;
-    int32_t row[8];
-    int32_t col[8];
+    Vertex node;
+    Idx row[8];
+    Idx col[8];
 } NeighborVertices;
 
-uint8_t get_AdjMat(AdjMat A, int32_t i, int32_t j);
-void set_AdjMat(AdjMat *A, int32_t i, int32_t j, uint8_t neighbors);
+Vertex get_NeighborMat_bc(NeighborMat A, Idx i, Idx j);
+void set_NeighborMat_bc(NeighborMat *A, Idx i, Idx j, Vertex node);
 
 /**
  * @brief Get the row and column indices of neighboring vertices for a given cell.
@@ -58,7 +62,7 @@ void set_AdjMat(AdjMat *A, int32_t i, int32_t j, uint8_t neighbors);
  * @param j Column index of the cell
  * @return A NeighborVertices struct containing the number of neighbors and their indices
  */
-NeighborVertices get_neighbor_vertices(AdjMat A, int32_t i, int32_t j);
+NeighborVertices get_neighbor_vertices_bc(NeighborMat A, Idx i, Idx j);
 
 /**
  * @brief Get the indices of the neighbor in the direction indicated by the clockhand.
@@ -68,7 +72,7 @@ NeighborVertices get_neighbor_vertices(AdjMat A, int32_t i, int32_t j);
  * @param clockhand An integer from 0 to 7 indicating the direction (0=top, 1=top-right, ..., 7=top-left)
  * @return An array of two integers [i, j] representing the indices of the neighbor, or NULL if no neighbor exists in that direction
  */
-int32_t *get_clockhand_neighbor(AdjMat A, int32_t i, int32_t j, uint8_t clockhand);
+int32_t *get_clockhand_neighbor_bc(NeighborMat A, Idx i, Idx j, Clockhand hand);
 
 /**
  * @brief Represents a permutation of a vertex in the adjacency matrix.
@@ -79,10 +83,10 @@ int32_t *get_clockhand_neighbor(AdjMat A, int32_t i, int32_t j, uint8_t clockhan
  * @param newclockhand The new neighbor value (bitmask) of the vertex after permutation
  */
 typedef struct {
-    int32_t i;
-    int32_t j;
-    uint8_t oldclockhand;
-    uint8_t newclockhand;
+    Idx i;
+    Idx j;
+    Clockhand oldhand;
+    Clockhand newhand;
 } Permutation;
 
 /**
@@ -91,6 +95,6 @@ typedef struct {
  * @param perm The permutation mapping
  * @return 0 if the permutation was successful, 1 if the old edge does not exist, 2 if the new edge already exists, or 3 if both errors occurred
  */
-int permute_vertices(AdjMat *A, Permutation perm);
+int permute_vertices_bc(NeighborMat *A, Permutation perm);
 
 #endif // ADJACENCYMATRIX_H

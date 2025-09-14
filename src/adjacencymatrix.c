@@ -4,142 +4,175 @@
 #include <stdbool.h>
 #include "adjacencymatrix.h"
 
-static void assert_in_bounds(AdjMat A, int32_t i, int32_t j) {
-    assert(i >= 0 && i < A.rows && j >= 0 && j < A.cols);
-}
+#define edge_exists(vert, hand) ((vert) & (1 << (hand)))
+#define SUCCESS 256
+#define NO_EDGE 257
+#define OUT_OF_BOUNDS 258
 
-uint8_t get_AdjMat(AdjMat A, int32_t i, int32_t j) {
-    assert_inbounds(A, i, j);
+typedef int16_t Idx; // for indexing rows and columns
+typedef uint16_t Vertex; // 16-bit unsigned int representing edges to 8 neighbors. Values over 255 are used as return codes.
+typedef uint8_t Clockhand; // 0-7
+
+/**
+ * @brief Neighbor matrix structure.
+ * 
+ * The neighbor matrix is a 2D array where each element indicates the presence
+ * (1) or absence (0) of an edge between vertices in a graph. Each element N[i,j] 
+ * represents the edges connecting the vertex at row i, column j to its
+ * 8 immediate neighbors as an 8 bit unsigned int. The least significant bit 
+ * represents the topmost neighbor, and the bits proceed clockwise from there.
+ * 
+ * Example
+ * -------
+ * Consider the following spanning tree of a 3x3 matrix
+ * o o o
+ *  \|/
+ * o-o-o
+ *    /|
+ * o-o o
+ * 
+ * Vertex 1,1 (in the middle) is connected to neighbors 0 (top), 1 (top right),
+ * 2 (right), 6 (left), and 7 (top left), so A[1,1] = 0b11000111 = 0xc7
+ */
+typedef struct {
+    Idx rows;
+    Idx cols;
+    Vertex *data;
+} NeighborMat;
+
+/**
+ * @brief Retrieves the vertex stored at (i,j) in the NeighborMat A. Performs bounds checking.
+ * @param A The neighbor matrix
+ * @param i Row index
+ * @param j Column index
+ * @return The vertex at (i,j) or an error code
+ */
+Vertex get_NeighborMat_bc(NeighborMat A, Idx i, Idx j) {
+    if (i < 0 || i >= A.rows || j < 0 || j >= A.cols) return OUT_OF_BOUNDS;
     return A.data[i * A.cols + j];
 }
 
-void set_AdjMat(AdjMat *A, int32_t i, int32_t j, uint8_t neighbors) {
-    assert_inbounds(*A, i, j);
-    A->data[i * A->cols + j] = neighbors;
+/**
+ * @brief Sets the vertex stored at (i,j) in the NeighborMat A to the given value. Performs bounds checking.
+ * @param A Pointer to the neighbor matrix
+ * @param i Row index
+ * @param j Column index
+ * @param vert The new vertex value to set
+ * @return SUCCESS or an error code
+ */
+Vertex set_NeighborMat_bc(NeighborMat *A, Idx i, Idx j, Vertex vert) {
+    if (i < 0 || i >= A->rows || j < 0 || j >= A->cols) return OUT_OF_BOUNDS;
+    A->data[i * A->cols + j] = vert;
+    return SUCCESS;
 }
 
-NeighborVertices get_neighbor_vertices(AdjMat A, int32_t i, int32_t j) {
-    assert_in_bounds(A, i, j);
-    uint8_t neighbors = get_AdjMat(A, i, j);
-    
-    uint8_t bitmask = 1; 
-    uint8_t nneighbors = 0;  // number of neighbors found
-    int32_t row[8], col[8];  // arrays to hold row and column indices of neighbors
-    for (int _ = 0; _ < 8; _++) {
-        switch(bitmask & neighbors){
-            case 0x01:  // top neighbor
-                row[nneighbors] = i - 1; col[nneighbors] = j;
-                nneighbors++;
-                break;
-            case 0x02:  // top-right neighbor
-                row[nneighbors] = i - 1; col[nneighbors] = j + 1;
-                nneighbors++;
-                break;
-            case 0x04:  // right neighbor
-                row[nneighbors] = i; col[nneighbors] = j + 1;
-                nneighbors++;
-                break;
-            case 0x08:  // bottom-right neighbor
-                row[nneighbors] = i + 1; col[nneighbors] = j + 1;
-                nneighbors++;
-                break;
-            case 0x10:  // bottom neighbor
-                row[nneighbors] = i + 1; col[nneighbors] = j;
-                nneighbors++;
-                break;
-            case 0x20:  // bottom-left neighbor
-                row[nneighbors] = i + 1; col[nneighbors] = j - 1;
-                nneighbors++;
-                break;
-            case 0x40:  // left neighbor
-                row[nneighbors] = i; col[nneighbors] = j - 1;
-                nneighbors++;
-                break;
-            case 0x80:  // top-left neighbor
-                row[nneighbors] = i - 1; col[nneighbors] = j - 1;
-                nneighbors++;
-                break;
-            default:
-                break;
-        }
-        bitmask <<= 1;
-    }
-    NeighborVertices neighbor_verts = {
-        .n = nneighbors,
-        .row = row,
-        .col = col
-    };
+static const Idx row_neighbors[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
+static const Idx col_neighbors[8] = {0, 1, 1, 1, 0, -1, -1, -1};
 
-    return neighbor_verts;
-}
-
-int32_t *get_clockhand_neighbor(AdjMat A, int32_t i, int32_t j, uint8_t clockhand) {
+/**
+ * @brief Get the row and column indices of neighboring vertices for a given cell.
+ * @param A The adjacency matrix
+ * @param i Row index of the cell
+ * @param j Column index of the cell
+ * @return A NeighborVertices struct containing the number of neighbors and their indices
+ */
+Vertex get_clockhand_neighbor(NeighborMat A, Idx i, Idx j, Clockhand hand, Idx out[2]) {
     // returns the index of the neighbor pointed to by the clockhand (0-7) of the vertex at (i,j).
-    uint8_t neighbors = get_AdjMat(A, i, j);
-    int32_t neighbor_index[2];
-    if (neighbors & (1 << clockhand)) {
-        switch(clockhand) {
-            case 0: neighbor_index[0] = i - 1; neighbor_index[1] = j; break;       // top
-            case 1: neighbor_index[0] = i - 1; neighbor_index[1] = j + 1; break;   // top-right
-            case 2: neighbor_index[0] = i; neighbor_index[1] = j + 1; break;       // right
-            case 3: neighbor_index[0] = i + 1; neighbor_index[1] = j + 1; break;   // bottom-right
-            case 4: neighbor_index[0] = i + 1; neighbor_index[1] = j; break;       // bottom
-            case 5: neighbor_index[0] = i + 1; neighbor_index[1] = j - 1; break;   // bottom-left
-            case 6: neighbor_index[0] = i; neighbor_index[1] = j - 1; break;       // left
-            case 7: neighbor_index[0] = i - 1; neighbor_index[1] = j - 1; break;  // top-left
-            default: return NULL; // invalid clockhand
-        }
-        return neighbor_index;
-    }
-    return NULL; // no neighbor in that direction
+    Vertex vert = get_NeighborMat_bc(A, i, j);
+    if (vert == OUT_OF_BOUNDS) return OUT_OF_BOUNDS;
+    if (!edge_exists(vert, hand)) return NO_EDGE; // no neighbor in that direction
+
+    out[0] = i + row_neighbors[hand];
+    out[1] = j + col_neighbors[hand];
+    return SUCCESS;
 }
 
-int permute_vertices(AdjMat *A, Permutation perm) {
-    // permutes a single edge in AdjMat according to the permutation mapping perm.
+/**
+ * @brief swap edges in the adjacency matrix according to the given permutation.
+ * @param A Pointer to the neighbor matrix
+ * @param perm The permutation to apply
+ * @return SUCCESS or an error code
+ */
+Vertex swap_edges(NeighborMat *A, Permutation perm) {
+    // permutes a single edge in NeighborMat according to the permutation mapping perm.
+   
+    NeighborMat Acopy = *A;  // avoid dereferencing A multiple times. Used only for lookup, not modification.
 
-    uint8_t source = get_AdjMat(*A, perm.i, perm.j);
+    Vertex source = get_NeighborMat_bc(Acopy, perm.i, perm.j);
+    if (source == OUT_OF_BOUNDS) return OUT_OF_BOUNDS;
     
-    int validity = 0;
-    if (!(source & (1 << perm.oldclockhand))){  // old edge does not exist
-        validity += 1;
-    }
-    if (source & (1 << perm.newclockhand)){ // new edge already exists
-        validity += 2;
-    }
-    if (validity == 0){  // only proceed if permutation is valid
-        // 1. The source vertex (remove old edge to target, add new edge to new target)
-        // 2. The old target vertex (remove old edge to source)
-        // 3. The new target vertex (add new edge to source)
-        
-        uint8_t sourcemask = (1 << perm.oldclockhand) | (1 << perm.newclockhand);  
-        uint8_t oldtargetmask = (1 << perm.oldclockhand) + 4;
-        uint8_t newtargetmask = (1 << perm.newclockhand) + 4;
+    if (!edge_exists(source, perm.oldhand)) return NO_EDGE;
+    if (edge_exists(source, perm.newhand)) return NO_EDGE;
 
-        int32_t *oldtargetidx = get_clockhand_neighbor(*A, perm.i, perm.j, perm.oldclockhand);
-        int32_t *newtargetidx = get_clockhand_neighbor(*A, perm.i, perm.j, perm.newclockhand);
-        
-        int32_t ioldtarget = oldtargetidx[0];
-        int32_t inewtarget = newtargetidx[0];
-        
-        int32_t joldtarget = oldtargetidx[1];
-        int32_t jnewtarget = newtargetidx[1];
+    // 1. The source vertex (remove old edge to target, add new edge to new target)
+    // 2. The old target vertex (remove old edge to source)
+    // 3. The new target vertex (add new edge to source)
 
-        uint8_t oldtarget = get_AdjMat(*A, ioldtarget, joldtarget);
-        uint8_t newtarget = get_AdjMat(*A, inewtarget, jnewtarget);
+    // bitmasks for toggling edges. Will be XORed with existing vert.
+    Vertex sourcemask = (1 << perm.oldhand) | (1 << perm.newhand);
+    Vertex oldtgtmask = (1 << perm.oldhand) + 4;
+    Vertex newtgtmask = (1 << perm.newhand) + 4;
 
-        set_AdjMat(A, perm.i, perm.j, source ^ sourcemask);
-        set_AdjMat(A, ioldtarget, joldtarget, oldtarget ^ oldtargetmask);
-        set_AdjMat(A, inewtarget, jnewtarget, newtarget ^ newtargetmask);
-    }
-    return validity;
+    Idx oldtgtidx[2], newtgtidx[2];
+    Vertex oldretval = get_clockhand_neighbor(Acopy, perm.i, perm.j, perm.oldhand, oldtgtidx);
+    if (oldretval != SUCCESS) return oldretval;
+    Vertex newretval = get_clockhand_neighbor(Acopy, perm.i, perm.j, perm.newhand, newtgtidx);
+    if (newretval != SUCCESS) return newretval;
+
+    Idx ioldtgt = oldtgtidx[0];
+    Idx inewtgt = newtgtidx[0];
+
+    Idx joldtgt = oldtgtidx[1];
+    Idx jnewtgt = newtgtidx[1];
+
+    // we don't use get/set_NeighborMat_bc here to avoid redundant bounds checking
+    Vertex oldtarget = Acopy.data[ioldtgt * Acopy.cols + joldtgt];
+    Vertex newtarget = Acopy.data[inewtgt * Acopy.cols + jnewtgt];
+    A->data[perm.i * Acopy.cols + perm.j] = source ^ sourcemask;
+    A->data[ioldtgt * Acopy.cols + joldtgt] = oldtarget ^ oldtgtmask;
+    A->data[inewtgt * Acopy.cols + jnewtgt] = newtarget ^ newtgtmask;
+
+    return SUCCESS;
 }
 
-void free_AdjMat(AdjMat *A) {
+void print_vert(Vertex vert){
+    
+    // top row of Os
+    printf("O O O\n");
+
+    // top row of connections
+    printf(" ");
+    if (edge_exists(vert, 7)) printf("\\"); else printf(" ");
+    if (edge_exists(vert, 0)) printf("|"); else printf(" ");
+    if (edge_exists(vert, 1)) printf("/"); else printf(" ");
+    printf("\n");
+    // middle row of Os
+    printf("O");
+    if (edge_exists(vert, 6)) printf("-"); else printf(" ");
+    printf("O");
+    if (edge_exists(vert, 2)) printf("-"); else printf(" ");
+    printf("O");
+    printf("\n");
+    
+    // bottom row of connections
+    printf(" ");
+    if (edge_exists(vert, 5)) printf("/"); else printf(" ");
+    if (edge_exists(vert, 4)) printf("|"); else printf(" ");
+    if (edge_exists(vert, 3)) printf("\\"); else printf(" ");
+
+    // bottom row of O's
+    printf("O O O\n");
+}
+
+void free_NeighborMat(NeighborMat *A) {
     if (A->data != NULL) {
         free(A->data);
         A->data = NULL;
     }
 }
+
+
+
 
 
 
