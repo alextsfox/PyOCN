@@ -4,54 +4,75 @@
 // simple types: flatcase_t
 // functions + variables: snake_case
 
-#include "streamgraph.h"
-const double gamma = 0.5;
-const double temperature = 0.75;
+#ifndef STREAMGRAPH_C
+#define STREAMGRAPH_C
+
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <math.h>
+#include <stdio.h>
 
 #include "returncodes.h"
 
-// typedef int32_t drainedarea_t;
-// typedef uint16_t cartidx_t;
-// typedef uint32_t linidx_t;
-// typedef uint8_t localedges_t; // 8 bits representing edges to 8 neighbors
-// typedef uint8_t clockhand_t; // 0-7. 0 = top, 1 = top right, 2 = right, etc. 255 means no neighbor.
-// #define IS_ROOT (clockhand_t)255
+const double gamma = 0.5;
+const double temperature = 0.75;
 
-// // [1111|2222|345-] 12B
-// typedef struct{
-//     drainedarea_t drained_area;
-//     linidx_t adown; // linear index of the downstream vertex
-//     localedges_t edges;
-//     clockhand_t downstream;
-//     uint8_t visited;
-// } Vertex;
+/**
+ * @file streamgraph.h
+ * @brief Data structures and functions for managing stream graphs.
+ * A stream graph represents a tree of vertices with directed edges,
+ * where each vertex has a drained area and flows downstream to another vertex.
+ * The graph is stored in a 2D grid layout for spatial representation, and laid out in memory using block tiling.
+ * The edges connected to each vertex are represented using an 8-bit integer, where each bit corresponds to one of the 8 possible neighboring directions.
+ * The downstream direction is represented as a clock hand (0-7), with 255 indicating no downstream (root).
+ */
 
-// typedef struct {
-//     cartidx_t m; cartidx_t n; 
-//     cartidx_t i_root; cartidx_t j_root; 
-//     double energy;
-//     Vertex *vertices;
-// } StreamGraph;
+#include <stdint.h>
+#include <stdbool.h>
+#include "returncodes.h"
+
+// Type definitions
+typedef int32_t drainedarea_t;
+typedef uint16_t cartidx_t;
+typedef uint32_t linidx_t;
+typedef uint8_t localedges_t;
+typedef uint8_t clockhand_t;
+
+#define IS_ROOT (clockhand_t)255
+#define TILE_SIZE 2
+
+typedef struct {
+    drainedarea_t drained_area;
+    linidx_t adown;
+    localedges_t edges;
+    clockhand_t downstream;
+    uint8_t visited;
+} Vertex;
+
+typedef struct {
+    cartidx_t m, n;
+    cartidx_t i_root, j_root;
+    double energy;
+    Vertex *vertices;
+} StreamGraph;
 
 // ##############################
 // # Helpers
 // ##############################
-static const cartidx_t row_offsets[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
-static const cartidx_t col_offsets[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+const cartidx_t row_offsets[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
+const cartidx_t col_offsets[8] = {0, 1, 1, 1, 0, -1, -1, -1};
 
 // ##############################
 // # Create/destroy streamgraph #
 // ##############################
-Status sg_create(StreamGraph *G, cartidx_t m, cartidx_t n){
+Status sg_create(StreamGraph *G, cartidx_t m, cartidx_t n, cartidx_t i_root, cartidx_t j_root){
     if (m % 2 != 0 || n % 2 != 0) return MALFORMED_GRAPH_ERROR;
     if (G == NULL) return NULL_POINTER_ERROR;
     Vertex *vertices = calloc(m*n, sizeof(Vertex));
     if (vertices == NULL) return NULL_POINTER_ERROR;
-    *G = (StreamGraph){m, n, vertices};
+    *G = (StreamGraph){m, n, i_root, j_root, 0.0, vertices};
     return SUCCESS;
 }
 Status sg_destroy(StreamGraph *G){
@@ -76,7 +97,7 @@ Status sg_destroy(StreamGraph *G){
 linidx_t sg_cart_to_lin(cartidx_t row, cartidx_t col, cartidx_t m, cartidx_t n){
     div_t r_divT = div(row, TILE_SIZE);
     div_t c_divT = div(col, TILE_SIZE);
-    linidx_t k = r_divT.quot * n/TILE_SIZE * c_divT.quot;
+    linidx_t k = r_divT.quot * n/TILE_SIZE + c_divT.quot;
     linidx_t a = (TILE_SIZE * TILE_SIZE * k) + (TILE_SIZE * r_divT.rem) + c_divT.rem;
     return a;
 }
@@ -172,15 +193,15 @@ Status sg_change_vertex_outflow(linidx_t a, StreamGraph *G, clockhand_t down_new
     // 2. 
     // (Could move to just below sg_get_lin_safe(Gcopy, &vert, a))
     if (
-        vert.downstream == IS_ROOT  // root node
-        || down_new == vert.downstream  // no change
-        || 1 << down_new & vert.edges != 0  // new downstream not a valid edge
+        (vert.downstream == IS_ROOT)  // root node
+        || (down_new == vert.downstream)  // no change
+        || ((1 << down_new) & (vert.edges != 0)) // new downstream not a valid edge
     ) return SWAP_WARNING;
 
     // 3.
     vert.adown = a_down_new;
     vert.downstream = down_new;
-    vert.edges = vert.edges ^ (vert.edges || (1 << down_new));
+    vert.edges = vert.edges ^ (vert.edges | (1 << down_new));
     sg_set_lin(vert, G, a);
 
     vert_down_old.edges = vert_down_old.edges ^ (1 << (down_new + 4));
@@ -193,10 +214,7 @@ Status sg_change_vertex_outflow(linidx_t a, StreamGraph *G, clockhand_t down_new
 
 // starting from vertex linear (in-memory) index a, flow downstream and increment nodes by inc until reaching the root node
 // visitationinc tracks how many times this function has been called since .vistitations was reset to 0. Can be either 1 or 2
-static const uint8_t ncallsregistry[2] = {};
-
 Status sg_increment_downstream_safe(drainedarea_t inc, StreamGraph *G, linidx_t a, uint8_t ncalls){
-    uint8_t visit_inc = ncallsregistry[ncalls];
     StreamGraph Gcopy = *G;
 
     Vertex vert;
@@ -218,10 +236,8 @@ Status sg_increment_downstream_safe(drainedarea_t inc, StreamGraph *G, linidx_t 
     return SUCCESS;
 }
 Status sg_increment_downstream(drainedarea_t inc, StreamGraph *G, linidx_t a, uint8_t ncalls){
-    uint8_t visit_inc = ncallsregistry[ncalls];
     StreamGraph Gcopy = *G;
     Vertex vert;
-    Status code;
 
     sg_get_lin(Gcopy, &vert, a);
     while (vert.downstream != IS_ROOT){
@@ -330,11 +346,56 @@ Status sg_single_erosion_event(StreamGraph *G){
 Status sg_outer_ocn_loop(uint32_t niterations, StreamGraph *G, drainedarea_t tol){
     Status code;
     uint32_t i = 0;
-    if (code != SUCCESS) return code;
-
     for (i = 0; i < niterations; i++){
         code = sg_single_erosion_event(G);
         if (code != SUCCESS) exit(code);
     }
     return SUCCESS;
 }
+
+const char RIGHT_ARROW = '-';
+const char DOWN_ARROW = '|';
+const char LEFT_ARROW = '-';
+const char UP_ARROW = '|';
+const char DOWNRIGHT_ARROW = '\\';
+const char DOWNLEFT_ARROW = '/';
+const char UPLEFT_ARROW = '\\';
+const char UPRIGHT_ARROW = '/';
+const char NO_ARROW = ' ';
+const char NODE = 'O';
+const char ROOT_NODE = 'X';
+void sg_display(StreamGraph G){
+    Vertex vert;
+    clockhand_t direction;
+    for (cartidx_t printed_row = 0; printed_row < G.m*2; printed_row++){
+        cartidx_t row = printed_row / 2;
+        for (cartidx_t col = 0; col < G.n; col++){
+            sg_get_lin(G, &vert, sg_cart_to_lin(row, col, G.m, G.n));
+            // same row as vertex: horizontal edges
+            if (printed_row % 2 == 0){
+                if (vert.downstream == ROOT_NODE) printf("%c", ROOT_NODE);
+                else printf("%c", NODE);
+                direction = (1 << 2);
+                if (vert.edges & direction) printf("%c", RIGHT_ARROW);
+                else printf("%c", NO_ARROW);
+            // row between vertices: vertical and diagonal edges
+            } else {
+                direction = (1 << 4);
+                if (vert.edges & direction){
+                    printf("%c", DOWN_ARROW);
+                } else {
+                    printf("%c", NO_ARROW);
+                }
+                direction = (1 << 3);
+                if (vert.edges & direction){
+                    printf("%c", DOWNRIGHT_ARROW);
+                } else {
+                    printf("%c", NO_ARROW);
+                }
+            }
+        }
+        printf("\n");
+    }
+}
+
+#endif // STREAMGRAPH_C

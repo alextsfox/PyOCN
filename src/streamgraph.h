@@ -1,45 +1,6 @@
 #ifndef STREAMGRAPH_H
 #define STREAMGRAPH_H
 
-/**
- * @file streamgraph.h
- * @brief Data structures and functions for managing stream graphs.
- * A stream graph represents a tree of vertices with directed edges,
- * where each vertex has a drained area and flows downstream to another vertex.
- * The graph is stored in a 2D grid layout for spatial representation, and laid out in memory using block tiling.
- * The edges connected to each vertex are represented using an 8-bit integer, where each bit corresponds to one of the 8 possible neighboring directions.
- * The downstream direction is represented as a clock hand (0-7), with 255 indicating no downstream (root).
- */
-
-#include <stdint.h>
-#include <stdbool.h>
-#include "returncodes.h"
-
-// Type definitions
-typedef int32_t drainedarea_t;
-typedef uint16_t cartidx_t;
-typedef uint32_t linidx_t;
-typedef uint8_t localedges_t;
-typedef uint8_t clockhand_t;
-
-#define IS_ROOT (clockhand_t)255
-#define TILE_SIZE 2
-
-typedef struct {
-    drainedarea_t drained_area;
-    linidx_t adown;
-    localedges_t edges;
-    clockhand_t downstream;
-    uint8_t visited;
-} Vertex;
-
-typedef struct {
-    cartidx_t m, n;
-    cartidx_t i_root, j_root;
-    double energy;
-    Vertex *vertices;
-} StreamGraph;
-
 Status sg_create(StreamGraph *G, cartidx_t m, cartidx_t n);
 Status sg_destroy(StreamGraph *G);
 
