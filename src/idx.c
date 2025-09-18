@@ -24,11 +24,10 @@ void free_IdxArray_data(IdxArray *arr) {
     }
 }
 
-Status get_IdxArray_bc(IdxArray arr, Idx out[2], Idx i) {
+Status get_IdxArray_bc(IdxArray arr, IdxPair out, Idx i) {
     if (i < 0 || i >= arr.n) return OOB_ERROR;
-    if (out == NULL) return NULL_POINTER_ERROR;
-    *out[0] = arr.pairs[i].row;  // row
-    *out[1] = arr.pairs[i].col;  // col
+    out.row = arr.pairs[i].row;  // row
+    out.col = arr.pairs[i].col;  // col
     return SUCCESS;
 }
 Status set_IdxArray_bc(IdxArray *arr, Idx i, Idx row, Idx col) {

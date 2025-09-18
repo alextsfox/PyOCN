@@ -9,26 +9,52 @@
 #include "idx.c"
 
 
-typedef uint8_t LocalEdges; // 8 bits representing edges to 8 neighbors
-typedef uint8_t Clockhand; // 0-7. 0 = top, 1 = top right, 2 = right, etc. 255 means no neighbor.
+/*
+Stream graph is laid out physically as MxN, but in memory is represented as 
+2x2x(MxN/4) to improve cache locality
+
+Each vertex has up to 8 neighbors (3x3 grid minus itself), so this layout
+maximizes how close neighbors are in memory
+*/
+
+typedef uint8_t localedges_t; // 8 bits representing edges to 8 neighbors
+typedef uint8_t clockhand_t; // 0-7. 0 = top, 1 = top right, 2 = right, etc. 255 means no neighbor.
 #define NO_CLOCKHAND (Clockhand)255
-typedef struct{LocalEdges edges; Clockhand downstream;} Vertex;  // downstream indicates the direction of the downstream vertex
+typedef struct{localedges_t edges; clockhand_t downstream;} Vertex;  // downstream indicates the direction of the downstream vertex
 typedef struct {Idx m; Idx n; Vertex *vertices;} StreamGraph;
+
+typedef uint32_t drainedarea_t;
+typedef struct{
+    drainedarea_t da;
+    Idx i;
+    Idx j;
+    localedges_t edges;
+    clockhand_t downstream;
+    bool visited;
+}
 
 #define edge_exists(vert, hand) (vert.edges & (1 << hand))
 #define downstream_edge_exists(vert, hand) (edge_exists(vert, hand) & (hand == vert.downstream))
 #define upstream_edge_exists(vert, hand) (edge_exists(vert, hand) & (hand != vert.downstream))
 
 Status get_StreamGraph_bc(StreamGraph S, Vertex *vert, IdxPair idx) {
-    if (idx[0] < 0 || idx[0] >= S.m || idx[1] < 0 || idx[1] >= S.n) return OOB_ERROR;
+    if (idx.row < 0 || idx.row >= S.m || idx.col < 0 || idx.col >= S.n) return OOB_ERROR;
     if (vert == NULL) return NULL_POINTER_ERROR;
-    *vert = S.vertices[idx[0] * S.n + idx[1]];
+    *vert = S.vertices[idx.row * S.n + idx.col];
+    return SUCCESS;
+}
+Status get_StreamGraph(StreamGraph S, Vertex *vert, IdxPair idx) {
+    *vert = S.vertices[idx.row * S.n + idx.col];
     return SUCCESS;
 }
 Status set_StreamGraph_bc(StreamGraph *S, IdxPair idx, Vertex vert) {
-    if (idx[0] < 0 || idx[0] >= S->m || idx[1] < 0 || idx[1] >= S->n) return OOB_ERROR;
+    if (idx.row < 0 || idx.col >= S->m || idx.row < 0 || idx.col >= S->n) return OOB_ERROR;
     if (S->vertices == NULL) return NULL_POINTER_ERROR;
-    S->vertices[idx[0] * S->n + idx[1]] = vert;
+    S->vertices[idx.row * S->n + idx.col] = vert;
+    return SUCCESS;
+}
+Status set_StreamGraph(StreamGraph *S, IdxPair idx, Vertex vert) {
+    S->vertices[idx.row * S->n + idx.col] = vert;
     return SUCCESS;
 }
 
@@ -46,7 +72,7 @@ static const IdxPair neighbor_offsets[8] = {
  * @param j Column index of the vertex in question
  * @return SUCCESS or an error code
  */
-Status get_clockhand_neighbor(StreamGraph S, IdxPair *out, IdxPair idx, Clockhand hand) {
+Status get_clockhand_neighbor(StreamGraph S, IdxPair *out, IdxPair idx, clockhand_t hand) {
     // returns the index of the neighbor pointed to by the clockhand (0-7) of the vertex at (i,j).
     Vertex vert;
     Status code = get_StreamGraph_bc(S, &vert, idx);
@@ -68,7 +94,7 @@ Status get_clockhand_neighbor(StreamGraph S, IdxPair *out, IdxPair idx, Clockhan
  * @param newdownstream The new downstream direction
  * @return SUCCESS or an error code. 
  */
-Status swap_edges(StreamGraph *S, IdxPair idx, Clockhand newdownstream) {
+Status swap_edges(StreamGraph *S, IdxPair idx, clockhand_t newdownstream) {
     StreamGraph Acopy = *S ; // avoid dereferencing S multiple times. Used only for lookup, not modification.
     Vertex sourcenode, downnode, newdownnode;
     Status code;
@@ -85,9 +111,9 @@ Status swap_edges(StreamGraph *S, IdxPair idx, Clockhand newdownstream) {
     // could remove later.
     if (!downstream_edge_exists(sourcenode, sourcenode.downstream)) return NO_EDGE_WARNING;  
 
-    LocalEdges sourcemask = (1 << sourcenode.downstream) | (1 << newdownstream);
-    LocalEdges downmask = (1 << sourcenode.downstream) + 4;
-    LocalEdges newdownmask = (1 << newdownstream) + 4;
+    localedges_t sourcemask = (1 << sourcenode.downstream) | (1 << newdownstream);
+    localedges_t downmask = (1 << sourcenode.downstream) + 4;
+    localedges_t newdownmask = (1 << newdownstream) + 4;
 
     // we don't use get/set_StreamGraph_bc here to avoid redundant bounds checking
     IdxPair downidx, newdownidx;
@@ -98,16 +124,9 @@ Status swap_edges(StreamGraph *S, IdxPair idx, Clockhand newdownstream) {
     if (code != SUCCESS) return code;
     newdownnode = Acopy.vertices[newdownidx.row * Acopy.n + newdownidx.col];
 
-    S->vertices[idx.row * Acopy.n + idx.col] = (Vertex){sourcenode.edges ^ sourcemask, newdownstream};
-
-    S->vertices[downidx.row * Acopy.n + downidx.col] = (Vertex){
-        downnode.edges ^ downmask, 
-        downnode.downstream
-    };
-    S->vertices[newdownidx.row * Acopy.n + newdownidx.col] = (Vertex){
-        newdownnode.edges ^ newdownmask, 
-        newdownnode.downstream
-    };
+    set_StreamGraph(S, idx, (Vertex){sourcenode.edges ^ sourcemask, newdownstream});
+    set_StreamGraph(S, downidx, (Vertex){downnode.edges ^ downmask, downnode.downstream});
+    set_StreamGraph(S, newdownidx, (Vertex){newdownnode.edges ^ newdownmask, newdownnode.downstream});
     return SUCCESS;
 }
 

@@ -3,8 +3,9 @@
 #include <stdbool.h>
 
 #include "returncodes.h"
-#include "neighbormatrix.c"
+#include "streamgraph.c"
 #include "idx.c"
+#include "boolarray.c"
 
 /**
  * @brief computes the drained area of each vertex in the neighbor matrix A, given a root vertex.
@@ -44,10 +45,6 @@ Case 4 (hard):
 //     for n in DAG.predecessors(node):
 //         predecessors = predecessors | DAG.nodes[n]['predecessors']
 //     DAG.nodes[node]['predecessors'] = predecessors
-int32_t compute_drained_area(NeighborMat A, Vertex root, int32_t *drained_area) {
-    return SUCCESS;
-}
-
 
 
 
@@ -126,22 +123,27 @@ Status swap_edges_and_compute_drained_area(
     DrainedArea *drainedarea,
     IdxArray *olddownnodes,
     IdxArray *newdownnodes,
-    bool *visited,
+    BoolArray *visited,
     IdxPair idx, 
-    Clockhand newdownstream, 
+    clockhand_t newdownstream, 
 ){
+
+    if (S == NULL || drainedarea == NULL || olddownnodes == NULL || newdownnodes == NULL || visited == NULL) {
+        return NULL_POINTER_ERROR;
+    }
+
     Status code;
-    code = swap_edges(S, idx, newdownstream);
-    if (code == SUCCESS || code == NULL_POINTER_ERROR || code == OOB_ERROR) return code;
+    code = swap_edges(S, idx, newdownstream);  // performs a bounds check
+    if (code != SUCCESS) return code;
 
-    // check for cycles and return the list of affected nodes 
-    // (in reality this list would be pre-allocated and only modified by the swap function), 
-    // and then modify the drained area in the main function using that list if no cycles were detected.
+    Vertex vert;
+    StreamGraph Scopy = *S; // avoid dereferencing S multiple times. Used only for lookup, not modification.
+    BoolArray visitedcopy = *visited;  // make a copy of the visited array to avoid modifying the input array
+    get_StreamGraph(Scopy, &vert, idx);  // no bc because we already checked bounds in swap_edges
 
-    // visited = [0]*S.m*S.n  # can skip if we are confidant that the graph is not malformed/does not contain a cycle. Could be a big time saver.
-    //     vert = S[i][j]
-    //     visited[i*S.n + j] += 1  # again, could skip
-    //     while vert.downstream != NO_CLOCKHAND:  # while vert is not root
+    visitedcopy.data[idx.row*Scopy.n + idx.col] = true;  // mark source node as visited
+    IdxPair downidx;
+    while (vert.downstream != NO_CLOCKHAND) {  // while vert is not root
     //         i, j = get_clockhand_neighbor(S, i, j)
     //         if visited[i*S.n + j] >= 1:  # again, could skip
     //             raise CYCLE_ERROR  # to handle this, we will have to revert all changes with another call to this function, but with a negative delta.
