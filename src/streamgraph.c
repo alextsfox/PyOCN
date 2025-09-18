@@ -1,175 +1,340 @@
-#ifndef STREAMGRAPH_C
-#define STREAMGRAPH_C
+// naming convention
+// defines: ALL_CAPS
+// struct types: PascalCase
+// simple types: flatcase_t
+// functions + variables: snake_case
+
+#include "streamgraph.h"
+const double gamma = 0.5;
+const double temperature = 0.75;
 
 #include <stdint.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <stdbool.h>
+
 #include "returncodes.h"
-#include "idx.c"
 
+// typedef int32_t drainedarea_t;
+// typedef uint16_t cartidx_t;
+// typedef uint32_t linidx_t;
+// typedef uint8_t localedges_t; // 8 bits representing edges to 8 neighbors
+// typedef uint8_t clockhand_t; // 0-7. 0 = top, 1 = top right, 2 = right, etc. 255 means no neighbor.
+// #define IS_ROOT (clockhand_t)255
 
-/*
-Stream graph is laid out physically as MxN, but in memory is represented as 
-2x2x(MxN/4) to improve cache locality
+// // [1111|2222|345-] 12B
+// typedef struct{
+//     drainedarea_t drained_area;
+//     linidx_t adown; // linear index of the downstream vertex
+//     localedges_t edges;
+//     clockhand_t downstream;
+//     uint8_t visited;
+// } Vertex;
 
-Each vertex has up to 8 neighbors (3x3 grid minus itself), so this layout
-maximizes how close neighbors are in memory
-*/
+// typedef struct {
+//     cartidx_t m; cartidx_t n; 
+//     cartidx_t i_root; cartidx_t j_root; 
+//     double energy;
+//     Vertex *vertices;
+// } StreamGraph;
 
-typedef uint8_t localedges_t; // 8 bits representing edges to 8 neighbors
-typedef uint8_t clockhand_t; // 0-7. 0 = top, 1 = top right, 2 = right, etc. 255 means no neighbor.
-#define NO_CLOCKHAND (Clockhand)255
-typedef struct{localedges_t edges; clockhand_t downstream;} Vertex;  // downstream indicates the direction of the downstream vertex
-typedef struct {Idx m; Idx n; Vertex *vertices;} StreamGraph;
+// ##############################
+// # Helpers
+// ##############################
+static const cartidx_t row_offsets[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
+static const cartidx_t col_offsets[8] = {0, 1, 1, 1, 0, -1, -1, -1};
 
-typedef uint32_t drainedarea_t;
-typedef struct{
-    drainedarea_t da;
-    Idx i;
-    Idx j;
-    localedges_t edges;
-    clockhand_t downstream;
-    bool visited;
-}
-
-#define edge_exists(vert, hand) (vert.edges & (1 << hand))
-#define downstream_edge_exists(vert, hand) (edge_exists(vert, hand) & (hand == vert.downstream))
-#define upstream_edge_exists(vert, hand) (edge_exists(vert, hand) & (hand != vert.downstream))
-
-Status get_StreamGraph_bc(StreamGraph S, Vertex *vert, IdxPair idx) {
-    if (idx.row < 0 || idx.row >= S.m || idx.col < 0 || idx.col >= S.n) return OOB_ERROR;
-    if (vert == NULL) return NULL_POINTER_ERROR;
-    *vert = S.vertices[idx.row * S.n + idx.col];
+// ##############################
+// # Create/destroy streamgraph #
+// ##############################
+Status sg_create(StreamGraph *G, cartidx_t m, cartidx_t n){
+    if (m % 2 != 0 || n % 2 != 0) return MALFORMED_GRAPH_ERROR;
+    if (G == NULL) return NULL_POINTER_ERROR;
+    Vertex *vertices = calloc(m*n, sizeof(Vertex));
+    if (vertices == NULL) return NULL_POINTER_ERROR;
+    *G = (StreamGraph){m, n, vertices};
     return SUCCESS;
 }
-Status get_StreamGraph(StreamGraph S, Vertex *vert, IdxPair idx) {
-    *vert = S.vertices[idx.row * S.n + idx.col];
-    return SUCCESS;
-}
-Status set_StreamGraph_bc(StreamGraph *S, IdxPair idx, Vertex vert) {
-    if (idx.row < 0 || idx.col >= S->m || idx.row < 0 || idx.col >= S->n) return OOB_ERROR;
-    if (S->vertices == NULL) return NULL_POINTER_ERROR;
-    S->vertices[idx.row * S->n + idx.col] = vert;
-    return SUCCESS;
-}
-Status set_StreamGraph(StreamGraph *S, IdxPair idx, Vertex vert) {
-    S->vertices[idx.row * S->n + idx.col] = vert;
-    return SUCCESS;
-}
-
-static const IdxPair neighbor_offsets[8] = {
-    (IdxPair){-1, -1}, (IdxPair){-1, 0}, (IdxPair){-1, 1}, 
-    (IdxPair){0, -1}, (IdxPair){0, 1},   
-    (IdxPair){1, -1}, (IdxPair){1, 0}, (IdxPair){1, 1}
-};
-
-/**
- * @brief Get the row and column indices of neighboring vertices for a given cell.
- * @param S The adjacency matrix
- * @param out Array of size 2 to store the row and column indices of the neighbor
- * @param i Row index of the vertex in question
- * @param j Column index of the vertex in question
- * @return SUCCESS or an error code
- */
-Status get_clockhand_neighbor(StreamGraph S, IdxPair *out, IdxPair idx, clockhand_t hand) {
-    // returns the index of the neighbor pointed to by the clockhand (0-7) of the vertex at (i,j).
-    Vertex vert;
-    Status code = get_StreamGraph_bc(S, &vert, idx);
-    if (code != SUCCESS) return code;
-    if (vert.downstream == NO_CLOCKHAND) return NO_EDGE_WARNING; // root node
-    if (edge_exists(vert, hand) == 0) return NO_EDGE_WARNING; // no neighbor in that direction
-
-    out->row = idx.row + neighbor_offsets[hand].row;
-    out->col = idx.col + neighbor_offsets[hand].col;
-    return SUCCESS;
-}
-
-/**
- * @brief Move the outgoing edge from direction handa to handb for the vertex at (i,j) in the neighbor matrix S.
- * Will swap edges only if they are are not immediately obviously invalid (ie will not check for large cycles).
- * @param S Pointer to the neighbor matrix
- * @param i Row index of the vertex
- * @param j Column index of the vertex
- * @param newdownstream The new downstream direction
- * @return SUCCESS or an error code. 
- */
-Status swap_edges(StreamGraph *S, IdxPair idx, clockhand_t newdownstream) {
-    StreamGraph Acopy = *S ; // avoid dereferencing S multiple times. Used only for lookup, not modification.
-    Vertex sourcenode, downnode, newdownnode;
-    Status code;
-    
-    // confirm that the source node exists
-    code = get_StreamGraph_bc(Acopy, &sourcenode, idx);
-    if (code != SUCCESS) return code;
-    
-    // once again, we could remove this check later once we work out a good method to prevent it from happening.
-    if (sourcenode.downstream == NO_CLOCKHAND) return SWAP_WARNING; // can't swap if there is no downstream edge
-    if (newdownstream == sourcenode.downstream) return SWAP_WARNING; // nothing to do
-    if (edge_exists(sourcenode, newdownstream)) return SWAP_WARNING; // can't swap to an upstream edge
-    // So long as the initial array was constructed correctly, this should not be necessary.
-    // could remove later.
-    if (!downstream_edge_exists(sourcenode, sourcenode.downstream)) return NO_EDGE_WARNING;  
-
-    localedges_t sourcemask = (1 << sourcenode.downstream) | (1 << newdownstream);
-    localedges_t downmask = (1 << sourcenode.downstream) + 4;
-    localedges_t newdownmask = (1 << newdownstream) + 4;
-
-    // we don't use get/set_StreamGraph_bc here to avoid redundant bounds checking
-    IdxPair downidx, newdownidx;
-    code = get_clockhand_neighbor(Acopy, &downidx, idx, sourcenode.downstream);
-    if (code != SUCCESS) return code;
-    downnode = Acopy.vertices[downidx.row * Acopy.n + downidx.col];
-    code = get_clockhand_neighbor(Acopy, &newdownidx, idx, newdownstream);
-    if (code != SUCCESS) return code;
-    newdownnode = Acopy.vertices[newdownidx.row * Acopy.n + newdownidx.col];
-
-    set_StreamGraph(S, idx, (Vertex){sourcenode.edges ^ sourcemask, newdownstream});
-    set_StreamGraph(S, downidx, (Vertex){downnode.edges ^ downmask, downnode.downstream});
-    set_StreamGraph(S, newdownidx, (Vertex){newdownnode.edges ^ newdownmask, newdownnode.downstream});
-    return SUCCESS;
-}
-
-
-
-/**
- * @brief Print a visual representation of the vertex to stdout.
- * @param vert The vertex to print
- */
-void print_vert(Vertex vert){
-    
-    // top row of Os
-    printf("O O O\n");
-
-    // top row of connections
-    printf(" ");
-    if (edge_exists(vert, 7)) printf("\\"); else printf(" ");
-    if (edge_exists(vert, 0)) printf("|"); else printf(" ");
-    if (edge_exists(vert, 1)) printf("/"); else printf(" ");
-    printf("\n");
-    // middle row of Os
-    printf("O");
-    if (edge_exists(vert, 6)) printf("-"); else printf(" ");
-    printf("O");
-    if (edge_exists(vert, 2)) printf("-"); else printf(" ");
-    printf("O");
-    printf("\n");
-    
-    // bottom row of connections
-    printf(" ");
-    if (edge_exists(vert, 5)) printf("/"); else printf(" ");
-    if (edge_exists(vert, 4)) printf("|"); else printf(" ");
-    if (edge_exists(vert, 3)) printf("\\"); else printf(" ");
-
-    // bottom row of O's
-    printf("O O O\n");
-}
-
-void free_StreamGraph(StreamGraph *S) {
-    if (S->vertices != NULL) {
-        free(S->vertices);
-        S->vertices = NULL;
+Status sg_destroy(StreamGraph *G){
+    if (G != NULL && G->vertices != NULL){
+        free(G->vertices);
+        G->vertices = NULL;
     }
+    G = NULL;
+    return SUCCESS;
 }
 
-#endif // STREAMGRAPH_C
+
+// ##############################
+// # Getters + Setters          #
+// ##############################
+
+// 2d raster is block-tiled in memory to improve cache locality
+#define TILE_SIZE 2
+/*
+ * Converts cartesian (row, col) to linear index in block-tiled memory
+ */
+linidx_t sg_cart_to_lin(cartidx_t row, cartidx_t col, cartidx_t m, cartidx_t n){
+    div_t r_divT = div(row, TILE_SIZE);
+    div_t c_divT = div(col, TILE_SIZE);
+    linidx_t k = r_divT.quot * n/TILE_SIZE * c_divT.quot;
+    linidx_t a = (TILE_SIZE * TILE_SIZE * k) + (TILE_SIZE * r_divT.rem) + c_divT.rem;
+    return a;
+}
+
+// Gets the value at [row, col] on the map and loads into *out, with safeguards.
+Status sg_get_cart_safe(StreamGraph G, Vertex *out, cartidx_t row, cartidx_t col){
+    if (row < 0 || row >= G.m || col < 0 || col >= G.n) return OOB_ERROR;
+    linidx_t a = sg_cart_to_lin(row, col, G.m, G.n);
+    *out = G.vertices[a];
+    return SUCCESS;
+}
+
+// Gets the value at [row, col] on the map and loads into *out, without safeguards.
+Status sg_get_cart(StreamGraph G, Vertex *out, cartidx_t row, cartidx_t col){
+    linidx_t a = sg_cart_to_lin(row, col, G.m, G.n);
+    *out = G.vertices[a];
+    return SUCCESS;
+}
+
+// Sets the value at [row, col] on the map from *vert, with safeguards.
+Status sg_set_cart_safe(Vertex vert, StreamGraph *G, cartidx_t row, cartidx_t col){
+    if (row < 0 || row >= G->m || col < 0 || col >= G->n) return OOB_ERROR;
+    linidx_t a = sg_cart_to_lin(row, col, G->m, G->n);
+    G->vertices[a] = vert;
+    return SUCCESS;
+}
+// Sets the value at [row, col] on the map from *vert, without safeguards.
+Status sg_set_cart(Vertex vert, StreamGraph *G, cartidx_t row, cartidx_t col){
+    linidx_t a = sg_cart_to_lin(row, col, G->m, G->n);
+    G->vertices[a] = vert;
+    return SUCCESS;
+}
+// Gets the value at [a] in memory and loads into *out, with safeguards.
+Status sg_get_lin_safe(StreamGraph G, Vertex *out, linidx_t a){
+    if (a < 0 || a >= (G.m * G.n)) return OOB_ERROR;
+    *out = G.vertices[a];
+    return SUCCESS;
+}
+// Gets the value at [a] in memory and loads into *out, with safeguards.
+Status sg_get_lin(StreamGraph G, Vertex *out, linidx_t a){
+    *out = G.vertices[a];
+    return SUCCESS;
+}
+// Sets the value at [a] in memory to vert, with safeguards.
+Status sg_set_lin_safe(Vertex vert, StreamGraph *G, linidx_t a){
+    if (a < 0 || a >= (G->m * G->n)) return OOB_ERROR;
+    G->vertices[a] = vert;
+    return SUCCESS;
+}
+// Gets the value at [a] in memory to vert, with safeguards.
+Status sg_set_lin(Vertex vert, StreamGraph *G, linidx_t a){
+    G->vertices[a] = vert;
+    return SUCCESS;
+}
+
+
+// ##############################
+// # Network traversal          #
+// ##############################
+
+/**
+ * @brief Change the outflow direction of a vertex, updating the edges of the new and old downstream vertices accordingly.
+ * @param a Linear index into the StreamGraph of the vertex to change
+ * @param G Pointer to the StreamGraph
+ * @param down_new The new downstream direction (0-7).
+ * @return SUCCESS, SWAP_WARNING, or OOB_ERROR.
+ */
+Status sg_change_vertex_outflow(linidx_t a, StreamGraph *G, clockhand_t down_new){
+    // 1. Get G[a], G[a_down_old], G[adownnew] safely
+    // 2. Check that everything is valid regarding the swap
+    // 3. Make the swap, adjust old and new downstream edges accordingly
+
+    // 1.
+    StreamGraph Gcopy = *G;
+
+    Status code;
+
+    Vertex vert;
+    Vertex vert_down_old;
+    Vertex vert_down_new;
+    
+    code = sg_get_lin_safe(Gcopy, &vert, a);
+    if (code == OOB_ERROR) return OOB_ERROR;
+
+    linidx_t a_down_old = vert.adown;
+    code = sg_get_lin_safe(Gcopy, &vert_down_old, a_down_old);
+    if (code == OOB_ERROR) return OOB_ERROR;
+
+    linidx_t a_down_new = sg_cart_to_lin(row_offsets[down_new], col_offsets[down_new], Gcopy.m, Gcopy.n);
+    code = sg_get_lin_safe(Gcopy, &vert_down_new, a_down_new);
+    if (code == OOB_ERROR) return OOB_ERROR;
+
+    // 2. 
+    // (Could move to just below sg_get_lin_safe(Gcopy, &vert, a))
+    if (
+        vert.downstream == IS_ROOT  // root node
+        || down_new == vert.downstream  // no change
+        || 1 << down_new & vert.edges != 0  // new downstream not a valid edge
+    ) return SWAP_WARNING;
+
+    // 3.
+    vert.adown = a_down_new;
+    vert.downstream = down_new;
+    vert.edges = vert.edges ^ (vert.edges || (1 << down_new));
+    sg_set_lin(vert, G, a);
+
+    vert_down_old.edges = vert_down_old.edges ^ (1 << (down_new + 4));
+    sg_set_lin(vert_down_old, G, a_down_old);
+    vert_down_new.edges = vert_down_new.edges ^ (1 << (down_new + 4));
+    sg_set_lin(vert_down_new, G, a_down_new);
+
+    return SUCCESS;
+}
+
+// starting from vertex linear (in-memory) index a, flow downstream and increment nodes by inc until reaching the root node
+// visitationinc tracks how many times this function has been called since .vistitations was reset to 0. Can be either 1 or 2
+static const uint8_t ncallsregistry[2] = {};
+
+Status sg_increment_downstream_safe(drainedarea_t inc, StreamGraph *G, linidx_t a, uint8_t ncalls){
+    uint8_t visit_inc = ncallsregistry[ncalls];
+    StreamGraph Gcopy = *G;
+
+    Vertex vert;
+    Status code;
+
+    code = sg_get_lin_safe(Gcopy, &vert, a);
+    if (code != SUCCESS) return code;
+    while (vert.downstream != IS_ROOT){
+        // if we find ourselves in a cycle, exit immediately and signal to the caller
+        if (vert.visited == ncalls) return SWAP_WARNING;
+        vert.visited += ncalls;
+        vert.drained_area += inc;
+        
+        // any other errorcode: exit
+        code = sg_get_lin_safe(Gcopy, &vert, vert.adown);
+        if (code != SUCCESS) return code;
+    }
+
+    return SUCCESS;
+}
+Status sg_increment_downstream(drainedarea_t inc, StreamGraph *G, linidx_t a, uint8_t ncalls){
+    uint8_t visit_inc = ncallsregistry[ncalls];
+    StreamGraph Gcopy = *G;
+    Vertex vert;
+    Status code;
+
+    sg_get_lin(Gcopy, &vert, a);
+    while (vert.downstream != IS_ROOT){
+        // if we find ourselves in a cycle, exit immediately and signal to the caller
+        if (vert.visited == ncalls) return SWAP_WARNING;
+        vert.visited += ncalls;
+        
+        G->energy -= pow(vert.drained_area, gamma);  // remove old energy contribution
+        vert.drained_area += inc;  // update drained area
+        G->energy += pow(vert.drained_area, gamma);  // add new energy contribution
+        
+        // any other errorcode: exit
+        sg_get_lin(Gcopy, &vert, vert.adown);
+    }
+
+    return SUCCESS;
+}
+
+Status sg_single_erosion_event(StreamGraph *G){
+    Status code;
+    StreamGraph Gcopy = *G;
+
+    Vertex vert, vert_down_old, vert_down_new;
+    clockhand_t down_old, down_new;
+    linidx_t a, a_down_old, a_down_new;
+    
+    drainedarea_t inc;
+    double energy_old = G->energy;
+    bool accept_bad_value = (((double)rand() / (double)RAND_MAX) / temperature) > 1.0;  // Metro-Hastings criterion
+
+    linidx_t i;
+    uint8_t ntries;
+
+    while (true){
+        // pick a random vertex and a random new downstream direction,
+        a = rand() % (G->m * G->n);
+        sg_get_lin(Gcopy, &vert, a);
+        
+        down_old = vert.downstream;
+        down_new = rand();
+        
+        a_down_old = vert.adown;
+
+        inc = vert.drained_area;
+
+        // try to find a new downstream direction that doesn't break the graph
+        for (ntries = 0, down_new = rand(); ntries < 8; ntries++, down_new++){
+            code = sg_change_vertex_outflow(a, G, down_new);
+            if (code != SUCCESS) continue;
+            
+            // this repeats code that was done in sg_change_vertex_outflow
+            // TODO: refactor to avoid redundant calculation
+            a_down_new = sg_cart_to_lin(row_offsets[down_new], col_offsets[down_new], Gcopy.m, Gcopy.n);
+            sg_get_lin(Gcopy, &vert_down_old, a_down_old);
+            sg_get_lin(Gcopy, &vert_down_new, a_down_new);
+
+            // zero the cycle tracker before updating drained area
+            for (i = 0; i < Gcopy.m * Gcopy.n; i++) G->vertices[i].visited = 0;  
+            // this also repeats code that was done in sg_change_vertex_outflow (get vertex)
+            // TODO: refactor to avoid redundant calculation
+            code = sg_increment_downstream_safe(-inc, G, a_down_old, 1);
+
+            if (code == SWAP_WARNING){  // if we find ourselves in a cycle, retrace our steps and undo the increment
+                for (i = 0; i < Gcopy.m * Gcopy.n; i++){
+                    G->vertices[i].visited = 0;
+                }
+                sg_increment_downstream(inc, G, a_down_old, 1);  // undo the decrement
+                sg_change_vertex_outflow(a, G, down_old);  // undo the outflow change
+                continue;
+            }
+
+            // use a new visitation increment to avoid collision with the previous sg_increment_downstream call
+            // TODO: find a way to use visitation increments that don't collide to avoid resetting the entire visited array each time
+            code = sg_increment_downstream_safe(inc, G, a_down_new, 2);
+            if (code == SWAP_WARNING){
+                for (i = 0; i < Gcopy.m * Gcopy.n; i++){
+                    G->vertices[i].visited = 0;
+                }
+                sg_increment_downstream(inc, G, a_down_old, 1);  // undo the decrement
+                sg_increment_downstream(-inc, G, a_down_new, 2);  // undo the increment
+                sg_change_vertex_outflow(a, G, down_old);  // undo the outflow change
+                continue;
+            }
+
+            break;  // if we reached here, the swap was successful
+        }
+        if (code != SUCCESS) continue;  // if we exhausted all 8 directions without a successful swap, try again
+
+        // if we reach here, the swap was successful, now we choose whether to accept it
+        if (G->energy < energy_old || accept_bad_value){  // accept swap
+            break;
+        }
+
+        // reject swap: undo everything
+        for (i = 0; i < Gcopy.m * Gcopy.n; i++){
+            G->vertices[i].visited = 0;
+        }
+        sg_increment_downstream(inc, G, a_down_old, 1);  // undo the decrement
+        sg_increment_downstream(-inc, G, a_down_new, 2);  // undo the increment
+        sg_change_vertex_outflow(a, G, a_down_old);  // undo the outflow change
+    }
+
+    return SUCCESS;
+}
+
+Status sg_outer_ocn_loop(uint32_t niterations, StreamGraph *G, drainedarea_t tol){
+    Status code;
+    uint32_t i = 0;
+    if (code != SUCCESS) return code;
+
+    for (i = 0; i < niterations; i++){
+        code = sg_single_erosion_event(G);
+        if (code != SUCCESS) exit(code);
+    }
+    return SUCCESS;
+}
