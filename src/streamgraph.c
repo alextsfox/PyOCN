@@ -71,7 +71,7 @@ const int16_t col_offsets[8] = {0, 1, 1, 1, 0, -1, -1, -1};
 // # Create/destroy streamgraph #
 // ##############################
 Status sg_create(StreamGraph *G, cartidx_t m, cartidx_t n, cartidx_t i_root, cartidx_t j_root){
-    if (m % 2 != 0 || n % 2 != 0) return MALFORMED_GRAPH_ERROR;
+    if (m % 2 != 0 || n % 2 != 0) return MALFORMED_GRAPH_WARNING;
     if (G == NULL) return NULL_POINTER_ERROR;
     Vertex *vertices = calloc(m*n, sizeof(Vertex));
     if (vertices == NULL) return NULL_POINTER_ERROR;
@@ -192,6 +192,35 @@ Status sg_set_lin(Vertex vert, StreamGraph *G, linidx_t a){
     return SUCCESS;
 }
 
+/**
+ * @brief Get the downstream neighbor of a vertex in a specified direction, with safeguards.
+ * @param m Number of rows in the grid
+ * @param n Number of columns in the grid
+ * @param vert_down Pointer to store the downstream neighbor vertex
+ * @param a Linear index of the current vertex
+ * @param down The downstream direction (0-7)
+ * @return SUCCESS or OOB_ERROR if out of bounds
+ */
+Status sg_clockhand_to_lin(cartidx_t m, cartidx_t n, linidx_t *a_down, linidx_t a, clockhand_t down){
+    struct cartesian_pair row_col;
+    Status code;
+
+    code = sg_lin_to_cart(a, &row_col, m, n);
+    if (code != SUCCESS) return code;
+
+    int16_t col_off = col_offsets[down];
+    int16_t col = (int16_t)row_col.j + col_off;  // cast to signed int to avoid underflow
+    if (col < 0 || col >= (int16_t)n) return OOB_ERROR;
+
+    int16_t row_off = row_offsets[down];
+    int16_t row = (int16_t)row_col.i + row_off;
+    if (row < 0 || row >= (int16_t)m) return OOB_ERROR;
+
+    *a_down = sg_cart_to_lin((cartidx_t)row, (cartidx_t)col, m, n);  // recast back to unsigned before converting to linear index
+
+    return SUCCESS;
+}
+
 
 // ##############################
 // # Network traversal          #
@@ -210,7 +239,8 @@ Status sg_change_vertex_outflow(linidx_t a, StreamGraph *G, clockhand_t down_new
     // 3. Make the swap, adjust old and new downstream edges accordingly
 
     // 1.
-    StreamGraph Gcopy = *G;
+    cartidx_t m = G->m;
+    cartidx_t n = G->n;
 
     Status code;
 
@@ -220,29 +250,29 @@ Status sg_change_vertex_outflow(linidx_t a, StreamGraph *G, clockhand_t down_new
     
     // retrieve G[a], G[a_down_old], G[adownnew]
     // return OOB_ERROR if any of these fail
-    code = sg_get_lin_safe(Gcopy, &vert, a);
+    code = sg_get_lin_safe(*G, &vert, a);
     if (code == OOB_ERROR) return OOB_ERROR;
 
     linidx_t a_down_old = vert.adown;
-    code = sg_get_lin_safe(Gcopy, &vert_down_old, a_down_old);
+    code = sg_get_lin_safe(*G, &vert_down_old, a_down_old);
     if (code == OOB_ERROR) return OOB_ERROR;
 
-    struct cartesian_pair row_col;
-    code = sg_lin_to_cart(a, &row_col, Gcopy.m, Gcopy.n);
+    
+    // int16_t col_off = col_offsets[down_new];
+    // int16_t col = (int16_t)row_col.j + col_off;  // cast to signed int to avoid underflow
+    // if (col < 0 || col >= (int16_t)Gcopy.n) return OOB_ERROR;
+    
+    // int16_t row_off = row_offsets[down_new];
+    // int16_t row = (int16_t)row_col.i + row_off;
+    // if (row < 0 || row >= (int16_t)Gcopy.m) return OOB_ERROR;
+    
+    // linidx_t a_down_new = sg_cart_to_lin((cartidx_t)row, (cartidx_t)col, Gcopy.m, Gcopy.n);  // recast back to unsigned before converting to linear index
+    linidx_t a_down_new;
+    code = sg_clockhand_to_lin(m, n, &a_down_new, a, down_new);
     if (code == OOB_ERROR) return OOB_ERROR;
-
-    int16_t col_off = col_offsets[down_new];
-    int16_t col = (int16_t)row_col.j + col_off;  // cast to signed int to avoid underflow
-    if (col < 0 || col >= (int16_t)Gcopy.n) return OOB_ERROR;
-
-    int16_t row_off = row_offsets[down_new];
-    int16_t row = (int16_t)row_col.i + row_off;
-    if (row < 0 || row >= (int16_t)Gcopy.m) return OOB_ERROR;
-
-    linidx_t a_down_new = sg_cart_to_lin((cartidx_t)row, (cartidx_t)col, Gcopy.m, Gcopy.n);  // recast back to unsigned before converting to linear index
-    code = sg_get_lin_safe(Gcopy, &vert_down_new, a_down_new);
+    code = sg_get_lin_safe(*G, &vert_down_new, a_down_new);
     if (code == OOB_ERROR) return OOB_ERROR;
-
+    
     // 2. 
     // check that the new downstream is valid (does not check for large cycles or for root access)
     if (
@@ -250,13 +280,16 @@ Status sg_change_vertex_outflow(linidx_t a, StreamGraph *G, clockhand_t down_new
         || (down_new == vert.downstream)  // no change
         || ((1 << down_new) & (vert.edges != 0)) // new downstream not a valid edge
     ) return SWAP_WARNING;
-
+    
     // check that we haven't created any crosses
     // how to check: upper right quadrant (new_downstream = 1): vertically upwards vertex cannot have an edge at 2 (edges & (1 << 2) == 0)
     // upper left quadrant (new_downstream = 7): vertically upwards vertex cannot have an edge at 5 (edges & (1 << 5) == 0)
     // lower right quadrant (new_downstream = 3): vertically downwards vertex cannot have an edge at 1 (edges & (1 << 1) == 0)
     // lower left quadrant (new_downstream = 5): vertically downwards vertex cannot have an edge at 6 (edges & (1 << 6) == 0)
     Vertex cross_check_vert;
+    struct cartesian_pair row_col;
+    code = sg_lin_to_cart(a, &row_col, m, n);
+    if (code == OOB_ERROR) return OOB_ERROR;
     cartidx_t check_row = (cartidx_t)row_col.i;
     cartidx_t check_col = (cartidx_t)row_col.j;
     switch (down_new){
@@ -265,7 +298,7 @@ Status sg_change_vertex_outflow(linidx_t a, StreamGraph *G, clockhand_t down_new
         case 5: check_col -= 1; break;
         case 7: check_col += 1; break;
     }
-    sg_get_cart_safe(Gcopy, &cross_check_vert, check_row, check_col);
+    sg_get_cart_safe(*G, &cross_check_vert, check_row, check_col);
     switch (down_new){
         case 1: if (cross_check_vert.edges & (1 << 2)) return SWAP_WARNING; break;
         case 3: if (cross_check_vert.edges & (1 << 1)) return SWAP_WARNING; break;
@@ -288,164 +321,131 @@ Status sg_change_vertex_outflow(linidx_t a, StreamGraph *G, clockhand_t down_new
     return SUCCESS;
 }
 
-// starting from vertex linear (in-memory) index a, flow downstream and increment nodes by inc until reaching the root node
-// visitationinc tracks how many times this function has been called since .vistitations was reset to 0. Can be either 1 or 2
-Status sg_increment_downstream_safe(drainedarea_t inc, StreamGraph *G, linidx_t a, uint8_t ncalls){
-    StreamGraph Gcopy = *G;
-
+// simply flows downstream. Does not accumulate any values other than a visit checker
+// returns a MALFORMED_GRAPH_WARNING if a cycle is detected, an OOB_ERROR is thrown, or if we cannot find the root node.
+Status sg_flow_downstream_safe(StreamGraph *G, linidx_t a, uint8_t ncalls){
     Vertex vert;
     Status code;
-
-    code = sg_get_lin_safe(Gcopy, &vert, a);
+    code = sg_get_lin_safe(*G, &vert, a);
     if (code != SUCCESS) return code;
+
     while (vert.downstream != IS_ROOT){
         // if we find ourselves in a cycle, exit immediately and signal to the caller
-        if (vert.visited == ncalls) return SWAP_WARNING;
+        if (vert.visited == ncalls) return CYCLE_WARNING;
         vert.visited += ncalls;
-
-        G->energy -= pow((double)vert.drained_area, gamma);  // remove old energy contribution
-        vert.drained_area += inc;
-        G->energy += pow((double)vert.drained_area, gamma);  // add new energy contribution
+        sg_set_lin(vert, G, a);
 
         // any other errorcode: exit
-        code = sg_get_lin_safe(Gcopy, &vert, vert.adown);
+        a = vert.adown;
+        code = sg_get_lin_safe(*G, &vert, vert.adown);
         if (code != SUCCESS) return code;
+
     }
 
-    return SUCCESS;
+    return SUCCESS;  // found root successfully, no cycles found
 }
-Status sg_increment_downstream(drainedarea_t inc, StreamGraph *G, linidx_t a, uint8_t ncalls){
+
+// flows downstream, incrementing drained area of each node, and updating the energy
+// UNSAFE; assumes that the graph is well-formed and acyclic. Does no error checking.
+Status sg_increment_downstream(drainedarea_t da_inc, StreamGraph *G, linidx_t a){
     StreamGraph Gcopy = *G;
     Vertex vert;
-
+    drainedarea_t da;
     sg_get_lin(Gcopy, &vert, a);
     while (vert.downstream != IS_ROOT){
-        // if we find ourselves in a cycle, exit immediately and signal to the caller
-        if (vert.visited == ncalls) return SWAP_WARNING;
-        vert.visited += ncalls;
-        
-        G->energy -= pow((double)vert.drained_area, gamma);  // remove old energy contribution
-        vert.drained_area += inc;  // update drained area
-        G->energy += pow((double)vert.drained_area, gamma);  // add new energy contribution
-        
-        // any other errorcode: exit
-        sg_get_lin(Gcopy, &vert, vert.adown);
+        da = vert.drained_area;
+        G->energy += pow((double)(da + da_inc), gamma) - pow((double)da, gamma);  // update energy
+        vert.drained_area += da_inc;  // update drained area of vertex
+        sg_set_lin(vert, G, a);
+        a = vert.adown;
+        sg_get_lin(Gcopy, &vert, vert.adown);  // get next
     }
-
     return SUCCESS;
 }
 
 Status sg_single_erosion_event(StreamGraph *G){
     Status code;
-    StreamGraph Gcopy = *G;
 
     Vertex vert, vert_down_old, vert_down_new;
     clockhand_t down_old, down_new;
     linidx_t a, a_down_old, a_down_new;
     
-    drainedarea_t inc;
+    cartidx_t m, n;
+    m = G->m;
+    n = G->n;
+
+    drainedarea_t da_inc;
     double energy_old = G->energy;
     double energy_new;
     bool accept_bad_value = (((double)rand() / (double)RAND_MAX) / temperature) > 1.0;  // Metro-Hastings criterion
 
     linidx_t i;
     uint8_t ntries;
-
-    while (true){
+    for (uint16_t total_tries = 0; total_tries < 1000; total_tries++){
         // pick a random vertex and a random new downstream direction,
-        a = rand() % (G->m * G->n);
-        sg_get_lin(Gcopy, &vert, a);
+        down_new = rand() % 8;
+        a = rand() % (m*n);
+        sg_get_lin(*G, &vert, a);
         
         down_old = vert.downstream;
-        
         a_down_old = vert.adown;
-        
-        inc = vert.drained_area;
-        
-        // try to find a new downstream direction that doesn't break the graph
-        for (ntries = 0, down_new = rand() % 8; ntries < 8; ntries++, down_new++){
+        da_inc = vert.drained_area;
+
+        for (ntries = 0; ntries < 8; ntries++){  // try a new direction each time, up to 8 times before giving up and picking a new vertex
+            down_new  = (down_new + 1) % 8;
+
             code = sg_change_vertex_outflow(a, G, down_new);
-            if (code != SUCCESS) continue;
+            if (code != SUCCESS){
+                continue;  // try again if the swap is immediately invalid
+            }
             
-            // this repeats code that was done in sg_change_vertex_outflow
-            // TODO: refactor to avoid redundant calculation
-
-
-            struct cartesian_pair row_col;
-            code = sg_lin_to_cart(a, &row_col, Gcopy.m, Gcopy.n);
-            if (code == OOB_ERROR) return OOB_ERROR;
-
-            int16_t col_off = col_offsets[down_new];
-            int16_t col = (int16_t)row_col.j + col_off;  // cast to signed int to avoid underflow
-            if (col < 0 || col >= (int16_t)Gcopy.n) return OOB_ERROR;
-
-            int16_t row_off = row_offsets[down_new];
-            int16_t row = (int16_t)row_col.i + row_off;
-            if (row < 0 || row >= (int16_t)Gcopy.m) return OOB_ERROR;
-
-            a_down_new = sg_cart_to_lin((cartidx_t)row, (cartidx_t)col, Gcopy.m, Gcopy.n);  // recast back to unsigned before converting to linear index
-            code = sg_get_lin_safe(Gcopy, &vert_down_new, a_down_new);
-            if (code == OOB_ERROR) return OOB_ERROR;
-
-            code = sg_get_lin_safe(Gcopy, &vert_down_old, a_down_old);
-            if (code == OOB_ERROR){
-                sg_change_vertex_outflow(a, G, down_old);  // undo the outflow change
-                continue;
-            }
-            code = sg_get_lin_safe(Gcopy, &vert_down_new, a_down_new);
-            if (code == OOB_ERROR){
-                sg_change_vertex_outflow(a, G, down_old);  // undo the outflow change
-                continue;
-            }
+            // retrieve the downstream vertices...shouldn't fail, since we already checked bounds in sg_change_vertex_outflow
+            a_down_new = vert.adown;
+            sg_get_lin(*G, &vert_down_new, a_down_new);
+            sg_get_lin(*G, &vert_down_old, a_down_old);
 
             // zero the cycle tracker before updating drained area
-            for (i = 0; i < Gcopy.m * Gcopy.n; i++) G->vertices[i].visited = 0;  
+            for (i = 0; i < m*n; i++) G->vertices[i].visited = 0;
             // this also repeats code that was done in sg_change_vertex_outflow (get vertex)
             // TODO: refactor to avoid redundant calculation
-            code = sg_increment_downstream_safe(-inc, G, a_down_old, 1);
-
-            if (code == SWAP_WARNING){  // if we find ourselves in a cycle, retrace our steps and undo the increment
-                for (i = 0; i < Gcopy.m * Gcopy.n; i++){
-                    G->vertices[i].visited = 0;
-                }
-                sg_increment_downstream(inc, G, a_down_old, 1);  // undo the decrement
-                sg_change_vertex_outflow(a, G, down_old);  // undo the outflow change
+            code = sg_flow_downstream_safe(G, a_down_old, 1);
+            if (code != SUCCESS){
+                sg_change_vertex_outflow(a, G, down_old);  // undo the swap, try again
                 continue;
             }
 
             // use a new visitation increment to avoid collision with the previous sg_increment_downstream call
             // TODO: find a way to use visitation increments that don't collide to avoid resetting the entire visited array each time
-            code = sg_increment_downstream_safe(inc, G, a_down_new, 2);
-            if (code == SWAP_WARNING){
-                for (i = 0; i < Gcopy.m * Gcopy.n; i++){
-                    G->vertices[i].visited = 0;
-                }
-                sg_increment_downstream(inc, G, a_down_old, 1);  // undo the decrement
-                sg_increment_downstream(-inc, G, a_down_new, 2);  // undo the increment
-                sg_change_vertex_outflow(a, G, down_old);  // undo the outflow change
+            code = sg_flow_downstream_safe(G, a_down_new, 2);
+            if (code != SUCCESS){
+                sg_change_vertex_outflow(a, G, down_old);  // undo the swap, try again
                 continue;
             }
-            
-            energy_new = G->energy;
-            break;  // if we reached here, the swap was successful
-        }
-        if (code != SUCCESS) continue;  // if we exhausted all 8 directions without a successful swap, try again
 
-        // if we reach here, the swap was successful, now we choose whether to accept it
-        if (energy_new < energy_old || accept_bad_value){  // accept swap
-            break;
+            break;  // if we reached here, the swap resulted in a well-formed graph, so we can move on the acceptance step
+        }
+        if (code != SUCCESS) continue;  // if we exhausted all 8 directions without a successful swap, try again. do not go to acceptance step
+
+        // update drained area and energy along both paths
+        energy_old = G->energy;
+        sg_increment_downstream(-da_inc, G, a_down_old);  // decrement drained area along old path
+        sg_increment_downstream(da_inc, G, a_down_new);  // increment drained area along new path
+        energy_new = G->energy;
+
+        if (energy_new < energy_old || accept_bad_value){  // accept the swap
+            return SUCCESS;
         }
 
-        // reject swap: undo everything
-        for (i = 0; i < Gcopy.m * Gcopy.n; i++){
+        // reject swap: undo everything and try again
+        for (i = 0; i < G->m * G->n; i++){
             G->vertices[i].visited = 0;
         }
-        sg_increment_downstream(inc, G, a_down_old, 1);  // undo the decrement
-        sg_increment_downstream(-inc, G, a_down_new, 2);  // undo the increment
+        sg_increment_downstream(da_inc, G, a_down_old);  // undo the decrement
+        sg_increment_downstream(-da_inc, G, a_down_new);  // undo the increment
         sg_change_vertex_outflow(a, G, a_down_old);  // undo the outflow change
     }
 
-    return SUCCESS;
+    return MALFORMED_GRAPH_WARNING;  // if we reach here, we failed to find a valid swap in many, many tries
 }
 
 Status sg_outer_ocn_loop(uint32_t niterations, StreamGraph *G){
@@ -453,7 +453,7 @@ Status sg_outer_ocn_loop(uint32_t niterations, StreamGraph *G){
     uint32_t i = 0;
     for (i = 0; i < niterations; i++){
         code = sg_single_erosion_event(G);
-        if (code != SUCCESS) exit(code);
+        if (code != SUCCESS) exit(code);  // malformed graph?
     }
     return SUCCESS;
 }
@@ -469,50 +469,71 @@ Status sg_outer_ocn_loop(uint32_t niterations, StreamGraph *G){
 // const char NO_ARROW = ' ';
 // const char NODE = 'O';
 // const char ROOT_NODE = 'X';
-// void sg_display(StreamGraph G){
-//     Vertex vert;
-//     clockhand_t direction;
-//     for (cartidx_t printed_row = 0; printed_row < G.m*2; printed_row++){
-//         cartidx_t row = printed_row / 2;
-//         for (cartidx_t printed_col = 0; printed_col < G.n*2; printed_col++){
-//             cartidx_t col = printed_col / 2;
-//             sg_get_lin(G, &vert, sg_cart_to_lin(row, col, G.m, G.n));
-//             // same row as vertex: horizontal edges
-//             if (printed_row % 2 == 0){  // in-line with vertex
-//                 if (printed_col % 2 == 0){  // same col as verted: print vertex
-//                     if (vert.downstream == IS_ROOT) printf("%c", ROOT_NODE);
-//                     else printf("%c", NODE);
-//                 } else {  // between vertices: horizontal edges
-//                     direction = (1 << 2);
-//                     if (vert.edges & direction) printf("%c", RIGHT_ARROW);
-//                     else printf("%c", NO_ARROW);
-//                 }
-//             // row between vertices: vertical and diagonal edges
-//             } else {
-//                 if (printed_col % 2 == 0){  // same col as vertex: vertical edges}
-//                     direction = (1 << )
-//                 }
-//             }
 
+/*
+Iterate through the vertices and print them out in a grid, with arrows (described above) indicating the edges coming from each vertex.
+Loop through rows (outer) and column (inner) to print in the correct order.
+Each vertex is printed as a NODE character. Edges are given by edge characters. The edges are described by the .edges field of each vertex, which is an 8-bit integer where each bit represents one of the 8 possible directions (N, NE, E, SE, S, SW, W, NW).
+Example:
+Vertices have edges 0b100, 0b1000100, 0b1000100, 0b1000000:
+O - O - O - O
 
+Note that edges are printed between the vertices, so that every other line contains edges only.
+*/
+void sg_display(StreamGraph G){
+    cartidx_t m = G.m;
+    cartidx_t n = G.n;
+    if (m == 0 || n == 0) return;
 
+    // Derived raster (interleaved nodes and edges):
+    // node positions at even coordinates (2*i, 2*j)
+    size_t H = (size_t)(m * 2 - 1);
+    size_t W = (size_t)(n * 2 - 1);
 
-//                 direction = (1 << 4);
-//                 if (vert.edges & direction){
-//                     printf("%c", DOWN_ARROW);
-//                 } else {
-//                     printf("%c", NO_ARROW);
-//                 }
-//                 direction = (1 << 3);
-//                 if (vert.edges & direction){
-//                     printf("%c", DOWNRIGHT_ARROW);
-//                 } else {
-//                     printf("%c", NO_ARROW);
-//                 }
-//             }
-//         }
-//         printf("\n");
-//     }
-// }
+    char *grid = (char *)malloc(H * W);
+    if (!grid) return;
+    for (size_t k = 0; k < H * W; k++) grid[k] = ' ';
 
-#endif // STREAMGRAPH_C
+    // Helper lambda-like macro to place a char if inside bounds
+    #define PUT(r,c,ch) \
+        do { \
+            if ((r) < H && (c) < W) grid[(r)*W + (c)] = (ch); \
+        } while(0)
+
+    for (cartidx_t i = 0; i < m; i++){
+        for (cartidx_t j = 0; j < n; j++){
+            linidx_t a = sg_cart_to_lin(i, j, m, n);
+            Vertex vert = G.vertices[a];
+
+            size_t gr = (size_t)(2 * i);
+            size_t gc = (size_t)(2 * j);
+
+            // Node character
+            char node_ch = (vert.downstream == IS_ROOT) ? 'X' : 'O';
+            PUT(gr, gc, node_ch);
+
+            localedges_t e = vert.edges;
+
+            // For each direction bit set, draw the edge midway between nodes
+            if (e & (1 << 0)) { if (i > 0)           PUT(gr - 1, gc, '|'); }          // N
+            if (e & (1 << 1)) { if (i > 0 && j < n-1) PUT(gr - 1, gc + 1, '/'); }      // NE
+            if (e & (1 << 2)) { if (j < n - 1)       PUT(gr, gc + 1, '-'); }          // E
+            if (e & (1 << 3)) { if (i < m - 1 && j < n -1) PUT(gr + 1, gc + 1, '\\'); } // SE
+            if (e & (1 << 4)) { if (i < m - 1)       PUT(gr + 1, gc, '|'); }          // S
+            if (e & (1 << 5)) { if (i < m - 1 && j > 0) PUT(gr + 1, gc - 1, '/'); }    // SW
+            if (e & (1 << 6)) { if (j > 0)           PUT(gr, gc - 1, '-'); }          // W
+            if (e & (1 << 7)) { if (i > 0 && j > 0)  PUT(gr - 1, gc - 1, '\\'); }      // NW
+        }
+    }
+
+    // Print the assembled grid
+    for (size_t r = 0; r < H; r++){
+        for (size_t c = 0; c < W; c++){
+            putchar(grid[r * W + c]);
+        }
+        putchar('\n');
+    }
+
+    free(grid);
+    #undef PUT
+}

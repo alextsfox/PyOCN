@@ -13,8 +13,7 @@ typedef uint8_t Status;
 #define NO_EDGE_WARNING (Status)2
 #define NULL_POINTER_ERROR (Status)3
 #define SWAP_WARNING (Status)4
-#define MALFORMED_GRAPH_ERROR (Status)5
-#define TOO_MANY_CALLS_ERROR (Status)6
-#define CYCLE_WARNING (Status)7
+#define MALFORMED_GRAPH_WARNING (Status)5
+#define CYCLE_WARNING (Status)6
 
 #endif // RETURNCODES_H

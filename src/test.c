@@ -15,7 +15,7 @@ int main(void){
     | | | |
     O O O O
     | | | |
-    O-O-O-X
+    O-O-O X
     */
 
     const cartidx_t m = 4;
@@ -98,18 +98,25 @@ int main(void){
     sg_get_lin_safe(G, &vert, 11);
     assert(vert.downstream == 4);
     assert(vert.edges == 0b00110001);
-    
-    // attempt to create cross
-    // O O O O
-    // | | | |
-    // O O O O
-    // | | | |
-    // O O O O
-    // | |  X|  should fail with warning
-    // O-O-O X
+
+    // attempt to create cross-flow
     assert(sg_change_vertex_outflow(10, &G, 3) == SWAP_WARNING);
-    sg_get_lin_safe(G, &vert, 10);
+    sg_get_lin_safe(G, &vert, 10);  // confirm that nothing changed
     assert(vert.downstream == 4);
     assert(vert.adown == 14);
     assert(vert.edges == 0b00010001);
+    sg_get_lin_safe(G, &vert, 15);
+    assert(vert.downstream == IS_ROOT);
+    assert(vert.edges == 0b00000001);
+    sg_get_lin_safe(G, &vert, 14);
+    assert(vert.downstream == 1);
+    assert(vert.edges == 0b01000011);
+
+    // flow downstream from a vertex
+    assert(sg_flow_downstream_safe(&G, 0, 1) == SUCCESS);
+    // create a cycle and test that it is detected
+    assert(sg_change_vertex_outflow(14, &G, 7) == SUCCESS);  // should not detect a cycle yet
+    assert(sg_flow_downstream_safe(&G, 9, 2) == CYCLE_WARNING);  // should detect a cycle now
+
+    sg_outer_ocn_loop(10, &G);
 }
