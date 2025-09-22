@@ -417,7 +417,7 @@ Status sg_single_erosion_event(StreamGraph *G){
             }
             
             // retrieve the downstream vertices...shouldn't fail, since we already checked bounds in sg_change_vertex_outflow
-            a_down_new = vert.adown;
+            a_down_new = vert.adown;  // TODO: 
             sg_get_lin(*G, &vert_down_new, a_down_new);
             sg_get_lin(*G, &vert_down_old, a_down_old);
 
@@ -445,6 +445,7 @@ Status sg_single_erosion_event(StreamGraph *G){
 
         // update drained area and energy along both paths
         energy_old = G->energy;
+        // TODO: FOR SOME REASON A_DOWN_OLD IS THE SAME AS A_DOWN_NEW
         sg_increment_downstream(-da_inc, G, a_down_old);  // decrement drained area along old path
         sg_increment_downstream(da_inc, G, a_down_new);  // increment drained area along new path
         energy_new = G->energy;
