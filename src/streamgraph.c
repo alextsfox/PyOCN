@@ -230,12 +230,12 @@ Status sg_change_vertex_outflow(linidx_t a, StreamGraph *G, clockhand_t down_new
     vert.adown = a_down_new;
     clockhand_t down_old = vert.downstream;
     vert.downstream = down_new;
-    vert.edges = vert.edges ^ (vert.edges | (1 << down_new));
+    vert.edges ^= (1 << down_old) | (1 << down_new);
     sg_set_lin(vert, G, a);
 
-    vert_down_old.edges = vert_down_old.edges ^ (1 << (down_old + 4));
+    vert_down_old.edges ^= (1 << (down_old + 4));
     sg_set_lin(vert_down_old, G, a_down_old);
-    vert_down_new.edges = vert_down_new.edges ^ (1 << (down_new + 4));
+    vert_down_new.edges ^= (1 << (down_new + 4));
     sg_set_lin(vert_down_new, G, a_down_new);
 
     return SUCCESS;
