@@ -7,8 +7,12 @@
 #include <math.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <locale.h>
+
+#define USE_UTF8 true
 
 int main(void){
+    setlocale(LC_ALL, "");
 /*
     O O O O
     | | | |
@@ -52,7 +56,7 @@ int main(void){
     G.vertices = lin_vertices;
     G.energy = 4 + sqrt(2)*4 + sqrt(3)*4 + sqrt(4)*4;  // pre-calculate initial energy
 
-    sg_display(G);
+    sg_display(G, USE_UTF8);
 
     
     // Test getters
@@ -100,7 +104,7 @@ int main(void){
     assert(vert.downstream == 4);
     assert(vert.edges == 0b00110001);
 
-    sg_display(G);
+    sg_display(G, USE_UTF8);
 
     // attempt to create cross-flow
     assert(sg_change_vertex_outflow(10, &G, 3) == SWAP_WARNING);
@@ -123,7 +127,7 @@ int main(void){
     // O O O O
     // | | |/|
     // O-O-O X
-    sg_display(G);
+    sg_display(G, USE_UTF8);
 
     // flow downstream from a vertex
     assert(sg_flow_downstream_safe(&G, 0, 1) == SUCCESS);
@@ -132,5 +136,9 @@ int main(void){
     assert(sg_flow_downstream_safe(&G, 9, 2) == CYCLE_WARNING);  // should detect a cycle now
 
     sg_outer_ocn_loop(10, &G);
-    sg_display(G);
+    sg_display(G, USE_UTF8);
+
+    // printf("←\n");
+
+    printf("test");
 }

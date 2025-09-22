@@ -14,6 +14,8 @@
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
+#include <wchar.h>
+// #include <locale.h>
 
 #include "returncodes.h"
 
@@ -471,12 +473,26 @@ const char NE_ARROW = '/';
 const char NO_ARROW = ' ';
 const char NODE = 'O';
 const char ROOT_NODE = 'X';
+
+
+const wchar_t E_ARROW_UTF8 = L'\u2192';
+const wchar_t S_ARROW_UTF8 = L'\u2193';
+const wchar_t W_ARROW_UTF8 = L'\u2190';
+const wchar_t N_ARROW_UTF8 = L'\u2191';
+const wchar_t SE_ARROW_UTF8 = L'\u2198';
+const wchar_t SW_ARROW_UTF8 = L'\u2199';
+const wchar_t NW_ARROW_UTF8 = L'\u2196';
+const wchar_t NE_ARROW_UTF8 = L'\u2197';
+const wchar_t NO_ARROW_UTF8 = L'\u2002';  // space
+const wchar_t NODE_UTF8 = L'\u25EF';  // large empty circle
+const wchar_t ROOT_NODE_UTF8 = L'\u25CF';  // circle with x
+
 /**
  * @brief Display the stream graph in a human-readable format.
  * Nodes are represented by 'O' (or 'X' for the root), and edges are represented by arrows.
  * @param G The StreamGraph to display.
  */
-void sg_display(StreamGraph G){
+void sg_display(StreamGraph G, bool use_utf8){
     if (G.vertices == NULL || G.m == 0 || G.n == 0) return;
 
     putchar('\n');
@@ -485,52 +501,83 @@ void sg_display(StreamGraph G){
     cartidx_t n = G.n;
 
     for (cartidx_t i = 0; i < m; i++){
-        /* Node row */
+        // node row
         for (cartidx_t j = 0; j < n; j++){
             Vertex *v = &G.vertices[i*n + j];
-            putchar(v->downstream == IS_ROOT ? ROOT_NODE : NODE);
+
+            // Draw node
+            if (use_utf8) wprintf(L"%lc", v->downstream == IS_ROOT ? ROOT_NODE : NODE);
+            else putchar(v->downstream == IS_ROOT ? ROOT_NODE : NODE);
+            if (use_utf8) putchar (' ');
+            
             if (j < n - 1){
-                /* Horizontal (E) edge only between nodes on this line */
-                if (v->edges & (1u << 2)){
-                    if (v->downstream == 2) putchar(E_ARROW);
-                    else putchar(W_ARROW);
-                } else putchar(NO_ARROW);
+                // Draw horizontal edge going right out of node
+                if (v->edges & (1u << 2)){        
+                    if (v->downstream == 2) {
+                        if (use_utf8) wprintf(L"%lc", E_ARROW_UTF8);        
+                        else putchar(E_ARROW);
+                    } else {
+                        if (use_utf8) wprintf(L"%lc", W_ARROW_UTF8);    
+                        else putchar(W_ARROW);    
+                    }
+                } else {  // no horizontal edge edge
+                    if (use_utf8) putchar(NO_ARROW);
+                    else wprintf(L"%lc", NO_ARROW_UTF8);
+                }
+                if (use_utf8) putchar(' ');
             }
         }
         putchar('\n');
 
-        if (i == m - 1) break; /* last row: no edge row below */
+        if (i == m - 1) break; // last row: no edges below
 
-        /* Edge row (only between this node row and next) */
+        // edge-only row
         for (cartidx_t j = 0; j < n; j++){
             Vertex *v = &G.vertices[i*n + j];
 
-            /* Vertical (S) edge directly under node */
-            if (v->edges & (1u << 4)){
-                if (v->downstream == 4) putchar(S_ARROW);
-                else putchar(N_ARROW);
-            } else putchar(NO_ARROW);
+            if (v->edges & (1u << 4)){  // vertical, under node
+                if (v->downstream == 4){
+                    if (use_utf8) wprintf(L"%lc", S_ARROW_UTF8);    
+                    else putchar(S_ARROW);
+                } else {
+                    if (use_utf8) wprintf(L"%lc", N_ARROW_UTF8);
+                    else putchar(N_ARROW);
+                }
+            } else {  // no vertical under node
+                if (use_utf8) wprintf(L"%lc", NO_ARROW_UTF8);
+                else putchar(NO_ARROW);
+            }
+            if (use_utf8) putchar(' ');
 
-            if (j < n - 1){
-                /* Diagonal edges occupy the space between two vertical positions */
-                char mid = NO_ARROW;
-                /* SE from (i,j) */
-                if (v->edges & (1u << 3)) {
-                    if (v->downstream == 3) mid = SE_ARROW;
-                    else mid = UPLEFT_ARROW;
+            if (j < n - 1){// Diagonal edges occupy the space between two vertical edges
+                wchar_t mid_utf8 = NO_ARROW_UTF8;
+                char mid = NO_ARROW;  // default to no diagonal edge
+                if (v->edges & (1u << 3)) {  // diagonal edge heading SE or NW
+                    if (v->downstream == 3){
+                        mid_utf8 = SE_ARROW_UTF8;
+                        mid = SE_ARROW;
+                    } else {
+                        mid_utf8 = NW_ARROW_UTF8;
+                        mid = NW_ARROW;
+                    }
                 }
-                /* SW from (i,j+1) (drawn leaning left) */
                 Vertex *v_right = &G.vertices[i*n + (j+1)];
-                if (mid == NO_ARROW && (v_right->edges & (1u << 5))){
-                    if (v_right->downstream == 5) mid = DOWNLEFT_ARROW;
-                    else mid = UPRIGHT_ARROW;
-                }
-                putchar(mid);
+                if (mid == NO_ARROW && (v_right->edges & (1u << 5))){  // diagonal edge heading NE or SW
+                    if (v_right->downstream == 5) {
+                        mid_utf8 = SW_ARROW_UTF8;
+                        mid = SW_ARROW;
+                    } else {
+                        mid_utf8 = NE_ARROW_UTF8;
+                        mid = NE_ARROW;
+                    }   
+                } 
+                if (use_utf8) wprintf(L"%lc", mid_utf8);
+                else putchar(mid);
+                if (use_utf8) putchar(' ');
             }
         }
         putchar('\n');
     }
-
     putchar('\n');
 }
 
