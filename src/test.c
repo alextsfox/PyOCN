@@ -51,7 +51,7 @@ int main(void){
     G.vertices = lin_vertices;
     G.energy = 4 + sqrt(2)*4 + sqrt(3)*4 + sqrt(4)*4;  // pre-calculate initial energy
 
-    sg_display(G);
+    // sg_display(G);
 
     
     // Test getters
@@ -78,12 +78,19 @@ int main(void){
     assert(vert.edges == 0b01000101);
 
     // successful rerout
+    // O O O O
+    // | | | |
+    // O O O O
+    // | | | |
+    // O O O O
+    // | | |/|
+    // O-O-O X
     assert(sg_change_vertex_outflow(14, &G, 1) == SUCCESS);
     sg_get_lin_safe(G, &vert, 14);
     assert(vert.downstream == 1);
     assert(vert.adown == 11);
     assert(vert.edges == 0b01000011);
-
+    
     sg_get_lin_safe(G, &vert, 15);
     assert(vert.downstream == IS_ROOT);
     assert(vert.edges == 0b00000001);
@@ -91,4 +98,18 @@ int main(void){
     sg_get_lin_safe(G, &vert, 11);
     assert(vert.downstream == 4);
     assert(vert.edges == 0b00110001);
+    
+    // attempt to create cross
+    // O O O O
+    // | | | |
+    // O O O O
+    // | | | |
+    // O O O O
+    // | |  X|  should fail with warning
+    // O-O-O X
+    assert(sg_change_vertex_outflow(10, &G, 3) == SWAP_WARNING);
+    sg_get_lin_safe(G, &vert, 10);
+    assert(vert.downstream == 4);
+    assert(vert.adown == 14);
+    assert(vert.edges == 0b00010001);
 }

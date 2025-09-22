@@ -58,6 +58,9 @@ typedef struct {
     Vertex *vertices;
 } StreamGraph;
 
+struct cartesian_pair{cartidx_t i, j;};
+
+
 // ##############################
 // # Helpers
 // ##############################
@@ -88,7 +91,6 @@ Status sg_destroy(StreamGraph *G){
 // ##############################
 // # Getters + Setters          #
 // ##############################
-
 // 2d raster is block-tiled in memory to improve cache locality
 #define TILE_SIZE 2
 /*
@@ -107,24 +109,33 @@ linidx_t sg_cart_to_lin(cartidx_t row, cartidx_t col, cartidx_t m, cartidx_t n){
     // return a;
 }
 
-
-
-
 // absolute nightmare of a function, but it works for now
 // TODO: write a proper linear to cartesian conversion function
-cartidx_t sg_lin_to_cart_row(linidx_t a, cartidx_t m, cartidx_t n){
+Status sg_lin_to_cart(linidx_t a, struct cartesian_pair *out, cartidx_t m, cartidx_t n){
     for (cartidx_t row = 0; row < m; row++){
         for (cartidx_t col = 0; col < n; col++){
-            if (a == sg_cart_to_lin(row, col, m, n)) return row;
+            if (a == sg_cart_to_lin(row, col, m, n)) {
+                out->i = row;
+                out->j = col;
+                return SUCCESS;
+            }
         }
     }
-    return 0;
+    return OOB_ERROR;
 }
 
 cartidx_t sg_lin_to_cart_col(linidx_t a, cartidx_t m, cartidx_t n){
     for (cartidx_t row = 0; row < m; row++){
         for (cartidx_t col = 0; col < n; col++){
             if (a == sg_cart_to_lin(row, col, m, n)) return col;
+        }
+    }
+    return 0;
+}
+cartidx_t sg_lin_to_cart_row(linidx_t a, cartidx_t m, cartidx_t n){
+    for (cartidx_t row = 0; row < m; row++){
+        for (cartidx_t col = 0; col < n; col++){
+            if (a == sg_cart_to_lin(row, col, m, n)) return row;
         }
     }
     return 0;
@@ -207,6 +218,8 @@ Status sg_change_vertex_outflow(linidx_t a, StreamGraph *G, clockhand_t down_new
     Vertex vert_down_old;
     Vertex vert_down_new;
     
+    // retrieve G[a], G[a_down_old], G[adownnew]
+    // return OOB_ERROR if any of these fail
     code = sg_get_lin_safe(Gcopy, &vert, a);
     if (code == OOB_ERROR) return OOB_ERROR;
 
@@ -214,19 +227,53 @@ Status sg_change_vertex_outflow(linidx_t a, StreamGraph *G, clockhand_t down_new
     code = sg_get_lin_safe(Gcopy, &vert_down_old, a_down_old);
     if (code == OOB_ERROR) return OOB_ERROR;
 
-    linidx_t a_down_new = sg_cart_to_lin((cartidx_t)(sg_lin_to_cart_row(a, Gcopy.m, Gcopy.n) + row_offsets[down_new]), (cartidx_t)(sg_lin_to_cart_col(a, Gcopy.m, Gcopy.n) + col_offsets[down_new]), Gcopy.m, Gcopy.n);
+    struct cartesian_pair row_col;
+    code = sg_lin_to_cart(a, &row_col, Gcopy.m, Gcopy.n);
+    if (code == OOB_ERROR) return OOB_ERROR;
+
+    int16_t col_off = col_offsets[down_new];
+    int16_t col = (int16_t)row_col.j + col_off;  // cast to signed int to avoid underflow
+    if (col < 0 || col >= (int16_t)Gcopy.n) return OOB_ERROR;
+
+    int16_t row_off = row_offsets[down_new];
+    int16_t row = (int16_t)row_col.i + row_off;
+    if (row < 0 || row >= (int16_t)Gcopy.m) return OOB_ERROR;
+
+    linidx_t a_down_new = sg_cart_to_lin((cartidx_t)row, (cartidx_t)col, Gcopy.m, Gcopy.n);  // recast back to unsigned before converting to linear index
     code = sg_get_lin_safe(Gcopy, &vert_down_new, a_down_new);
     if (code == OOB_ERROR) return OOB_ERROR;
 
     // 2. 
-    // (Could move to just below sg_get_lin_safe(Gcopy, &vert, a))
+    // check that the new downstream is valid (does not check for large cycles or for root access)
     if (
         (vert.downstream == IS_ROOT)  // root node
         || (down_new == vert.downstream)  // no change
         || ((1 << down_new) & (vert.edges != 0)) // new downstream not a valid edge
     ) return SWAP_WARNING;
 
-    // 3.
+    // check that we haven't created any crosses
+    // how to check: upper right quadrant (new_downstream = 1): vertically upwards vertex cannot have an edge at 2 (edges & (1 << 2) == 0)
+    // upper left quadrant (new_downstream = 7): vertically upwards vertex cannot have an edge at 5 (edges & (1 << 5) == 0)
+    // lower right quadrant (new_downstream = 3): vertically downwards vertex cannot have an edge at 1 (edges & (1 << 1) == 0)
+    // lower left quadrant (new_downstream = 5): vertically downwards vertex cannot have an edge at 6 (edges & (1 << 6) == 0)
+    Vertex cross_check_vert;
+    cartidx_t check_row = (cartidx_t)row_col.i;
+    cartidx_t check_col = (cartidx_t)row_col.j;
+    switch (down_new){
+        case 1: check_row -= 1; break;
+        case 3: check_row += 1; break;
+        case 5: check_col -= 1; break;
+        case 7: check_col += 1; break;
+    }
+    sg_get_cart_safe(Gcopy, &cross_check_vert, check_row, check_col);
+    switch (down_new){
+        case 1: if (cross_check_vert.edges & (1 << 2)) return SWAP_WARNING; break;
+        case 3: if (cross_check_vert.edges & (1 << 1)) return SWAP_WARNING; break;
+        case 5: if (cross_check_vert.edges & (1 << 6)) return SWAP_WARNING; break;
+        case 7: if (cross_check_vert.edges & (1 << 5)) return SWAP_WARNING; break;
+    }
+
+    // 3. make the swap
     vert.adown = a_down_new;
     clockhand_t down_old = vert.downstream;
     vert.downstream = down_new;
@@ -323,7 +370,23 @@ Status sg_single_erosion_event(StreamGraph *G){
             // this repeats code that was done in sg_change_vertex_outflow
             // TODO: refactor to avoid redundant calculation
 
-            a_down_new = sg_cart_to_lin((cartidx_t)(sg_lin_to_cart_row(a_down_new, Gcopy.m, Gcopy.n) + row_offsets[down_new]), (cartidx_t)(sg_lin_to_cart_col(a_down_new, Gcopy.m, Gcopy.n) + col_offsets[down_new]), Gcopy.m, Gcopy.n);
+
+            struct cartesian_pair row_col;
+            code = sg_lin_to_cart(a, &row_col, Gcopy.m, Gcopy.n);
+            if (code == OOB_ERROR) return OOB_ERROR;
+
+            int16_t col_off = col_offsets[down_new];
+            int16_t col = (int16_t)row_col.j + col_off;  // cast to signed int to avoid underflow
+            if (col < 0 || col >= (int16_t)Gcopy.n) return OOB_ERROR;
+
+            int16_t row_off = row_offsets[down_new];
+            int16_t row = (int16_t)row_col.i + row_off;
+            if (row < 0 || row >= (int16_t)Gcopy.m) return OOB_ERROR;
+
+            a_down_new = sg_cart_to_lin((cartidx_t)row, (cartidx_t)col, Gcopy.m, Gcopy.n);  // recast back to unsigned before converting to linear index
+            code = sg_get_lin_safe(Gcopy, &vert_down_new, a_down_new);
+            if (code == OOB_ERROR) return OOB_ERROR;
+
             code = sg_get_lin_safe(Gcopy, &vert_down_old, a_down_old);
             if (code == OOB_ERROR){
                 sg_change_vertex_outflow(a, G, down_old);  // undo the outflow change
@@ -395,49 +458,61 @@ Status sg_outer_ocn_loop(uint32_t niterations, StreamGraph *G){
     return SUCCESS;
 }
 
-const char RIGHT_ARROW = '-';
-const char DOWN_ARROW = '|';
-const char LEFT_ARROW = '-';
-const char UP_ARROW = '|';
-const char DOWNRIGHT_ARROW = '\\';
-const char DOWNLEFT_ARROW = '/';
-const char UPLEFT_ARROW = '\\';
-const char UPRIGHT_ARROW = '/';
-const char NO_ARROW = ' ';
-const char NODE = 'O';
-const char ROOT_NODE = 'X';
-void sg_display(StreamGraph G){
-    Vertex vert;
-    clockhand_t direction;
-    for (cartidx_t printed_row = 0; printed_row < G.m*2; printed_row++){
-        cartidx_t row = printed_row / 2;
-        for (cartidx_t col = 0; col < G.n; col++){
-            sg_get_lin(G, &vert, sg_cart_to_lin(row, col, G.m, G.n));
-            // same row as vertex: horizontal edges
-            if (printed_row % 2 == 0){
-                if (vert.downstream == IS_ROOT) printf("%c", ROOT_NODE);
-                else printf("%c", NODE);
-                direction = (1 << 2);
-                if (vert.edges & direction) printf("%c", RIGHT_ARROW);
-                else printf("%c", NO_ARROW);
-            // row between vertices: vertical and diagonal edges
-            } else {
-                direction = (1 << 4);
-                if (vert.edges & direction){
-                    printf("%c", DOWN_ARROW);
-                } else {
-                    printf("%c", NO_ARROW);
-                }
-                direction = (1 << 3);
-                if (vert.edges & direction){
-                    printf("%c", DOWNRIGHT_ARROW);
-                } else {
-                    printf("%c", NO_ARROW);
-                }
-            }
-        }
-        printf("\n");
-    }
-}
+// const char RIGHT_ARROW = '-';
+// const char DOWN_ARROW = '|';
+// const char LEFT_ARROW = '-';
+// const char UP_ARROW = '|';
+// const char DOWNRIGHT_ARROW = '\\';
+// const char DOWNLEFT_ARROW = '/';
+// const char UPLEFT_ARROW = '\\';
+// const char UPRIGHT_ARROW = '/';
+// const char NO_ARROW = ' ';
+// const char NODE = 'O';
+// const char ROOT_NODE = 'X';
+// void sg_display(StreamGraph G){
+//     Vertex vert;
+//     clockhand_t direction;
+//     for (cartidx_t printed_row = 0; printed_row < G.m*2; printed_row++){
+//         cartidx_t row = printed_row / 2;
+//         for (cartidx_t printed_col = 0; printed_col < G.n*2; printed_col++){
+//             cartidx_t col = printed_col / 2;
+//             sg_get_lin(G, &vert, sg_cart_to_lin(row, col, G.m, G.n));
+//             // same row as vertex: horizontal edges
+//             if (printed_row % 2 == 0){  // in-line with vertex
+//                 if (printed_col % 2 == 0){  // same col as verted: print vertex
+//                     if (vert.downstream == IS_ROOT) printf("%c", ROOT_NODE);
+//                     else printf("%c", NODE);
+//                 } else {  // between vertices: horizontal edges
+//                     direction = (1 << 2);
+//                     if (vert.edges & direction) printf("%c", RIGHT_ARROW);
+//                     else printf("%c", NO_ARROW);
+//                 }
+//             // row between vertices: vertical and diagonal edges
+//             } else {
+//                 if (printed_col % 2 == 0){  // same col as vertex: vertical edges}
+//                     direction = (1 << )
+//                 }
+//             }
+
+
+
+
+//                 direction = (1 << 4);
+//                 if (vert.edges & direction){
+//                     printf("%c", DOWN_ARROW);
+//                 } else {
+//                     printf("%c", NO_ARROW);
+//                 }
+//                 direction = (1 << 3);
+//                 if (vert.edges & direction){
+//                     printf("%c", DOWNRIGHT_ARROW);
+//                 } else {
+//                     printf("%c", NO_ARROW);
+//                 }
+//             }
+//         }
+//         printf("\n");
+//     }
+// }
 
 #endif // STREAMGRAPH_C
