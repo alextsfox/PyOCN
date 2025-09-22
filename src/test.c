@@ -2,6 +2,7 @@
 #include "streamgraph.c"
 #include "returncodes.h"
 #include <stdint.h>
+#include <string.h>
 #include <stdlib.h>
 #include <math.h>
 #include <stdbool.h>
@@ -15,7 +16,7 @@ int main(void){
     | | | |
     O O O O
     | | | |
-    O-O-O X
+    O-O-O-X
     */
 
     const cartidx_t m = 4;
@@ -51,7 +52,7 @@ int main(void){
     G.vertices = lin_vertices;
     G.energy = 4 + sqrt(2)*4 + sqrt(3)*4 + sqrt(4)*4;  // pre-calculate initial energy
 
-    // sg_display(G);
+    sg_display(G);
 
     
     // Test getters
@@ -99,6 +100,8 @@ int main(void){
     assert(vert.downstream == 4);
     assert(vert.edges == 0b00110001);
 
+    sg_display(G);
+
     // attempt to create cross-flow
     assert(sg_change_vertex_outflow(10, &G, 3) == SWAP_WARNING);
     sg_get_lin_safe(G, &vert, 10);  // confirm that nothing changed
@@ -112,6 +115,16 @@ int main(void){
     assert(vert.downstream == 1);
     assert(vert.edges == 0b01000011);
 
+    // successful rerout
+    // O O O O
+    // | | | |
+    // O O O O
+    // | | | |
+    // O O O O
+    // | | |/|
+    // O-O-O X
+    sg_display(G);
+
     // flow downstream from a vertex
     assert(sg_flow_downstream_safe(&G, 0, 1) == SUCCESS);
     // create a cycle and test that it is detected
@@ -119,4 +132,5 @@ int main(void){
     assert(sg_flow_downstream_safe(&G, 9, 2) == CYCLE_WARNING);  // should detect a cycle now
 
     sg_outer_ocn_loop(10, &G);
+    sg_display(G);
 }

@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <math.h>
+#include <string.h>
 #include <stdio.h>
 
 #include "returncodes.h"
@@ -278,7 +279,7 @@ Status sg_change_vertex_outflow(linidx_t a, StreamGraph *G, clockhand_t down_new
     if (
         (vert.downstream == IS_ROOT)  // root node
         || (down_new == vert.downstream)  // no change
-        || ((1 << down_new) & (vert.edges != 0)) // new downstream not a valid edge
+        || ((1u << down_new) & (vert.edges)) // new downstream not a valid edge
     ) return SWAP_WARNING;
     
     // check that we haven't created any crosses
@@ -300,22 +301,22 @@ Status sg_change_vertex_outflow(linidx_t a, StreamGraph *G, clockhand_t down_new
     }
     sg_get_cart_safe(*G, &cross_check_vert, check_row, check_col);
     switch (down_new){
-        case 1: if (cross_check_vert.edges & (1 << 2)) return SWAP_WARNING; break;
-        case 3: if (cross_check_vert.edges & (1 << 1)) return SWAP_WARNING; break;
-        case 5: if (cross_check_vert.edges & (1 << 6)) return SWAP_WARNING; break;
-        case 7: if (cross_check_vert.edges & (1 << 5)) return SWAP_WARNING; break;
+        case 1: if (cross_check_vert.edges & (1u << 2)) return SWAP_WARNING; break;
+        case 3: if (cross_check_vert.edges & (1u << 1)) return SWAP_WARNING; break;
+        case 5: if (cross_check_vert.edges & (1u << 6)) return SWAP_WARNING; break;
+        case 7: if (cross_check_vert.edges & (1u << 5)) return SWAP_WARNING; break;
     }
 
     // 3. make the swap
     vert.adown = a_down_new;
     clockhand_t down_old = vert.downstream;
     vert.downstream = down_new;
-    vert.edges ^= (1 << down_old) | (1 << down_new);
+    vert.edges ^= ((1u << down_old) | (1u << down_new));
     sg_set_lin(vert, G, a);
 
-    vert_down_old.edges ^= (1 << (down_old + 4));
+    vert_down_old.edges ^= (1u << (down_old + 4));
     sg_set_lin(vert_down_old, G, a_down_old);
-    vert_down_new.edges ^= (1 << (down_new + 4));
+    vert_down_new.edges ^= (1u << (down_new + 4));
     sg_set_lin(vert_down_new, G, a_down_new);
 
     return SUCCESS;
@@ -453,87 +454,74 @@ Status sg_outer_ocn_loop(uint32_t niterations, StreamGraph *G){
     uint32_t i = 0;
     for (i = 0; i < niterations; i++){
         code = sg_single_erosion_event(G);
-        if (code != SUCCESS) exit(code);  // malformed graph?
+        if (code != SUCCESS) return code;  // malformed graph?
     }
     return SUCCESS;
 }
 
-// const char RIGHT_ARROW = '-';
-// const char DOWN_ARROW = '|';
-// const char LEFT_ARROW = '-';
-// const char UP_ARROW = '|';
-// const char DOWNRIGHT_ARROW = '\\';
-// const char DOWNLEFT_ARROW = '/';
-// const char UPLEFT_ARROW = '\\';
-// const char UPRIGHT_ARROW = '/';
-// const char NO_ARROW = ' ';
-// const char NODE = 'O';
-// const char ROOT_NODE = 'X';
-
-/*
-Iterate through the vertices and print them out in a grid, with arrows (described above) indicating the edges coming from each vertex.
-Loop through rows (outer) and column (inner) to print in the correct order.
-Each vertex is printed as a NODE character. Edges are given by edge characters. The edges are described by the .edges field of each vertex, which is an 8-bit integer where each bit represents one of the 8 possible directions (N, NE, E, SE, S, SW, W, NW).
-Example:
-Vertices have edges 0b100, 0b1000100, 0b1000100, 0b1000000:
-O - O - O - O
-
-Note that edges are printed between the vertices, so that every other line contains edges only.
-*/
+// vibe-coded slop, I guess it works.
+const char RIGHT_ARROW = '-';
+const char DOWN_ARROW = '|';
+const char LEFT_ARROW = '-';
+const char UP_ARROW = '|';
+const char DOWNRIGHT_ARROW = '\\';
+const char DOWNLEFT_ARROW = '/';
+const char UPLEFT_ARROW = '\\';
+const char UPRIGHT_ARROW = '/';
+const char NO_ARROW = ' ';
+const char NODE = 'O';
+const char ROOT_NODE = 'X';
+/**
+ * @brief Display the stream graph in a human-readable format.
+ * Nodes are represented by 'O' (or 'X' for the root), and edges are represented by arrows.
+ * @param G The StreamGraph to display.
+ */
 void sg_display(StreamGraph G){
+    if (G.vertices == NULL || G.m == 0 || G.n == 0) return;
+
+    putchar('\n');
+
     cartidx_t m = G.m;
     cartidx_t n = G.n;
-    if (m == 0 || n == 0) return;
-
-    // Derived raster (interleaved nodes and edges):
-    // node positions at even coordinates (2*i, 2*j)
-    size_t H = (size_t)(m * 2 - 1);
-    size_t W = (size_t)(n * 2 - 1);
-
-    char *grid = (char *)malloc(H * W);
-    if (!grid) return;
-    for (size_t k = 0; k < H * W; k++) grid[k] = ' ';
-
-    // Helper lambda-like macro to place a char if inside bounds
-    #define PUT(r,c,ch) \
-        do { \
-            if ((r) < H && (c) < W) grid[(r)*W + (c)] = (ch); \
-        } while(0)
 
     for (cartidx_t i = 0; i < m; i++){
+        /* Node row */
         for (cartidx_t j = 0; j < n; j++){
-            linidx_t a = sg_cart_to_lin(i, j, m, n);
-            Vertex vert = G.vertices[a];
-
-            size_t gr = (size_t)(2 * i);
-            size_t gc = (size_t)(2 * j);
-
-            // Node character
-            char node_ch = (vert.downstream == IS_ROOT) ? 'X' : 'O';
-            PUT(gr, gc, node_ch);
-
-            localedges_t e = vert.edges;
-
-            // For each direction bit set, draw the edge midway between nodes
-            if (e & (1 << 0)) { if (i > 0)           PUT(gr - 1, gc, '|'); }          // N
-            if (e & (1 << 1)) { if (i > 0 && j < n-1) PUT(gr - 1, gc + 1, '/'); }      // NE
-            if (e & (1 << 2)) { if (j < n - 1)       PUT(gr, gc + 1, '-'); }          // E
-            if (e & (1 << 3)) { if (i < m - 1 && j < n -1) PUT(gr + 1, gc + 1, '\\'); } // SE
-            if (e & (1 << 4)) { if (i < m - 1)       PUT(gr + 1, gc, '|'); }          // S
-            if (e & (1 << 5)) { if (i < m - 1 && j > 0) PUT(gr + 1, gc - 1, '/'); }    // SW
-            if (e & (1 << 6)) { if (j > 0)           PUT(gr, gc - 1, '-'); }          // W
-            if (e & (1 << 7)) { if (i > 0 && j > 0)  PUT(gr - 1, gc - 1, '\\'); }      // NW
+            Vertex *v = &G.vertices[i*n + j];
+            putchar(v->downstream == IS_ROOT ? ROOT_NODE : NODE);
+            if (j < n - 1){
+                /* Horizontal (E) edge only between nodes on this line */
+                if (v->edges & (1u << 2)) putchar(RIGHT_ARROW);
+                else putchar(NO_ARROW);
+            }
         }
-    }
+        putchar('\n');
 
-    // Print the assembled grid
-    for (size_t r = 0; r < H; r++){
-        for (size_t c = 0; c < W; c++){
-            putchar(grid[r * W + c]);
+        if (i == m - 1) break; /* last row: no edge row below */
+
+        /* Edge row (only between this node row and next) */
+        for (cartidx_t j = 0; j < n; j++){
+            Vertex *v = &G.vertices[i*n + j];
+
+            /* Vertical (S) edge directly under node */
+            if (v->edges & (1u << 4)) putchar(DOWN_ARROW);
+            else putchar(NO_ARROW);
+
+            if (j < n - 1){
+                /* Diagonal edges occupy the space between two vertical positions */
+                char mid = NO_ARROW;
+                /* SE from (i,j) */
+                if (v->edges & (1u << 3)) mid = DOWNRIGHT_ARROW;
+                /* SW from (i,j+1) (drawn leaning left) */
+                Vertex *v_right = &G.vertices[i*n + (j+1)];
+                if (mid == NO_ARROW && (v_right->edges & (1u << 5))) mid = DOWNLEFT_ARROW;
+                putchar(mid);
+            }
         }
         putchar('\n');
     }
 
-    free(grid);
-    #undef PUT
+    putchar('\n');
 }
+
+#endif // STREAMGRAPH_C
