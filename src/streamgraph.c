@@ -15,9 +15,21 @@
 #include <string.h>
 #include <stdio.h>
 #include <wchar.h>
+#include <locale.h>
 // #include <locale.h>
 
-#include "returncodes.h"
+typedef uint8_t Status;
+
+const Status SUCCESS = 0;
+// vertex return codes
+// valid values for .downstream are 0-7
+// use remaining values for error codes
+const Status OOB_ERROR = 1;
+const Status NO_EDGE_WARNING = 2;
+const Status NULL_POINTER_ERROR = 3;
+const Status SWAP_WARNING = 4;
+const Status MALFORMED_GRAPH_WARNING = 5;
+const Status CYCLE_WARNING = 6;
 
 const double gamma = 0.5;
 const double temperature = 0.75;
@@ -37,7 +49,7 @@ const double temperature = 0.75;
 #include "returncodes.h"
 
 // Type definitions
-typedef int32_t drainedarea_t;
+typedef uint32_t drainedarea_t;
 typedef uint16_t cartidx_t;
 typedef uint32_t linidx_t;
 typedef uint8_t localedges_t;
@@ -69,26 +81,6 @@ struct cartesian_pair{cartidx_t i, j;};
 // ##############################
 const int16_t row_offsets[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
 const int16_t col_offsets[8] = {0, 1, 1, 1, 0, -1, -1, -1};
-
-// ##############################
-// # Create/destroy streamgraph #
-// ##############################
-Status sg_create(StreamGraph *G, cartidx_t m, cartidx_t n, cartidx_t i_root, cartidx_t j_root){
-    if (m % 2 != 0 || n % 2 != 0) return MALFORMED_GRAPH_WARNING;
-    if (G == NULL) return NULL_POINTER_ERROR;
-    Vertex *vertices = calloc(m*n, sizeof(Vertex));
-    if (vertices == NULL) return NULL_POINTER_ERROR;
-    *G = (StreamGraph){m, n, i_root, j_root, 0.0, vertices};
-    return SUCCESS;
-}
-Status sg_destroy(StreamGraph *G){
-    if (G != NULL && G->vertices != NULL){
-        free(G->vertices);
-        G->vertices = NULL;
-    }
-    G = NULL;
-    return SUCCESS;
-}
 
 
 // ##############################
@@ -192,6 +184,28 @@ Status sg_set_lin_safe(Vertex vert, StreamGraph *G, linidx_t a){
 // Gets the value at [a] in memory to vert, with safeguards.
 Status sg_set_lin(Vertex vert, StreamGraph *G, linidx_t a){
     G->vertices[a] = vert;
+    return SUCCESS;
+}
+
+// ##############################
+// # Create/destroy streamgraph #
+// ##############################
+Status sg_create(StreamGraph *G, cartidx_t m, cartidx_t n, cartidx_t i_root, cartidx_t j_root){
+    if (m % 2 != 0 || n % 2 != 0) return MALFORMED_GRAPH_WARNING;
+    if (G == NULL) return NULL_POINTER_ERROR;
+    Vertex *vertices = calloc(m*n, sizeof(Vertex));
+    if (vertices == NULL) return NULL_POINTER_ERROR;
+    if (i_root < 0 || i_root >= m || j_root < 0 || j_root >= n) return OOB_ERROR;
+    vertices[sg_cart_to_lin(i_root, j_root, m, n)].downstream = IS_ROOT;  // mark root
+    *G = (StreamGraph){m, n, i_root, j_root, 0.0, vertices};
+    return SUCCESS;
+}
+Status sg_destroy(StreamGraph *G){
+    if (G != NULL && G->vertices != NULL){
+        free(G->vertices);
+        G->vertices = NULL;
+    }
+    G = NULL;
     return SUCCESS;
 }
 
@@ -493,6 +507,8 @@ const wchar_t ROOT_NODE_UTF8 = L'\u25CF';  // circle with x
  * @param G The StreamGraph to display.
  */
 void sg_display(StreamGraph G, bool use_utf8){
+    if (use_utf8) setlocale(LC_ALL, "");
+
     if (G.vertices == NULL || G.m == 0 || G.n == 0) return;
 
     putchar('\n');
@@ -579,6 +595,43 @@ void sg_display(StreamGraph G, bool use_utf8){
         putchar('\n');
     }
     putchar('\n');
+}
+
+StreamGraph sg_make_test_graph(){
+    const cartidx_t m = 4;
+    const cartidx_t n = 4;
+
+
+    Vertex cart_vertices[] = {
+        (Vertex){1, 0,  0b00010000, 4, 0}, (Vertex){1, 0, 0b00010000, 4, 0}, (Vertex){1, 0, 0b00010000, 4, 0}, (Vertex){1, 0, 0b00010000, 4, 0},
+        (Vertex){2, 0, 0b00010001, 4, 0}, (Vertex){2, 0, 0b00010001, 4, 0}, (Vertex){2, 0, 0b00010001, 4, 0}, (Vertex){2, 0, 0b00010001, 4, 0},
+        (Vertex){3, 0, 0b00010001, 4, 0}, (Vertex){3, 0, 0b00010001, 4, 0}, (Vertex){3, 0, 0b00010001, 4, 0}, (Vertex){3, 0, 0b00010001, 4, 0},
+        (Vertex){4, 0, 0b00000101, 2, 0}, (Vertex){8, 0, 0b01000101, 2, 0}, (Vertex){12, 0,0b01000101, 2, 0}, (Vertex){16, 0,0b01000001, IS_ROOT, 0},
+    };
+    Vertex lin_vertices[m*n];
+    Vertex vert;
+    // awful hack until I write a proper conversion function i,j -> a
+    // TODO write proper conversion function
+    for (linidx_t a = 0; a < m*n; a++){
+        for (cartidx_t row = 0; row < m; row++){
+            for (cartidx_t col = 0; col < n; col++){
+                if (a == sg_cart_to_lin(row, col, m, n)){
+                    vert = cart_vertices[row*n + col];
+                    vert.adown = sg_cart_to_lin(row + row_offsets[vert.downstream], col + col_offsets[vert.downstream], m, n);
+                    lin_vertices[a] = vert;
+                }
+            }
+        }
+    }
+
+
+    StreamGraph G;
+    sg_create(&G, m, n, 3, 3);
+    G.energy = 0.0;
+    memcpy(G.vertices, lin_vertices, G.m * G.n * sizeof(Vertex));
+    G.energy = 4 + sqrt(2)*4 + sqrt(3)*4 + sqrt(4)*4;  // pre-calculate initial energy
+
+    return G;
 }
 
 #endif // STREAMGRAPH_C

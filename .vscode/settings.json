@@ -2,6 +2,8 @@
     "files.associations": {
         "*.eddypro": "ini",
         "neighbormatrix.c": "cpp",
-        "stdbool.h": "c"
+        "stdbool.h": "c",
+        "returncodes.h": "c",
+        "string.h": "c"
     }
 }
