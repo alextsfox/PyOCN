@@ -94,13 +94,20 @@ Status sg_destroy(StreamGraph *G){
 /*
  * Converts cartesian (row, col) to linear index in block-tiled memory
  */
+// linidx_t sg_cart_to_lin(cartidx_t row, cartidx_t col, cartidx_t m, cartidx_t n){
+//     div_t r_divT = div(row, TILE_SIZE);
+//     div_t c_divT = div(col, TILE_SIZE);
+//     linidx_t k = r_divT.quot * n/TILE_SIZE + c_divT.quot;
+//     linidx_t a = (TILE_SIZE * TILE_SIZE * k) + (TILE_SIZE * r_divT.rem) + c_divT.rem;
+//     return a;
+// }
+// for now, we just use normal row-major order until we finish debugging the main algorithm
 linidx_t sg_cart_to_lin(cartidx_t row, cartidx_t col, cartidx_t m, cartidx_t n){
-    div_t r_divT = div(row, TILE_SIZE);
-    div_t c_divT = div(col, TILE_SIZE);
-    linidx_t k = r_divT.quot * n/TILE_SIZE + c_divT.quot;
-    linidx_t a = (TILE_SIZE * TILE_SIZE * k) + (TILE_SIZE * r_divT.rem) + c_divT.rem;
-    return a;
+    return (row * n + col);
+    // return a;
 }
+
+
 
 
 // absolute nightmare of a function, but it works for now
