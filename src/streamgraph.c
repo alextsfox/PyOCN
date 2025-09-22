@@ -460,14 +460,14 @@ Status sg_outer_ocn_loop(uint32_t niterations, StreamGraph *G){
 }
 
 // vibe-coded slop, I guess it works.
-const char RIGHT_ARROW = '-';
-const char DOWN_ARROW = '|';
-const char LEFT_ARROW = '-';
-const char UP_ARROW = '|';
-const char DOWNRIGHT_ARROW = '\\';
-const char DOWNLEFT_ARROW = '/';
-const char UPLEFT_ARROW = '\\';
-const char UPRIGHT_ARROW = '/';
+const char E_ARROW = '-';
+const char S_ARROW = '|';
+const char W_ARROW = '-';
+const char N_ARROW = '|';
+const char SE_ARROW = '\\';
+const char SW_ARROW = '/';
+const char NW_ARROW = '\\';
+const char NE_ARROW = '/';
 const char NO_ARROW = ' ';
 const char NODE = 'O';
 const char ROOT_NODE = 'X';
@@ -491,8 +491,10 @@ void sg_display(StreamGraph G){
             putchar(v->downstream == IS_ROOT ? ROOT_NODE : NODE);
             if (j < n - 1){
                 /* Horizontal (E) edge only between nodes on this line */
-                if (v->edges & (1u << 2)) putchar(RIGHT_ARROW);
-                else putchar(NO_ARROW);
+                if (v->edges & (1u << 2)){
+                    if (v->downstream == 2) putchar(E_ARROW);
+                    else putchar(W_ARROW);
+                } else putchar(NO_ARROW);
             }
         }
         putchar('\n');
@@ -504,17 +506,25 @@ void sg_display(StreamGraph G){
             Vertex *v = &G.vertices[i*n + j];
 
             /* Vertical (S) edge directly under node */
-            if (v->edges & (1u << 4)) putchar(DOWN_ARROW);
-            else putchar(NO_ARROW);
+            if (v->edges & (1u << 4)){
+                if (v->downstream == 4) putchar(S_ARROW);
+                else putchar(N_ARROW);
+            } else putchar(NO_ARROW);
 
             if (j < n - 1){
                 /* Diagonal edges occupy the space between two vertical positions */
                 char mid = NO_ARROW;
                 /* SE from (i,j) */
-                if (v->edges & (1u << 3)) mid = DOWNRIGHT_ARROW;
+                if (v->edges & (1u << 3)) {
+                    if (v->downstream == 3) mid = SE_ARROW;
+                    else mid = UPLEFT_ARROW;
+                }
                 /* SW from (i,j+1) (drawn leaning left) */
                 Vertex *v_right = &G.vertices[i*n + (j+1)];
-                if (mid == NO_ARROW && (v_right->edges & (1u << 5))) mid = DOWNLEFT_ARROW;
+                if (mid == NO_ARROW && (v_right->edges & (1u << 5))){
+                    if (v_right->downstream == 5) mid = DOWNLEFT_ARROW;
+                    else mid = UPRIGHT_ARROW;
+                }
                 putchar(mid);
             }
         }
