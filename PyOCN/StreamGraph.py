@@ -1,6 +1,5 @@
-"""
 #TODO: allow users to provide multiple DAGs that partition a space.
-
+"""
 streamgraph.py
 
 High-level Python interface for StreamGraph structures from the libocn C library.
@@ -25,6 +24,7 @@ from ._statushandler import check_status
 
 from . import _libocn_bindings as _bindings
 
+#TODO: implement all initializers
 graph_initializers = {
     "I": None
 }
