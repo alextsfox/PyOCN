@@ -202,7 +202,7 @@ Status sg_change_vertex_outflow(StreamGraph *G, linidx_t a, clockhand_t down_new
     // 2. check for any immediate problems with the swap that would malform the graph
     // check that the new downstream is valid (does not check for large cycles or for root access)
     if (
-        (down_old == IS_ROOT)  // root node
+        (down_old == IS_ROOT)  // cannot rerout root node.
         || (down_new == down_old)  // no change
         || ((1u << down_new) & (vert.edges)) // new downstream direction already occupied
     ) return SWAP_WARNING;
