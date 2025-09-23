@@ -1,5 +1,5 @@
 import warnings
-from ._StreamGraphC import libocn
+from ._libocn_bindings import libocn
 
 class StreamGraphError(Exception): pass
 class OutOfBoundsError(StreamGraphError): pass

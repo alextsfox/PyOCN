@@ -19,7 +19,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib.patches import ArrowStyle
 
-from . import _StreamGraphC as _sgc
+from . import _libocn_bindings as _sgc
 
 # """Python representation of a vertex in the StreamGraph....might not use"""
 # @dataclass(slots=True)
@@ -52,7 +52,7 @@ class StreamGraph:
             self._c_graph = _sgc.libocn.sg_make_test_graph()
 
         else:    
-            self._c_graph = _sgc.StreamGraphC()
+            self._c_graph = _sgc.StreamGraph_C()
             if shape is None:
                 raise ValueError("Must provide shape when init_structure is not 'test'")
             i_root, j_root = shape[0]-1, shape[1]-1
@@ -97,7 +97,7 @@ class StreamGraph:
     @property
     def vertices(self) -> np.ndarray:
         # vertices = np.ctypeslib.as_array(self._c_graph.vertices, shape=(self.m*self.n,))
-        vert_c = _sgc.VertexC()
+        vert_c = _sgc.Vertex_C()
         vertices = np.empty((self.m*self.n,), dtype=_sgc.vert_dtype)
         for a in range(self.m*self.n):
             _ = _sgc.libocn.sg_get_lin(self._c_graph, byref(vert_c), a)
