@@ -13,11 +13,11 @@ typedef uint8_t clockhand_t;
 extern clockhand_t IS_ROOT;
 
 typedef struct {
-    drainedarea_t drained_area;
-    linidx_t adown;
-    localedges_t edges;
-    clockhand_t downstream;
-    uint8_t visited;
+    drainedarea_t drained_area;  // 4B
+    linidx_t adown;  // 4B
+    localedges_t edges;  // 1B
+    clockhand_t downstream;  // 1B
+    uint8_t visited;  // 1B
 } Vertex;
 
 typedef struct {
