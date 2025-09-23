@@ -51,19 +51,11 @@ libocn = CDLL(_streamgraph_so_file)
 #############################
 Status = c_uint8
 
-SUCCESS = int(Status.in_dll(libocn, "SUCCESS").value)
-OOB_ERROR = int(Status.in_dll(libocn, "OOB_ERROR").value)
-NULL_POINTER_ERROR = int(Status.in_dll(libocn, "NULL_POINTER_ERROR").value)
-SWAP_WARNING = int(Status.in_dll(libocn, "SWAP_WARNING").value)
-MALFORMED_GRAPH_WARNING = int(Status.in_dll(libocn, "MALFORMED_GRAPH_WARNING").value)
-
-STATUS_CODES = {
-    SUCCESS: "SUCCESS",
-    OOB_ERROR: "OOB_ERROR",
-    NULL_POINTER_ERROR: "NULL_POINTER_ERROR",
-    SWAP_WARNING: "SWAP_WARNING",
-    MALFORMED_GRAPH_WARNING: "MALFORMED_GRAPH_WARNING",
-}
+SUCCESS = Status.in_dll(libocn, "SUCCESS")
+OOB_ERROR = Status.in_dll(libocn, "OOB_ERROR")
+NULL_POINTER_ERROR = Status.in_dll(libocn, "NULL_POINTER_ERROR")
+SWAP_WARNING = Status.in_dll(libocn, "SWAP_WARNING")
+MALFORMED_GRAPH_WARNING = Status.in_dll(libocn, "MALFORMED_GRAPH_WARNING")
 
 #############################
 # STREAMGRAPH.H EQUIVALENTS #
@@ -193,3 +185,16 @@ libocn.ocn_single_erosion_event.restype = Status
 # Status ocn_outer_ocn_loop(StreamGraph *G, uint32_t niterations, double gamma, double *annealing_schedule);
 libocn.ocn_outer_ocn_loop.argtypes = [POINTER(StreamGraph_C), c_uint32, c_double, POINTER(c_double)]
 libocn.ocn_outer_ocn_loop.restype = Status
+
+__all__ = [
+    "SUCCESS",
+    "OOB_ERROR",
+    "NULL_POINTER_ERROR",
+    "SWAP_WARNING",
+    "MALFORMED_GRAPH_WARNING",
+    "libocn",
+    "CartPair_C",
+    "Vertex_C",
+    "StreamGraph_C",
+    "IS_ROOT",
+]
