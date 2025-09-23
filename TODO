@@ -1,1 +1,0 @@
-* Build and distribute wheels for each platform I want to support, or include the source code and a build script and use a tool like `setuptools` or `scikit-build` to build the C library during installation.

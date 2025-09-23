@@ -1,2 +1,10 @@
-/readme_files
-readme.html
+/readme_files/
+/.vscode/
+
+TODO*
+
+**/__pycache__/
+/__pycache__/
+*/__pycache__/
+
+.DS_Store
