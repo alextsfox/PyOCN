@@ -96,15 +96,15 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
 
         // update drained area and energy along both paths
         energy_old = G->energy;
-        sg_increment_downstream(-da_inc, G, a_down_old, gamma);  // decrement drained area along old path
-        sg_increment_downstream(da_inc, G, a_down_new, gamma);  // increment drained area along new path
+        ocn_update_energy(G, -da_inc, a_down_old, gamma);  // decrement drained area along old path
+        ocn_update_energy(G, da_inc, a_down_new, gamma);  // increment drained area along new path
         energy_new = G->energy;
 
         if (energy_new < energy_old || accept_bad_value) return SUCCESS;
 
         // reject swap: undo everything and try again
-        ocn_update_energy(da_inc, G, a_down_old, gamma);  // undo the decrement
-        ocn_update_energy(-da_inc, G, a_down_new, gamma);  // undo the increment
+        ocn_update_energy(G, da_inc, a_down_old, gamma);  // undo the decrement
+        ocn_update_energy(G, -da_inc, a_down_new, gamma);  // undo the increment
         sg_change_vertex_outflow(G, a, a_down_old);  // undo the outflow change
     }
 
