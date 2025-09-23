@@ -1,27 +1,31 @@
 #ifndef STREAMGRAPH_H
 #define STREAMGRAPH_H
 
-Status sg_create(StreamGraph *G, cartidx_t m, cartidx_t n);
-Status sg_destroy(StreamGraph *G);
+#include <stdint.h>
 
-linidx_t sg_cart_to_lin(cartidx_t row, cartidx_t col, cartidx_t m, cartidx_t n);
+// basic types
+typedef uint32_t drainedarea_t;
+typedef uint16_t cartidx_t;
+typedef struct {cartidx_t row, col;} CartPair;
+typedef uint32_t linidx_t;
+typedef uint8_t localedges_t;
+typedef uint8_t clockhand_t;
+extern clockhand_t IS_ROOT;
 
-Status sg_get_cart_safe(StreamGraph G, Vertex *out, cartidx_t row, cartidx_t col);
-Status sg_get_cart(StreamGraph G, Vertex *out, cartidx_t row, cartidx_t col);
-Status sg_set_cart_safe(Vertex vert, StreamGraph *G, cartidx_t row, cartidx_t col);
-Status sg_set_cart(Vertex vert, StreamGraph *G, cartidx_t row, cartidx_t col);
+typedef struct {
+    drainedarea_t drained_area;
+    linidx_t adown;
+    localedges_t edges;
+    clockhand_t downstream;
+    uint8_t visited;
+} Vertex;
 
-Status sg_get_lin_safe(StreamGraph G, Vertex *out, linidx_t a);
-Status sg_get_lin(StreamGraph G, Vertex *out, linidx_t a);
-Status sg_set_lin_safe(Vertex vert, StreamGraph *G, linidx_t a);
-Status sg_set_lin(Vertex vert, StreamGraph *G, linidx_t a);
+typedef struct {
+    CartPair dims;
+    CartPair root;
+    double energy;
+    Vertex *vertices;
+} StreamGraph;
 
-Status sg_change_vertex_outflow(linidx_t a, StreamGraph *G, clockhand_t down_new);
-
-Status sg_increment_downstream_safe(drainedarea_t inc, StreamGraph *G, linidx_t a, uint8_t ncalls);
-Status sg_increment_downstream(drainedarea_t inc, StreamGraph *G, linidx_t a, uint8_t ncalls);
-
-Status sg_single_erosion_event(StreamGraph *G);
-Status sg_outer_ocn_loop(uint32_t niterations, StreamGraph *G, drainedarea_t tol);
 
 #endif // STREAMGRAPH_H
