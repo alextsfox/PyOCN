@@ -87,7 +87,7 @@ class StreamGraph:
         vertices = self._vertices
         vertices_2d = np.empty(self.shape, dtype=vertices.dtype)        
         for a in range(vertices.size):
-            row_col = _bindings.sg_lin_to_cart(a, self._c_graph.dims)
+            row_col = _bindings.libocn.sg_lin_to_cart(a, self._c_graph.dims)
             row, col = row_col.row, row_col.col
             vertices_2d[row, col] = vertices[a]
         return vertices_2d[idx]
@@ -96,14 +96,17 @@ class StreamGraph:
     def __str__(self):
         return f"StreamGraph(dims={self.dims}, root={self.root}, vertices=<{self.dims[0] * self.dims[1]} vertices>)"
     def __del__(self):
-        _bindings.libocn.sg_destroy(byref(self._c_graph))
+        try:
+            _bindings.libocn.sg_destroy_safe(byref(self._c_graph))
+        except AttributeError:
+            pass
 
     @property
     def dims(self) -> tuple[int, int]:
-        return int(self._c_graph.shape.row), int(self._c_graph.shape.col)
+        return int(self._c_graph.dims.row), int(self._c_graph.dims.col)
     @property
     def shape(self) -> tuple[int, int]:
-        return int(self._c_graph.shape.row), int(self._c_graph.shape.col)
+        return int(self._c_graph.dims.row), int(self._c_graph.dims.col)
     @property
     def size(self) -> int:
         return self.shape[0] * self.shape[1]
@@ -120,26 +123,26 @@ class StreamGraph:
         Use the __getitem__ method instead 
         (ie do not do sg._vertices[i]. Instead, do sg[i] or sg[i, j].)"""
         
-        # method 1: copy to numpy array (safe, but slower)
-        buf_addr = ctypes.addressof(self._c_graph.vertices.contents)
-        buf_len = self.size * ctypes.sizeof(_bindings.Vertex_C)
-        buf = (ctypes.c_char * buf_len).from_address(buf_addr)
-        vertices = np.frombuffer(
-            buf, 
-            dtype=np.dtype([
-                ("drained_area", np.uint32),
-                ("adown", np.uint32),
-                ("edges", np.uint8),
-                ("downstream", np.uint8),
-                ("visited", np.uint8),
-            ]), 
-            count=self.size)
+        # # method 1: copy to numpy array (safe, but slower)
+        # buf_addr = ctypes.addressof(self._c_graph.vertices.contents)
+        # buf_len = self.size * ctypes.sizeof(_bindings.Vertex_C)
+        # buf = (ctypes.c_char * buf_len).from_address(buf_addr)
+        # vertices = np.frombuffer(
+        #     buf, 
+        #     dtype=np.dtype([
+        #         ("drained_area", np.uint32),
+        #         ("adown", np.uint32),
+        #         ("edges", np.uint8),
+        #         ("downstream", np.uint8),
+        #         ("visited", np.uint8),
+        #     ]), 
+        #     count=self.size)
 
-        # # method 2: get each vertex individually (slower, but guaranteed correct order)
-        # vertices = np.empty(self.size, dtype=Vertex)
-        # for a in range(self.size):
-        #     vert_c = _bindings.libocn.sg_get_lin(byref(self._c_graph), a)
-        #     vertices[a] = Vertex(vert_c.drained_area, vert_c.adown, vert_c.edges, vert_c.downstream, vert_c.visited)
+        # method 2: get each vertex individually (slower, but guaranteed correct order)
+        vertices = np.empty(self.size, dtype=Vertex)
+        for a in range(self.size):
+            vert_c = _bindings.libocn.sg_get_lin(byref(self._c_graph), a)
+            vertices[a] = Vertex(vert_c.drained_area, vert_c.adown, vert_c.edges, vert_c.downstream, vert_c.visited)
         return vertices
     
     # TODO: move to an OCN class/module
@@ -156,28 +159,29 @@ class StreamGraph:
     def to_networkx(self) -> nx.DiGraph:
         """Convert the StreamGraph to a NetworkX directed graph."""
         G = nx.DiGraph()
-        row_col = _bindings.cartesian_pair()
         for a, v in enumerate(self._vertices):
-            _ = _bindings.libocn.sg_lin_to_cart(a, byref(row_col), _bindings.CartPair_C(row=self.shape[0], col=self.shape[1]))
-            pos = row_col.i, row_col.j
-            G.add_node(a, pos=pos, drained_area=v["drained_area"])
+            row_col = _bindings.libocn.sg_lin_to_cart(a, self._c_graph.dims)
+            pos = row_col.row, row_col.col
+            G.add_node(a, pos=pos, drained_area=v.drained_area)
         for a, v in enumerate(self._vertices):
-            if v["downstream"] != int(_bindings.IS_ROOT.value):
-                G.add_edge(a, v["adown"])
+            if v.downstream != _bindings.IS_ROOT:
+                G.add_edge(a, v.adown)
         return G
-    
-    def plot_streamgraph(self, ax=None):
-        """Plot the StreamGraph in matplotlib"""
-        G = self.to_networkx()
-        pos = nx.get_node_attributes(G, 'pos')
-        drained_area = np.asarray(list(nx.get_node_attributes(G, 'drained_area').values()))
-        drained_area = (drained_area - drained_area.min()) / (drained_area.max() - drained_area.min())
-        size = 50 + drained_area*1000
-        lw = 1 + drained_area*5
-        if ax is None:
-            _, ax = plt.subplots()
-        nx.draw_networkx(G, pos=pos, node_size=size, width=lw, with_labels=False, arrowstyle=ArrowStyle("-|>", head_length=1.5, head_width=0.5), ax=ax)
-        return ax
+
+def plot_streamgraph(sg:StreamGraph, ax=None):
+    """Plot the StreamGraph in matplotlib"""
+    return plot_positional_digraph(sg.to_networkx(), ax=ax)
+
+def plot_positional_digraph(G:nx.DiGraph, ax=None):
+    pos = nx.get_node_attributes(G, 'pos')
+    drained_area = np.asarray(list(nx.get_node_attributes(G, 'drained_area').values()))
+    drained_area = (drained_area - drained_area.min()) / (drained_area.max() - drained_area.min())
+    size = 50 + drained_area*1000
+    lw = 1 + drained_area*5
+    if ax is None:
+        _, ax = plt.subplots()
+    nx.draw_networkx(G, pos=pos, node_size=size, width=lw, with_labels=False, arrowstyle=ArrowStyle("-|>", head_length=1.5, head_width=0.5), ax=ax)
+    return ax
 
 
 def display_streamgraph(sg:StreamGraph, use_utf8=True):
@@ -284,7 +288,7 @@ def _digraph_to_streamgraph_c(G: nx.DiGraph) -> _bindings.StreamGraph_C:
         return int(_bindings.libocn.sg_cart_to_lin(coords, dims))
 
     # Fill vertices
-    for u in reversed(nx.topological_sort(G)):  # reverse topo not strictly required for assignments
+    for u in reversed(list(nx.topological_sort(G))):  # reverse topo not strictly required for assignments
         r, c = positions[u]
         vertex = Vmat[r][c]
         vertex.drained_area = int(drained_area[u])
@@ -297,7 +301,7 @@ def _digraph_to_streamgraph_c(G: nx.DiGraph) -> _bindings.StreamGraph_C:
             vertex.edges ^= (1 << clockhand)  # flip the bit for this direction
             vertex.adown = cart_to_lin(r2, c2)
         else:
-            vertex.downstream = int(_bindings.IS_ROOT.value)
+            vertex.downstream = _bindings.IS_ROOT
         vertex.visited = 0
 
     # Validate that all grid cells correspond to a node (possibly redundant?)
@@ -337,11 +341,17 @@ def _digraph_to_streamgraph_c(G: nx.DiGraph) -> _bindings.StreamGraph_C:
     # TODO: (Skip if performance is critical)
     check_vert = _bindings.Vertex_C()
     for a in range(m * n):
-        status = _bindings.libocn.sg_get_lin_safe(c_graph, byref(check_vert), a)
+        status = _bindings.libocn.sg_get_lin_safe(byref(check_vert), byref(c_graph), a)
         check_status(status)
         if check_vert.visited != 0:
             raise RuntimeError(f"Post-write validation failed at a={a}.")
         
     return c_graph
 
-
+__all__ = [
+    "Vertex",
+    "StreamGraph",
+    "plot_streamgraph",
+    "display_streamgraph",
+    "plot_positional_digraph",
+]

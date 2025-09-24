@@ -42,7 +42,7 @@ CTYPE_TO_NP_DTYPE = {
 }
 
 # TODO This will need to change probably depending on OS/architecture
-_streamgraph_so_file = Path(__file__).parent.parent / "src" / "libocn.so"
+_streamgraph_so_file = Path(__file__).parent / "libocn.so"
 libocn = CDLL(_streamgraph_so_file)
 
 
@@ -51,11 +51,11 @@ libocn = CDLL(_streamgraph_so_file)
 #############################
 Status = c_uint8
 
-SUCCESS = Status.in_dll(libocn, "SUCCESS")
-OOB_ERROR = Status.in_dll(libocn, "OOB_ERROR")
-NULL_POINTER_ERROR = Status.in_dll(libocn, "NULL_POINTER_ERROR")
-SWAP_WARNING = Status.in_dll(libocn, "SWAP_WARNING")
-MALFORMED_GRAPH_WARNING = Status.in_dll(libocn, "MALFORMED_GRAPH_WARNING")
+SUCCESS = int(Status.in_dll(libocn, "SUCCESS").value)
+OOB_ERROR = int(Status.in_dll(libocn, "OOB_ERROR").value)
+NULL_POINTER_ERROR = int(Status.in_dll(libocn, "NULL_POINTER_ERROR").value)
+SWAP_WARNING = int(Status.in_dll(libocn, "SWAP_WARNING").value)
+MALFORMED_GRAPH_WARNING = int(Status.in_dll(libocn, "MALFORMED_GRAPH_WARNING").value)
 
 #############################
 # STREAMGRAPH.H EQUIVALENTS #

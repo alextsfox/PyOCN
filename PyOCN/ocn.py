@@ -63,7 +63,7 @@ class OCN():
         Returns:
             float: The computed energy.
         """
-        return np.sum(self.sg.vertices["drained_area"]**self.gamma)
+        return np.sum(v.drained_area**self.gamma for v in self.sg._vertices)
     
     @property
     def energy(self) -> float:
@@ -111,5 +111,7 @@ class OCN():
                 pbar.set_postfix({"H": self.energy})
                 pbar.update(iterations_this_loop)
         
-        
 
+__all__ = [
+    "OCN",
+]

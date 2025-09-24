@@ -1,21 +1,59 @@
 import matplotlib.pyplot as plt
 import networkx as nx
+import numpy as np
 
-import PyOCN as ocn
+import PyOCN
 
-sg = ocn.StreamGraph((3, 3), init_structure="test")
+G = nx.DiGraph()
+n = 6
+rows, cols = np.mgrid[0:n, 0:n]
+rows, cols = rows[::-1].flatten(), cols.flatten()
+for r, c in zip(rows, cols):
+    G.add_node(r*n + c, pos=(r, c))
+for r, c in zip(rows, cols):
+    if r < n - 1:
+        G.add_edge(r*n + c, (r + 1)*n + c)
+    elif c < n - 1:
+        G.add_edge(r*n + c, r*n + (c + 1))
 
-n_events = 4
-fig, axs = plt.subplots(1, n_events, figsize=(12, 6))
-sg.plot_streamgraph(ax=axs[0])
-axs[0].set_title("Initial State, Energy {:.2f}".format(sg.energy))
-for ax in axs[1:]:
-    try:
-        sg.single_erosion_event()
-        label = f"SUCCESS {sg.energy:.2f}"
-    except RuntimeError as e:
-        label = f"FAILURE {sg.energy:.2f}"
-        print(f"StreamGraph error during erosion event: {e}")
-    sg.plot_streamgraph(ax=ax)
-    ax.set_title(label)
+ocn = PyOCN.OCN(init_structure=G, gamma=0.5)
+
+print(ocn.energy)
+PyOCN.plot_streamgraph(ocn.sg)
 plt.show()
+
+ocn.single_erosion_event(temperature=1.0)
+print(ocn.energy)
+print(ocn.compute_energy())
+PyOCN.plot_streamgraph(ocn.sg)
+plt.show()
+
+ocn.single_erosion_event(temperature=1.0)
+print(ocn.energy)
+print(ocn.compute_energy())
+PyOCN.plot_streamgraph(ocn.sg)
+plt.show()
+
+ocn.single_erosion_event(temperature=1.0)
+print(ocn.energy)
+print(ocn.compute_energy())
+PyOCN.plot_streamgraph(ocn.sg)
+plt.show()
+
+ocn.single_erosion_event(temperature=1.0)
+print(ocn.energy)
+print(ocn.compute_energy())
+PyOCN.plot_streamgraph(ocn.sg)
+plt.show()
+
+from tqdm import trange
+from time import sleep
+for _ in trange(100):
+    ocn.single_erosion_event(temperature=1.0)
+    print(_)
+    print(ocn.energy)
+    print(ocn.compute_energy())
+PyOCN.plot_streamgraph(ocn.sg)
+plt.show()
+
+        
