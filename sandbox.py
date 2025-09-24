@@ -4,8 +4,9 @@ import numpy as np
 
 import PyOCN
 
+
 G = nx.DiGraph()
-n = 6
+n = 5
 rows, cols = np.mgrid[0:n, 0:n]
 rows, cols = rows[::-1].flatten(), cols.flatten()
 for r, c in zip(rows, cols):
@@ -20,9 +21,27 @@ ocn = PyOCN.OCN(init_structure=G, gamma=0.5)
 
 
 
-ocn.single_erosion_event(temperature=1.0)
-
-PyOCN.plot_streamgraph(ocn)
 
 
-plt.show()
+# G = nx.DiGraph()
+# n = 6
+# rows, cols = np.mgrid[0:n, 0:n]
+# rows, cols = rows[::-1].flatten(), cols.flatten()
+# for r, c in zip(rows, cols):
+#     G.add_node(r*n + c, pos=(r, c))
+# for r, c in zip(rows, cols):
+#     if r < n - 1:
+#         G.add_edge(r*n + c, (r + 1)*n + c)
+#     elif c < n - 1:
+#         G.add_edge(r*n + c, r*n + (c + 1))
+
+# ocn = PyOCN.OCN(init_structure=G, gamma=0.5)
+
+# ocn.single_erosion_event(temperature=1.0)
+
+
+
+# PyOCN.plot_streamgraph(ocn)
+
+
+# plt.show()

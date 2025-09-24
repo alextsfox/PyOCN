@@ -48,7 +48,7 @@ class OCN():
         self.gamma = gamma
         self.annealing_schedule = annealing_schedule if annealing_schedule is not None else lambda t: 0.0
         self.sg._c_graph.energy = self.compute_energy()
-        
+
         rng = np.random.default_rng(random_state)
         seed = rng.integers(0, 2**32 - 1)
         _bindings.libocn.rng_seed(seed)
@@ -61,7 +61,10 @@ class OCN():
     def __str__(self):
         return f"StreamGraph(dims={self.sg.dims}, root={self.sg.root}, energy={self.energy}, vertices=<{self.sg.dims[0] * self.sg.dims[1]} vertices>)"
     def __del__(self):
-        del self.sg
+        try:
+            del self.sg
+        except AttributeError:
+            pass
 
     def compute_energy(self) -> float:
         """

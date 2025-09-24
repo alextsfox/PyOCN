@@ -11,14 +11,13 @@ This file is part of the PyOCN project.
 """
 
 from ctypes import byref
-import ctypes
 from dataclasses import dataclass
 import itertools
+import warnings
 
 import numpy as np
 import networkx as nx
-import matplotlib.pyplot as plt
-from matplotlib.patches import ArrowStyle
+
 
 from ._statushandler import check_status
 
@@ -303,7 +302,9 @@ def _digraph_to_streamgraph_c(G: nx.DiGraph) -> _bindings.StreamGraph_C:
     )
     # to avoid memory leaks: call sg_destroy_safe on c_graph if an exception occurs before the function returns
     try:
-        check_status(status)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            check_status(status)
 
         # Flatten using cart_to_lin: streamgraph may not be stored in row-major order. Using the provided function ensures consistency.
         vert_c = _bindings.Vertex_C()

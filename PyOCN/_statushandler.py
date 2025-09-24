@@ -26,13 +26,39 @@ class LibOCNError(Exception):
     pass
 
 class NullPointerError(LibOCNError):
-    pass
+    default_message = (
+        "\nTrying to access a null pointer. "
+        "Something has gone terribly wrong inside PyOCN or libocn. "
+        "Please open an issue at https://github.com/alexfox/pyocn/issues."
+    )
+
+    def __init__(self, custom_message=None):
+        self.custom_message = custom_message
+
+    def __str__(self):
+        if self.custom_message:
+            return f"{self.default_message}\nDetails: {self.custom_message}"
+        return self.default_message
 
 class SwapWarning(RuntimeWarning):
     pass
 
 class MalformedGraphWarning(RuntimeWarning):
-    pass
+    default_message = (
+        "\nYour streamgraph is invalid. "
+        "This can be due to either cycles in the graph, "
+        "the root node not having access to all nodes, "
+        "incorrect dimensions (must have even rows and columns), "
+        "or other structural issues."
+    )
+
+    def __init__(self, custom_message=None):
+        self.custom_message = custom_message
+
+    def __str__(self):
+        if self.custom_message:
+            return f"{self.default_message}\nDetails: {self.custom_message}"
+        return self.default_message
 
 STATUS_EXCEPTION_MAP = {
     OOB_ERROR: IndexError,
