@@ -109,7 +109,6 @@ int main(void){
         printf("started iteration %d\n", i);
         ocn_single_erosion_event(&sg, 0.5, 0.01);
     }
-
-
+    
     sg_display(&sg, true);
 }

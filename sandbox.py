@@ -19,17 +19,10 @@ for r, c in zip(rows, cols):
 ocn = PyOCN.OCN(init_structure=G, gamma=0.5)
 
 
-ocn.single_erosion_event(temperature=1.0)
-print(ocn.energy)
 
 ocn.single_erosion_event(temperature=1.0)
-print(ocn.energy)
 
-ocn.single_erosion_event(temperature=1.0)
-print(ocn.energy)
+PyOCN.plot_streamgraph(ocn)
 
-ocn.single_erosion_event(temperature=1.0)
-print(ocn.energy)
 
-print(ocn)
-print(ocn.sg._vertices)
+plt.show()

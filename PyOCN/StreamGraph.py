@@ -168,21 +168,6 @@ class StreamGraph:
                 G.add_edge(a, v.adown)
         return G
 
-def plot_streamgraph(sg:StreamGraph, ax=None):
-    """Plot the StreamGraph in matplotlib"""
-    return plot_positional_digraph(sg.to_networkx(), ax=ax)
-
-def plot_positional_digraph(G:nx.DiGraph, ax=None):
-    pos = nx.get_node_attributes(G, 'pos')
-    drained_area = np.asarray(list(nx.get_node_attributes(G, 'drained_area').values()))
-    drained_area = (drained_area - drained_area.min()) / (drained_area.max() - drained_area.min())
-    size = 50 + drained_area*1000
-    lw = 1 + drained_area*5
-    if ax is None:
-        _, ax = plt.subplots()
-    nx.draw_networkx(G, pos=pos, node_size=size, width=lw, with_labels=False, arrowstyle=ArrowStyle("-|>", head_length=1.5, head_width=0.5), ax=ax)
-    return ax
-
 
 def display_streamgraph(sg:StreamGraph, use_utf8=True):
     """Plot the StreamGraph in a human-readable ASCII format."""
@@ -316,42 +301,70 @@ def _digraph_to_streamgraph_c(G: nx.DiGraph) -> _bindings.StreamGraph_C:
         _bindings.CartPair_C(row=root_r, col=root_c),
         _bindings.CartPair_C(row=m, col=n),
     )
-    check_status(status)
-
-    # Flatten using cart_to_lin: streamgraph may not be stored in row-major order. Using the provided function ensures consistency.
-    vert_c = _bindings.Vertex_C()
-    for r, c in itertools.product(range(m), range(n)):
-        a = cart_to_lin(r, c)
-        v = Vmat[r][c]
-        vert_c.drained_area = v.drained_area
-        vert_c.adown = v.adown
-        vert_c.edges = v.edges
-        vert_c.downstream = v.downstream
-        vert_c.visited = v.visited
-        status = _bindings.libocn.sg_set_lin_safe(byref(c_graph), vert_c, a)
+    # to avoid memory leaks: call sg_destroy_safe on c_graph if an exception occurs before the function returns
+    try:
         check_status(status)
 
-    # Set root indices
-    c_graph.root = _bindings.CartPair_C(row=root_r, col=root_c)
-    
-    # Initialize energy
-    c_graph.energy = 0.0
+        # Flatten using cart_to_lin: streamgraph may not be stored in row-major order. Using the provided function ensures consistency.
+        vert_c = _bindings.Vertex_C()
+        for r, c in itertools.product(range(m), range(n)):
+            a = cart_to_lin(r, c)
+            v = Vmat[r][c]
+            vert_c.drained_area = v.drained_area
+            vert_c.adown = v.adown
+            vert_c.edges = v.edges
+            vert_c.downstream = v.downstream
+            vert_c.visited = v.visited
+            status = _bindings.libocn.sg_set_lin_safe(byref(c_graph), vert_c, a)
+            check_status(status)
 
-    # Final validation pass: read back vertices
-    # TODO: (Skip if performance is critical)
-    check_vert = _bindings.Vertex_C()
-    for a in range(m * n):
-        status = _bindings.libocn.sg_get_lin_safe(byref(check_vert), byref(c_graph), a)
-        check_status(status)
-        if check_vert.visited != 0:
-            raise RuntimeError(f"Post-write validation failed at a={a}.")
+        # Set root indices
+        c_graph.root = _bindings.CartPair_C(row=root_r, col=root_c)
+        
+        # Initialize energy
+        c_graph.energy = 0.0
+
+        # Final validation pass: read back vertices
+        # TODO: (Skip if performance is critical)
+        check_vert = _bindings.Vertex_C()
+        for a in range(m * n):
+            status = _bindings.libocn.sg_get_lin_safe(byref(check_vert), byref(c_graph), a)
+            check_status(status)
+            if check_vert.visited != 0:
+                raise RuntimeError(f"Post-write validation failed at a={a}.")
+            
+    except Exception as e:
+        _bindings.libocn.sg_destroy_safe(byref(c_graph))
+        raise e
         
     return c_graph
+
+def validate_streamgraph(sg:StreamGraph) -> bool|str:
+    """
+    Validate the integrity of a StreamGraph.
+
+    Checks:
+      * Each vertex's downstream pointer is valid (either IS_ROOT or points to an adjacent vertex).
+      * The graph is acyclic and has a single root.
+      * The drained_area values are consistent with the graph structure.
+
+    Parameters:
+        sg (StreamGraph): The StreamGraph to validate.
+
+    Returns:
+        either True if valid, or an error message string if invalid.
+    """
+    try:
+        G = sg.to_networkx()
+        c_graph = _digraph_to_streamgraph_c(G)
+        _bindings.libocn.sg_destroy_safe(byref(c_graph))
+    except Exception as e:  # _digraph_to_streamgraph_c will destroy c_graph on failure
+        return str(e)
+    return True
 
 __all__ = [
     "Vertex",
     "StreamGraph",
-    "plot_streamgraph",
     "display_streamgraph",
-    "plot_positional_digraph",
+    "validate_streamgraph",
 ]
