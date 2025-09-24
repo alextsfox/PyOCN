@@ -244,7 +244,7 @@ Status sg_flow_downstream_safe(StreamGraph *G, linidx_t a, uint8_t ncalls){
     Status code;
     code = sg_get_lin_safe(&vert, G, a);
     if (code != SUCCESS) return code;
-    
+
     while (vert.downstream != IS_ROOT){
         // if we find ourselves in a cycle, exit immediately and signal to the caller
         if (vert.visited == ncalls) return MALFORMED_GRAPH_WARNING;
@@ -285,7 +285,7 @@ const wchar_t NO_ARROW_UTF8 = L'\u2002';  // space
 const wchar_t NODE_UTF8 = L'\u25EF';  // large empty circle
 const wchar_t ROOT_NODE_UTF8 = L'\u25CF';  // circle with x
 
-void sg_display(StreamGraph *G, bool use_utf8){
+void sg_display_bad(StreamGraph *G, bool use_utf8){
     if (use_utf8) setlocale(LC_ALL, "");
 
     if (G->vertices == NULL || G->dims.row == 0 || G->dims.col == 0) return;
@@ -415,4 +415,168 @@ StreamGraph *sg_make_test_graph(){
 
     return G;
 }
+
+
+
+
+
+void sg_display(StreamGraph *G, bool use_utf8){
+    if (use_utf8) setlocale(LC_ALL, "");
+
+    if (G->vertices == NULL || G->dims.row == 0 || G->dims.col == 0) return;
+
+    putchar('\n');
+
+    cartidx_t m = G->dims.row;
+    cartidx_t n = G->dims.col;
+
+    for (cartidx_t i = 0; i < m; i++){
+        // node row
+        for (cartidx_t j = 0; j < n; j++){
+            Vertex *v = &(G->vertices[i*n + j]);
+
+            // Draw node
+            if (use_utf8) wprintf(L"%lc", v->downstream == IS_ROOT ? ROOT_NODE_UTF8 : NODE_UTF8);
+            else putchar(v->downstream == IS_ROOT ? ROOT_NODE : NODE);
+            if (use_utf8) putchar(' ');
+            
+            if (j < n - 1){
+                // Draw horizontal edge going right out of node
+                // Check if there's an edge from current node to right node (E) or from right node to current node (W)
+                Vertex *v_right = &(G->vertices[i*n + (j+1)]);
+                bool has_edge = (v->edges & (1u << 2)) || (v_right->edges & (1u << 6));
+                
+                if (has_edge) {        
+                    if (v->downstream == 2) {
+                        // Current node flows east
+                        if (use_utf8) wprintf(L"%lc", E_ARROW_UTF8);        
+                        else putchar(E_ARROW);
+                    } else if (v_right->downstream == 6) {
+                        // Right node flows west
+                        if (use_utf8) wprintf(L"%lc", W_ARROW_UTF8);    
+                        else putchar(W_ARROW);    
+                    } else {
+                        // Non-flow edge, use default direction
+                        if (use_utf8) wprintf(L"%lc", E_ARROW_UTF8);
+                        else putchar(E_ARROW);
+                    }
+                } else {  // no horizontal edge
+                    if (use_utf8) wprintf(L"%lc", NO_ARROW_UTF8);
+                    else putchar(NO_ARROW);
+                }
+                if (use_utf8) putchar(' ');
+            }
+        }
+        putchar('\n');
+
+        if (i == m - 1) break; // last row: no edges below
+
+        // edge-only row
+        for (cartidx_t j = 0; j < n; j++){
+            Vertex *v = &(G->vertices[i*n + j]);
+            
+            // Check both current node's South edge and bottom node's North edge
+            bool has_v_edge = false;
+            bool flows_south = false;
+            bool flows_north = false;
+            
+            if (i < m - 1) {
+                Vertex *v_bottom = &(G->vertices[(i+1)*n + j]);
+                has_v_edge = (v->edges & (1u << 4)) || (v_bottom->edges & (1u << 0));
+                flows_south = (v->downstream == 4);
+                flows_north = (v_bottom->downstream == 0);
+            }
+            
+            if (has_v_edge) {
+                if (flows_south) {
+                    if (use_utf8) wprintf(L"%lc", S_ARROW_UTF8);    
+                    else putchar(S_ARROW);
+                } else if (flows_north) {
+                    if (use_utf8) wprintf(L"%lc", N_ARROW_UTF8);
+                    else putchar(N_ARROW);
+                } else {
+                    // Non-flow edge, use default direction
+                    if (use_utf8) wprintf(L"%lc", S_ARROW_UTF8);    
+                    else putchar(S_ARROW);
+                }
+            } else {  // no vertical under node
+                if (use_utf8) wprintf(L"%lc", NO_ARROW_UTF8);
+                else putchar(NO_ARROW);
+            }
+            if (use_utf8) putchar(' ');
+
+            if (j < n - 1) {
+                // Diagonal edges occupy the space between two vertical edges
+                wchar_t mid_utf8 = NO_ARROW_UTF8;
+                char mid = NO_ARROW;  // default to no diagonal edge
+                
+                bool has_se_edge = false;
+                bool has_ne_edge = false;
+                bool flows_se = false;
+                bool flows_nw = false;
+                bool flows_sw = false;
+                bool flows_ne = false;
+                
+                // Check SE/NW edge
+                if (i < m - 1 && j < n - 1) {
+                    Vertex *v_bottom_right = &(G->vertices[(i+1)*n + (j+1)]);
+                    has_se_edge = (v->edges & (1u << 3)) || (v_bottom_right->edges & (1u << 7));
+                    flows_se = (v->downstream == 3);
+                    flows_nw = (v_bottom_right->downstream == 7);
+                }
+                
+                // Check SW/NE edge
+                Vertex *v_right = &(G->vertices[i*n + (j+1)]);
+                if (i < m - 1) {
+                    Vertex *v_bottom = &(G->vertices[(i+1)*n + j]);
+                    has_ne_edge = (v_right->edges & (1u << 5)) || (v_bottom->edges & (1u << 1));
+                    flows_sw = (v_right->downstream == 5);
+                    flows_ne = (v_bottom->downstream == 1);
+                }
+                
+                // Prioritize SE/NW edge
+                if (has_se_edge) {
+                    if (flows_se) {
+                        mid_utf8 = SE_ARROW_UTF8;
+                        mid = SE_ARROW;
+                    } else if (flows_nw) {
+                        mid_utf8 = NW_ARROW_UTF8;
+                        mid = NW_ARROW;
+                    } else {
+                        // Non-flow edge, use default direction
+                        mid_utf8 = SE_ARROW_UTF8;
+                        mid = SE_ARROW;
+                    }
+                } else if (has_ne_edge) {  // If no SE/NW edge, check NE/SW
+                    if (flows_sw) {
+                        mid_utf8 = SW_ARROW_UTF8;
+                        mid = SW_ARROW;
+                    } else if (flows_ne) {
+                        mid_utf8 = NE_ARROW_UTF8;
+                        mid = NE_ARROW;
+                    } else {
+                        // Non-flow edge, use default direction
+                        mid_utf8 = NE_ARROW_UTF8;
+                        mid = NE_ARROW;
+                    }
+                }
+                
+                if (use_utf8) wprintf(L"%lc", mid_utf8);
+                else putchar(mid);
+                if (use_utf8) putchar(' ');
+            }
+        }
+        putchar('\n');
+    }
+    putchar('\n');
+}
+
+
+
+
+
+
+
+
+
 #endif // STREAMGRAPH_C
