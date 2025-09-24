@@ -150,7 +150,6 @@ void sg_set_lin(StreamGraph *G, Vertex vert, linidx_t a){
 // # Create/destroy streamgraph #
 // ##############################
 Status sg_create_empty_safe(StreamGraph *G, CartPair root, CartPair dims){
-    printf("Creating empty streamgraph with root at (%d, %d) and dimensions (%d, %d)\n", root.row, root.col, dims.row, dims.col);
     if (dims.row % 2 != 0 || dims.col % 2 != 0) return MALFORMED_GRAPH_WARNING;
     if (G == NULL) return NULL_POINTER_ERROR;
 
