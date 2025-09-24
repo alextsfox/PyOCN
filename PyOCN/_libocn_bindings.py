@@ -186,6 +186,18 @@ libocn.ocn_single_erosion_event.restype = Status
 libocn.ocn_outer_ocn_loop.argtypes = [POINTER(StreamGraph_C), c_uint32, c_double, POINTER(c_double)]
 libocn.ocn_outer_ocn_loop.restype = Status
 
+########################
+#  RNG.H EQUIVALENTS   #
+########################
+
+# void rng_seed(unsigned int seed);
+libocn.rng_seed.argtypes = [c_uint32]
+libocn.rng_seed.restype = None
+
+# void rng_seed_random();
+libocn.rng_seed_random.argtypes = []
+libocn.rng_seed_random.restype = None
+
 __all__ = [
     "SUCCESS",
     "OOB_ERROR",

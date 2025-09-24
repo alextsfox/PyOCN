@@ -23,7 +23,7 @@ from .streamgraph import StreamGraph
 
 
 class OCN():
-    def __init__(self, sg:StreamGraph=None, shape:tuple[int, int]=None, init_structure:str|nx.DiGraph="toy", gamma:float=0.5, annealing_schedule:callable=None):
+    def __init__(self, sg:StreamGraph=None, shape:tuple[int, int]=None, init_structure:str|nx.DiGraph="toy", gamma:float=0.5, annealing_schedule:callable=None, random_state=None):
         """
         Main class for working with Optimized Channel Networks (OCNs).
         Can be initialized from an existing StreamGraph, or by specifying a shape and initial structure.
@@ -33,6 +33,7 @@ class OCN():
             init_structure (str | nx.DiGraph): The initial structure of the graph.
             gamma (float): The gamma parameter for energy calculations. Default is 0.5.
             annealing_schedule (callable): A function that takes the iteration number and returns the temperature. If None, a constant temperature of 0 is used.
+            random_state: Seed or random number generator for reproducibility. If None, uses default randomness. Can be any legal seed argument to np.random.default_rng().
 
             See StreamGraph documentation for details on supported initial structures.
         """
@@ -47,6 +48,11 @@ class OCN():
         self.gamma = gamma
         self.annealing_schedule = annealing_schedule if annealing_schedule is not None else lambda t: 0.0
         self.sg._c_graph.energy = self.compute_energy()
+        
+        rng = np.random.default_rng(random_state)
+        seed = rng.integers(0, 2**32 - 1)
+        _bindings.libocn.rng_seed(seed)
+
 
     def __len__(self) -> int:
         return self.sg.size

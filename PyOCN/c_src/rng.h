@@ -3,8 +3,13 @@
 
 /**
  * @brief Seed the random number generator.
- * @param seed The seed value to initialize the random number generator. If NULL, a random seed will be used.
+ * @param seed The seed value to initialize the random number generator.
  */
-void seed(unsigned int seed);
+void rng_seed(unsigned int seed);
+
+/**
+ * @brief Seed the random number generator. Uses the current time as the seed.
+ */
+void rng_seed_random();
 
 #endif // RNG_H

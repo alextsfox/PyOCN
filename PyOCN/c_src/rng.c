@@ -2,10 +2,15 @@
 #define RNG_C
 
 #include <stdlib.h>
+#include <time.h>
+#include "rng.h"
 
-void seed(unsigned int seed) {
-    if (seed == NULL) seed = (unsigned int)time(NULL);
+void rng_seed(unsigned int seed) {
     srand(seed);
+}
+
+void rng_seed_random() {
+    srand((unsigned int)time(NULL));
 }
 
 #endif // RNG_C
