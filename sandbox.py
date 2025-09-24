@@ -1,3 +1,4 @@
+import warnings
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -16,12 +17,19 @@ for r, c in zip(rows, cols):
     elif c < n - 1:
         G.add_edge(r*n + c, r*n + (c + 1))
 
-ocn = PyOCN.OCN(init_structure=G, gamma=0.5)
+ocn = PyOCN.OCN(init_structure=G, gamma=0.5, random_state=8472)
 
-ocn.single_erosion_event(temperature=1.0)
-PyOCN.validate_streamgraph(ocn.sg)
+for _ in range(1000):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        try:
+            ocn.single_erosion_event(temperature=0)
+        except Warning as e:
+            PyOCN.plot_streamgraph(ocn)
+            plt.show()
+            raise e
+    PyOCN.validate_streamgraph(ocn.sg)
+    print(ocn.energy)
 
-PyOCN.plot_streamgraph(ocn)
 
 
-plt.show()
