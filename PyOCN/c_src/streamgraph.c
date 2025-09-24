@@ -230,10 +230,10 @@ Status sg_change_vertex_outflow(StreamGraph *G, linidx_t a, clockhand_t down_new
     vert.edges ^= ((1u << down_old) | (1u << down_new));
     sg_set_lin(G, vert, a);
 
-    vert_down_old.edges ^= (1u << (down_old + 4));  // old downstream node loses that edge. Note that (down_old + 4) wraps around correctly because down_old is in [0,7]
+    vert_down_old.edges ^= (1u << ((down_old + 4)%8));  // old downstream node loses that edge. Note that (down_old + 4) wraps around correctly because down_old is in [0,7]
     sg_set_lin(G, vert_down_old, a_down_old);
 
-    vert_down_new.edges ^= (1u << (down_new + 4));  // new downstream node gains that edge
+    vert_down_new.edges ^= (1u << ((down_new + 4)%8));  // new downstream node gains that edge
     sg_set_lin(G, vert_down_new, a_down_new);
 
     return SUCCESS;

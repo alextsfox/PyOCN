@@ -71,6 +71,7 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
             if (code != SUCCESS) continue;
             
             // retrieve the downstream vertices
+            vert = sg_get_lin(G, a);
             a_down_new = vert.adown;
             vert_down_new = sg_get_lin(G, a_down_new);  // bounds check was performed by sg_change_vertex_outflow
             vert_down_old = sg_get_lin(G, a_down_old);  // bounds check was performed by sg_change_vertex_outflow
@@ -95,7 +96,6 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
         if (code != SUCCESS) continue;  // if we exhausted all 8 directions without a successful swap, try again. do not go to acceptance step
 
         // update drained area and energy along both paths
-        energy_old = G->energy;
         ocn_update_energy(G, -da_inc, a_down_old, gamma);  // decrement drained area along old path
         ocn_update_energy(G, da_inc, a_down_new, gamma);  // increment drained area along new path
         energy_new = G->energy;

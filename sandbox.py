@@ -18,42 +18,18 @@ for r, c in zip(rows, cols):
 
 ocn = PyOCN.OCN(init_structure=G, gamma=0.5)
 
-print(ocn.energy)
-PyOCN.plot_streamgraph(ocn.sg)
-plt.show()
 
 ocn.single_erosion_event(temperature=1.0)
 print(ocn.energy)
-print(ocn.compute_energy())
-PyOCN.plot_streamgraph(ocn.sg)
-plt.show()
 
 ocn.single_erosion_event(temperature=1.0)
 print(ocn.energy)
-print(ocn.compute_energy())
-PyOCN.plot_streamgraph(ocn.sg)
-plt.show()
 
 ocn.single_erosion_event(temperature=1.0)
 print(ocn.energy)
-print(ocn.compute_energy())
-PyOCN.plot_streamgraph(ocn.sg)
-plt.show()
 
 ocn.single_erosion_event(temperature=1.0)
 print(ocn.energy)
-print(ocn.compute_energy())
-PyOCN.plot_streamgraph(ocn.sg)
-plt.show()
 
-from tqdm import trange
-from time import sleep
-for _ in trange(100):
-    ocn.single_erosion_event(temperature=1.0)
-    print(_)
-    print(ocn.energy)
-    print(ocn.compute_energy())
-PyOCN.plot_streamgraph(ocn.sg)
-plt.show()
-
-        
+print(ocn)
+print(ocn.sg._vertices)

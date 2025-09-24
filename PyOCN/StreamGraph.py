@@ -112,7 +112,7 @@ class StreamGraph:
         return self.shape[0] * self.shape[1]
     @property
     def root(self) -> tuple[int, int]:
-        return (int(self._c_graph.root.i), int(self._c_graph.root.j))
+        return (int(self._c_graph.root.row), int(self._c_graph.root.col))
     
     # TODO: figure out how to make this compatible with our in-memory tiling representation (not implemented currently in streamgraph.c)
     @property
