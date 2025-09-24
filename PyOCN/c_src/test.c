@@ -104,21 +104,10 @@ int main(void){
     sg.vertices = vertices;
     sg.energy = 76.82643119030881;
 
-    for (int i = 0; i < 50; i++) {
-        if (i == 33){
-            printf("Erosion step %d\nStarting Energy: %f\n", i, sg.energy);
-            break;
-        }
+    for (int i = 0; i < 100; i++) {
+        printf("started iteration %d\n", i);
         ocn_single_erosion_event(&sg, 0.5, 0.01);
     }
 
     sg_display(&sg, true);
-
-    int n = 8;
-    printf("Downstream: %d, Adown: %d, Edges: %d\n", sg.vertices[n].downstream, sg.vertices[n].adown, sg.vertices[n].edges);
-    n = 9;
-    printf("Downstream: %d, Adown: %d, Edges: %d\n", sg.vertices[n].downstream, sg.vertices[n].adown, sg.vertices[n].edges);
-    n = 15;
-    printf("Downstream: %d, Adown: %d, Edges: %d\n", sg.vertices[n].downstream, sg.vertices[n].adown, sg.vertices[n].edges);
-    printf("Energy: %f\n", sg.energy);
 }

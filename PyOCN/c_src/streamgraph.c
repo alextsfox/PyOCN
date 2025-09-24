@@ -244,7 +244,7 @@ Status sg_flow_downstream_safe(StreamGraph *G, linidx_t a, uint8_t ncalls){
     Status code;
     code = sg_get_lin_safe(&vert, G, a);
     if (code != SUCCESS) return code;
-
+    
     while (vert.downstream != IS_ROOT){
         // if we find ourselves in a cycle, exit immediately and signal to the caller
         if (vert.visited == ncalls) return MALFORMED_GRAPH_WARNING;

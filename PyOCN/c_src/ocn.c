@@ -18,6 +18,7 @@ Status ocn_update_energy(StreamGraph *G, drainedarea_t da_inc, linidx_t a, doubl
     Vertex vert;
     drainedarea_t da;
     vert = sg_get_lin(G, a);
+    int sanity_counter = 0;
     while (vert.downstream != IS_ROOT){
         // update drained area of the vertex and energy of the graph.
         da = vert.drained_area;
@@ -28,6 +29,11 @@ Status ocn_update_energy(StreamGraph *G, drainedarea_t da_inc, linidx_t a, doubl
         // get next vertex
         a = vert.adown;
         vert = sg_get_lin(G, a);
+
+        sanity_counter++;
+        if (sanity_counter > (G->dims.row * G->dims.col)){
+            printf("Sanity check failed in energy update loop.\n");
+        }
     }
     // update root vertex
     da = vert.drained_area;
@@ -63,8 +69,8 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
         down_old = vert.downstream;
         a_down_old = vert.adown;
         da_inc = vert.drained_area;
-
         for (ntries = 0; ntries < 8; ntries++){  // try a new direction each time, up to 8 times before giving up and picking a new vertex
+
             down_new  = (down_new + 1) % 8;
 
             code = sg_change_vertex_outflow(G, a, down_new);
@@ -76,15 +82,14 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
             vert_down_new = sg_get_lin(G, a_down_new);  // bounds check was performed by sg_change_vertex_outflow
             vert_down_old = sg_get_lin(G, a_down_old);  // bounds check was performed by sg_change_vertex_outflow
 
-            // zero the cycle tracker before updating drained area
+            // confirm that the new graph is well-formed (no cycles, still reaches root)
             for (i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
-
-            // confirm that both paths lead to the root without cycles
-            sg_flow_downstream_safe(G, a_down_old, 1);
+            code = sg_flow_downstream_safe(G, a_down_old, 1);
             if (code != SUCCESS){
                 sg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
             }
+            // for (i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
             code = sg_flow_downstream_safe(G, a_down_new, 2);  // use ncalls = 2. This way, if the two paths intersect, it won't trigger a cycle warning.
             if (code != SUCCESS){
                 sg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
