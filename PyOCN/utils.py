@@ -10,7 +10,7 @@ def plot_streamgraph(sg:StreamGraph|OCN, ax=None):
     """Plot the StreamGraph in matplotlib"""
     if isinstance(sg, OCN):
         sg = sg.sg
-    return plot_positional_digraph(sg.to_networkx(), ax=ax)
+    return plot_positional_digraph(sg.dag, ax=ax)
 
 def plot_positional_digraph(G:nx.DiGraph, ax=None):
     pos = nx.get_node_attributes(G, 'pos')

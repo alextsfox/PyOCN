@@ -123,7 +123,7 @@ class OCN():
                 temperatures = [self.annealing_schedule(t) for t in range(completed_iterations, completed_iterations + iterations_this_loop)]
                 temp_array = (ctypes.c_double * iterations_this_loop)(*temperatures)  # ctypes syntax for creating a C-compatible array from an iterable.
                 check_status(_bindings.libocn.ocn_outer_ocn_loop(
-                    self.sg._p_c_graph), 
+                    self.sg._p_c_graph, 
                     iterations_this_loop, 
                     self.gamma, 
                     temp_array
