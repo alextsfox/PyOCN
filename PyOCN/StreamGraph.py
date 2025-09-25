@@ -10,6 +10,7 @@ Copyright: (c) 2025 Alexander S Fox. All rights reserved.
 This file is part of the PyOCN project.
 """
 
+from collections.abc import Generator
 from ctypes import byref
 from dataclasses import dataclass
 import itertools
@@ -81,15 +82,75 @@ class StreamGraph:
 
     def __len__(self) -> int:
         return self.size
-    def __getitem__(self, idx):
-        """Get vertex or vertices by linear or 2D index. Follows numpy index notation."""
-        vertices = self._vertices
-        vertices_2d = np.empty(self.shape, dtype=vertices.dtype)        
-        for a in range(vertices.size):
-            row_col = _bindings.libocn.sg_lin_to_cart(a, self._c_graph.dims)
-            row, col = row_col.row, row_col.col
-            vertices_2d[row, col] = vertices[a]
-        return vertices_2d[idx]
+    # def __getitem__(self, idx) -> Vertex|np.ndarray:
+    #     """Get vertex or vertices by numpy-style indexing."""
+    #     rows, cols = self.shape
+
+    #     # Convert idx to row, col slices
+    #     if isinstance(idx, tuple):  # multiple indices
+    #         if len(idx) != 2:
+    #             raise IndexError(f"Too many indices for StreamGraph: got {len(idx)}, expected 2")
+    #         row_idx, col_idx = idx
+    #     else:  # single index
+    #         row_idx, col_idx = idx, slice(None)
+        
+    #     # Convert to actual row/col ranges
+    #     def normalize_idx(index, max_val):
+    #         if isinstance(index, slice):
+    #             start = 0 if index.start is None else index.start  # slice(None, stop, step)
+    #             stop = max_val if index.stop is None else index.stop  # slice(start, None, step)
+    #             step = 1 if index.step is None else index.step  # slice(start, stop, None)
+    #             if start < 0: start = max_val + start  # slice(-n, stop, step)
+    #             if stop < 0: stop = max_val + stop  # slice(start, -n, step)
+    #             return range(start, stop, step)
+    #         elif isinstance(index, int):
+    #             if index < 0: index = max_val + index  # -n
+    #             return [index]
+    #         else:
+    #             raise IndexError(f"Unsupported index type: {index}, type {type(index)}")
+        
+    #     row_indices = normalize_idx(row_idx, rows)
+    #     col_indices = normalize_idx(col_idx, cols)
+        
+    #     # Create result array with appropriate shape
+    #     is_single_row = isinstance(row_idx, int)
+    #     is_single_col = isinstance(col_idx, int)
+        
+    #     # Handle the various cases
+    #     if is_single_row and is_single_col:
+    #         # Single vertex case: sg[3, 4]
+    #         r, c = row_indices[0], col_indices[0]
+    #         v = _bindings.libocn.sg_get_cart_safe(byref(self._c_graph), _bindings.CartPair_C(row=r, col=c))
+    #         return Vertex(v.drained_area, v.adown, v.edges, v.downstream, v.visited)
+    #     else:
+    #         # Create a numpy array of the appropriate shape
+    #         result = np.empty((len(row_indices), len(col_indices)), dtype=np.object_)
+            
+    #         # Fill it with vertices
+    #         for i, r in enumerate(row_indices):
+    #             for j, c in enumerate(col_indices):
+    #                 v = _bindings.libocn.sg_get_cart_safe(byref(self._c_graph), _bindings.CartPair_C(row=r, col=c))
+    #                 result[i, j] = Vertex(v.drained_area, v.adown, v.edges, v.downstream, v.visited)
+            
+    #         # Convert to 1D array if needed
+    #         if is_single_row:
+    #             return result[0]
+    #         elif is_single_col:
+    #             return result[:, 0]
+    #         else:
+    #             return result
+    def __getitem__(self, idx) -> Vertex|np.ndarray:
+        return self._vertices[idx]
+    def __iter__(self) -> Generator[Vertex]:
+        """Iterate over the vertices in row-major order."""
+        v_c = _bindings.Vertex_C()
+        for r, c in itertools.product(range(self.shape[0]), range(self.shape[1])):
+            check_status(_bindings.libocn.sg_get_cart_safe(
+                byref(v_c), 
+                byref(self._c_graph),
+                _bindings.CartPair_C(row=r, col=c), 
+            ))
+            yield Vertex(v_c.drained_area, v_c.adown, v_c.edges, v_c.downstream, v_c.visited)
     def __repr__(self):
         return repr(self._c_graph)
     def __str__(self):
@@ -277,15 +338,26 @@ def _digraph_to_streamgraph_c(G: nx.DiGraph) -> _bindings.StreamGraph_C:
         vertex = Vmat[r][c]
         vertex.drained_area = int(drained_area[u])
         succs = list(G.successors(u))
+        preds = list(G.predecessors(u))
         if succs:
             vertex_down = succs[0]
             r2, c2 = positions[vertex_down]
             clockhand = get_clockhand_from_carts(r, c, r2, c2)
             vertex.downstream = clockhand
-            vertex.edges ^= (1 << clockhand)  # flip the bit for this direction
             vertex.adown = cart_to_lin(r2, c2)
         else:
             vertex.downstream = _bindings.IS_ROOT
+
+        neighbors = succs + preds
+        if neighbors:
+            for v_neighbor in neighbors:
+                r2, c2 = positions[v_neighbor]
+                clockhand = get_clockhand_from_carts(r, c, r2, c2)
+                vertex.edges |= (1 << clockhand)  # set the bit for this direction
+        else:
+            raise ValueError(f"Node {u} at position {(r,c)} has no neighbors; isolated nodes are not allowed.")
+
+        
         vertex.visited = 0
 
     # Validate that all grid cells correspond to a node (possibly redundant?)
@@ -308,6 +380,7 @@ def _digraph_to_streamgraph_c(G: nx.DiGraph) -> _bindings.StreamGraph_C:
 
         # Flatten using cart_to_lin: streamgraph may not be stored in row-major order. Using the provided function ensures consistency.
         vert_c = _bindings.Vertex_C()
+        coords = _bindings.CartPair_C()
         for r, c in itertools.product(range(m), range(n)):
             a = cart_to_lin(r, c)
             v = Vmat[r][c]
@@ -316,7 +389,8 @@ def _digraph_to_streamgraph_c(G: nx.DiGraph) -> _bindings.StreamGraph_C:
             vert_c.edges = v.edges
             vert_c.downstream = v.downstream
             vert_c.visited = v.visited
-            status = _bindings.libocn.sg_set_lin_safe(byref(c_graph), vert_c, a)
+            coords.row, coords.col = r, c
+            status = _bindings.libocn.sg_set_cart_safe(byref(c_graph), vert_c, coords)
             check_status(status)
 
         # Set root indices

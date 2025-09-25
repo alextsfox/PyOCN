@@ -47,7 +47,7 @@ Status ocn_update_energy(StreamGraph *G, drainedarea_t da_inc, linidx_t a, doubl
 Status ocn_single_erosion_event(StreamGraph *G, uint32_t *total_tries, double gamma, double temperature){
     Status code;
 
-    Vertex vert, vert_down_old, vert_down_new;
+    Vertex vert;//, vert_down_old, vert_down_new;  unused?
     clockhand_t down_old, down_new;
     linidx_t a, a_down_old, a_down_new;
     
@@ -80,8 +80,9 @@ Status ocn_single_erosion_event(StreamGraph *G, uint32_t *total_tries, double ga
             // retrieve the downstream vertices
             vert = sg_get_lin(G, a);
             a_down_new = vert.adown;
-            vert_down_new = sg_get_lin(G, a_down_new);  // bounds check was performed by sg_change_vertex_outflow
-            vert_down_old = sg_get_lin(G, a_down_old);  // bounds check was performed by sg_change_vertex_outflow
+            // unused?
+            // vert_down_new = sg_get_lin(G, a_down_new);  // bounds check was performed by sg_change_vertex_outflow
+            // vert_down_old = sg_get_lin(G, a_down_old);  // bounds check was performed by sg_change_vertex_outflow
 
             // TODO: do we actually need to check for cycles from a_down_old?
             // confirm that the new graph is well-formed (no cycles, still reaches root)

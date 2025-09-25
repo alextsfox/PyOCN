@@ -64,13 +64,11 @@ CartPair sg_lin_to_cart(linidx_t a, CartPair dims){
     return (CartPair){adiv.quot, adiv.rem};
 }
 Status sg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims){
-    Status code;
-
     CartPair row_col = sg_lin_to_cart(a, dims);
     OffsetPair offset = offsets[down];
     OffsetPair cart_down_off = {
-        .row = (int16_t)row_col.row + offsets[down].row,
-        .col = (int16_t)row_col.col + offsets[down].col
+        .row = (int16_t)row_col.row + offset.row,
+        .col = (int16_t)row_col.col + offset.col
     };
     if (
         cart_down_off.row < 0 
@@ -378,50 +376,6 @@ void sg_display_bad(StreamGraph *G, bool use_utf8){
     putchar('\n');
 }
 
-StreamGraph *sg_make_test_graph(){
-    const cartidx_t m = 4;
-    const cartidx_t n = 4;
-    const CartPair dims = {m, n};
-
-
-    Vertex cart_vertices[] = {
-        (Vertex){1, 0,  0b00010000, 4, 0}, (Vertex){1, 0, 0b00010000, 4, 0}, (Vertex){1, 0, 0b00010000, 4, 0}, (Vertex){1, 0, 0b00010000, 4, 0},
-        (Vertex){2, 0, 0b00010001, 4, 0}, (Vertex){2, 0, 0b00010001, 4, 0}, (Vertex){2, 0, 0b00010001, 4, 0}, (Vertex){2, 0, 0b00010001, 4, 0},
-        (Vertex){3, 0, 0b00010001, 4, 0}, (Vertex){3, 0, 0b00010001, 4, 0}, (Vertex){3, 0, 0b00010001, 4, 0}, (Vertex){3, 0, 0b00010001, 4, 0},
-        (Vertex){4, 0, 0b00000101, 2, 0}, (Vertex){8, 0, 0b01000101, 2, 0}, (Vertex){12, 0,0b01000101, 2, 0}, (Vertex){16, 0,0b01000001, IS_ROOT, 0},
-    };
-    Vertex lin_vertices[m*n];
-    Vertex vert;
-    // awful hack until I write a proper conversion function i,j -> a
-    // TODO write proper conversion function
-    for (linidx_t a = 0; a < m*n; a++){
-        for (cartidx_t row = 0; row < m; row++){
-            for (cartidx_t col = 0; col < n; col++){
-                CartPair coords = {row, col};
-                if (a == sg_cart_to_lin(coords, dims)){
-                    vert = cart_vertices[row*n + col];
-                    linidx_t a_down;
-                    sg_clockhand_to_lin_safe(&a_down, a, vert.downstream, dims);
-                    vert.adown = a_down;
-                    lin_vertices[a] = vert;
-                }
-            }
-        }
-    }
-
-
-    StreamGraph *G;
-    sg_create_empty_safe(G, (CartPair){3, 3}, dims);
-    memcpy(G->vertices, lin_vertices, (G->dims.row * G->dims.col) * sizeof(Vertex));
-    G->energy = 4 + sqrt(2)*4 + sqrt(3)*4 + sqrt(4)*4;  // pre-calculate initial energy
-
-    return G;
-}
-
-
-
-
-
 void sg_display(StreamGraph *G, bool use_utf8){
     if (G->vertices == NULL || G->dims.row == 0 || G->dims.col == 0) return;
     
@@ -575,13 +529,5 @@ void sg_display(StreamGraph *G, bool use_utf8){
     }
     putchar('\n');
 }
-
-
-
-
-
-
-
-
 
 #endif // STREAMGRAPH_C
