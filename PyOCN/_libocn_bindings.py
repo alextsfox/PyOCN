@@ -166,11 +166,6 @@ libocn.sg_flow_downstream_safe.restype = Status
 libocn.sg_display.argtypes = [POINTER(StreamGraph_C), c_bool]
 libocn.sg_display.restype = None
 
-# StreamGraph *sg_make_test_graph();
-libocn.sg_make_test_graph.argtypes = []
-libocn.sg_make_test_graph.restype = POINTER(StreamGraph_C)
-
-
 ##############################
 #     OCN.H EQUIVALENTS      #
 ##############################

@@ -14,6 +14,11 @@ def plot_streamgraph(sg:StreamGraph|OCN, ax=None):
 
 def plot_positional_digraph(G:nx.DiGraph, ax=None):
     pos = nx.get_node_attributes(G, 'pos')
+    # Transpose from (row, col) to (x, y) for plotting
+    nrows = max(r for r, _ in pos.values()) + 1
+    for node, (r, c) in pos.items():
+        pos[node] = (c, nrows - r - 1)  
+
     drained_area = np.asarray(list(nx.get_node_attributes(G, 'drained_area').values()))
     drained_area = (drained_area - drained_area.min()) / (drained_area.max() - drained_area.min())
     size = 50 + drained_area*1000

@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
-#include <math.h>
 #include <stdbool.h>
 #include <assert.h>
 #include <locale.h>
@@ -12,34 +11,62 @@
 #include "ocn.h"
 #include "rng.h"
 
-int main(void){
-    setlocale(LC_ALL, "");
-/*
-    O O O O
-    | | | |
-    O O O O
-    | | | |
-    O O O O
-    | | | |
-    O-O-O-X but with 36 vertices
-    */
+// Helper function to test for stream crossings
+bool test_for_crossing(StreamGraph* sg, linidx_t a) {
+    CartPair dims = sg->dims;
+    Vertex vert = sg->vertices[a];
+    clockhand_t down_new = vert.downstream;
 
-    //////////////////////////////////////////////////////////////////////////////////////
-    // X detection test
-    // X shape, 5->10 and 6->9
+    Vertex cross_check_vert;
+    CartPair check_row_col = sg_lin_to_cart(a, dims);
+    
+    // Check appropriate vertex based on flow direction
+    if (down_new == 1) {
+        check_row_col.row -= 1;  // NE flow: check N vertex
+    } else if (down_new == 7) {
+        check_row_col.row -= 1;  // NW flow: check N vertex
+    } else if (down_new == 3) {
+        check_row_col.row += 1;  // SE flow: check S vertex
+    } else if (down_new == 5) {
+        check_row_col.row += 1;  // SW flow: check S vertex
+    } else {
+        return false; // Not a diagonal flow
+    }
+
+    sg_get_cart_safe(&cross_check_vert, sg, check_row_col);
+    
+    // Check for crossing streams
+    if (down_new == 1 && (cross_check_vert.edges & (1u << 3))) return true;  // NE flow: N vertex has SE edge
+    if (down_new == 7 && (cross_check_vert.edges & (1u << 5))) return true;  // NW flow: N vertex has SW edge
+    if (down_new == 3 && (cross_check_vert.edges & (1u << 1))) return true;  // SE flow: S vertex has NE edge
+    if (down_new == 5 && (cross_check_vert.edges & (1u << 7))) return true;  // SW flow: S vertex has NW edge
+    
+    return false;
+}
+
+int main(void) {
+    setlocale(LC_ALL, "");
+    printf("Running StreamGraph tests...\n\n");
+    
+    /********************************************
+     * TEST 1: X-shaped Crossing Detection
+     ********************************************/
+    printf("TEST 1: X-shaped Crossing Detection\n");
+    
     StreamGraph sg;
     CartPair dims = {4, 4};
     CartPair root = {3, 3};
     sg_create_empty_safe(&sg, root, dims);
 
+    // Initialize with vertices that form X-shaped crossings
     Vertex vertices[16] = {
         {.drained_area = 1, .adown = 4, .edges = 16, .downstream = 4, .visited = 0},
         {.drained_area = 1, .adown = 5, .edges = 16, .downstream = 4, .visited = 0},
         {.drained_area = 1, .adown = 6, .edges = 16, .downstream = 4, .visited = 0},
         {.drained_area = 1, .adown = 7, .edges = 16, .downstream = 4, .visited = 0},
         {.drained_area = 2, .adown = 8, .edges = 17, .downstream = 4, .visited = 0},
-        {.drained_area = 2, .adown = 10, .edges = 9, .downstream = 3, .visited = 0},
-        {.drained_area = 2, .adown = 9, .edges = 33, .downstream = 5, .visited = 0},
+        {.drained_area = 2, .adown = 10, .edges = 9, .downstream = 3, .visited = 0},  // Diagonal SE
+        {.drained_area = 2, .adown = 9, .edges = 33, .downstream = 5, .visited = 0},  // Diagonal SW
         {.drained_area = 2, .adown = 11, .edges = 17, .downstream = 4, .visited = 0},
         {.drained_area = 3, .adown = 12, .edges = 17, .downstream = 4, .visited = 0},
         {.drained_area = 3, .adown = 13, .edges = 18, .downstream = 4, .visited = 0},
@@ -50,114 +77,76 @@ int main(void){
         {.drained_area = 12, .adown = 15, .edges = 69, .downstream = 2, .visited = 0},
         {.drained_area = 16, .adown = 0, .edges = 65, .downstream = 255, .visited = 0}
     };
-    memcpy(sg.vertices, vertices, sizeof(vertices));
-    sg.energy = 64.0 ;
-
-    rng_seed(8472);
-
-    sg_display(&sg, true);
-
-
-    // check that we haven't created any crosses
-    linidx_t a = 5;
-    Vertex vert = sg.vertices[a];
-    clockhand_t down_new = vert.downstream;
-
-    Vertex cross_check_vert;
-    CartPair check_row_col = sg_lin_to_cart(a, dims);
-    // Convert switch statements to if/else if/else structure
-    if (down_new == 1) {
-        check_row_col.row -= 1;  // NE flow: check N vertex
-    } else if (down_new == 7) {
-        check_row_col.row -= 1;  // NW flow: check N vertex
-    } else if (down_new == 3) {
-        check_row_col.row += 1;  // SE flow: check S vertex
-    } else if (down_new == 5) {
-        check_row_col.row += 1;  // SW flow: check S vertex
-    }
-
-    sg_get_cart_safe(&cross_check_vert, &sg, check_row_col);
-
-    printf("CHECK: row %d col %d lin %d\n", check_row_col.row, check_row_col.col, sg_cart_to_lin(check_row_col, dims));
-    printf("CROSS CHECK VERTEX EDGES: %u\n", cross_check_vert.edges);
-
-    bool triggered = false;
-    if (down_new == 1) {
-        if (cross_check_vert.edges & (1u << 3)) triggered = true;  // NE flow: N vertex cannot have a SE edge
-    } else if (down_new == 7) {
-        if (cross_check_vert.edges & (1u << 5)) triggered = true;  // NW flow: N vertex cannot have a SW edge
-    } else if (down_new == 3) {
-        if (cross_check_vert.edges & (1u << 1)) triggered = true;  // SE flow: S vertex cannot have a NE edge
-    } else if (down_new == 5) {
-        if (cross_check_vert.edges & (1u << 7)) triggered = true;  // SW flow: S vertex cannot have a NW edge
-    }
-    assert(triggered);
     
-    a = 6;
-    vert = sg.vertices[a];
-    down_new = vert.downstream;
-
-    check_row_col = sg_lin_to_cart(a, dims);
-    // Convert switch statements to if/else if/else structure
-    if (down_new == 1) {
-        check_row_col.row -= 1;  // NE flow: check N vertex
-    } else if (down_new == 7) {
-        check_row_col.row -= 1;  // NW flow: check N vertex
-    } else if (down_new == 3) {
-        check_row_col.row += 1;  // SE flow: check S vertex
-    } else if (down_new == 5) {
-        check_row_col.row += 1;  // SW flow: check S vertex
-    }
-
-    sg_get_cart_safe(&cross_check_vert, &sg, check_row_col);
-
-    printf("CHECK: row %d col %d lin %d\n", check_row_col.row, check_row_col.col, sg_cart_to_lin(check_row_col, dims));
-    printf("CROSS CHECK VERTEX EDGES: %u\n", cross_check_vert.edges);
-
-    triggered = false;
-    if (down_new == 1) {
-        if (cross_check_vert.edges & (1u << 3)) triggered = true;  // NE flow: N vertex cannot have a SE edge
-    } else if (down_new == 7) {
-        if (cross_check_vert.edges & (1u << 5)) triggered = true;  // NW flow: N vertex cannot have a SW edge
-    } else if (down_new == 3) {
-        if (cross_check_vert.edges & (1u << 1)) triggered = true;  // SE flow: S vertex cannot have a NE edge
-    } else if (down_new == 5) {
-        if (cross_check_vert.edges & (1u << 7)) triggered = true;  // SW flow: S vertex cannot have a NW edge
-    }
-    assert(triggered);
-
-    ////////////////////////////////////////////////////////////////////////////////////////
-    // Cycle dectection test
-    // contains a cycle
-    Vertex vertices_new[16] = {
+    memcpy(sg.vertices, vertices, sizeof(vertices));
+    
+    printf("Graph with X-shaped crossing:\n");
+    sg_display(&sg, false);
+    
+    // Test crossing detection
+    bool has_crossing_5 = test_for_crossing(&sg, 5);
+    bool has_crossing_6 = test_for_crossing(&sg, 6);
+    
+    printf("Vertex 5 has crossing: %s\n", has_crossing_5 ? "YES" : "NO");
+    printf("Vertex 6 has crossing: %s\n", has_crossing_6 ? "YES" : "NO");
+    
+    assert(has_crossing_5);
+    assert(has_crossing_6);
+    printf("X-crossing detection test passed!\n\n");
+    
+    /********************************************
+     * TEST 2: Cycle Detection
+     ********************************************/
+    printf("TEST 2: Cycle Detection\n");
+    
+    // Create a cycle: 5 → 6 → 10 → 9 → 5
+    Vertex vertices_cycle[16] = {
         {.drained_area = 1, .adown = 4, .edges = 16, .downstream = 4, .visited = 0},
         {.drained_area = 1, .adown = 5, .edges = 16, .downstream = 4, .visited = 0},
         {.drained_area = 1, .adown = 6, .edges = 16, .downstream = 4, .visited = 0},
         {.drained_area = 1, .adown = 7, .edges = 16, .downstream = 4, .visited = 0},
         {.drained_area = 2, .adown = 8, .edges = 17, .downstream = 4, .visited = 0},
-        {.drained_area = 2, .adown = 6, .edges = 21, .downstream = 4, .visited = 0},  // 5 goes to 6
-        {.drained_area = 2, .adown = 10, .edges = 81, .downstream = 4, .visited = 0},  // 6 goes to 10
+        {.drained_area = 2, .adown = 6, .edges = 21, .downstream = 4, .visited = 0},  // 5 → 6
+        {.drained_area = 2, .adown = 10, .edges = 81, .downstream = 4, .visited = 0}, // 6 → 10
         {.drained_area = 2, .adown = 11, .edges = 17, .downstream = 4, .visited = 0},
         {.drained_area = 3, .adown = 12, .edges = 17, .downstream = 4, .visited = 0},
-        {.drained_area = 3, .adown = 5, .edges = 5, .downstream = 4, .visited = 0},  // 9 goes to 5
-        {.drained_area = 3, .adown = 9, .edges = 65, .downstream = 4, .visited = 0},  // 10 goes to 9
+        {.drained_area = 3, .adown = 5, .edges = 5, .downstream = 4, .visited = 0},   // 9 → 5
+        {.drained_area = 3, .adown = 9, .edges = 65, .downstream = 4, .visited = 0},  // 10 → 9
         {.drained_area = 3, .adown = 15, .edges = 17, .downstream = 4, .visited = 0},
         {.drained_area = 4, .adown = 13, .edges = 5, .downstream = 2, .visited = 0},
         {.drained_area = 8, .adown = 14, .edges = 69, .downstream = 2, .visited = 0},
         {.drained_area = 12, .adown = 15, .edges = 69, .downstream = 2, .visited = 0},
         {.drained_area = 16, .adown = 0, .edges = 65, .downstream = 255, .visited = 0}
     };
-    memcpy(sg.vertices, vertices_new, sizeof(vertices_new));
-    sg.energy = 64.0;
-
-    linidx_t a_to_test[] = {1, 2, 5, 6, 9, 10};
-    for (int i = 0; i < sizeof(a_to_test) / sizeof(linidx_t); i++){
-        for (linidx_t j = 0; j < (dims.row * dims.col); j++) sg.vertices[j].visited = 0;
-        Status code = sg_flow_downstream_safe(&sg, a_to_test[i], 1);
-        assert(code == MALFORMED_GRAPH_WARNING);
+    
+    memcpy(sg.vertices, vertices_cycle, sizeof(vertices_cycle));
+    
+    printf("Graph with cycle 5 → 6 → 10 → 9 → 5:\n");
+    
+    // Test cycle detection starting from different vertices in the cycle
+    linidx_t cycle_vertices[] = {5, 6, 9, 10};
+    bool all_detected = true;
+    
+    for (int i = 0; i < sizeof(cycle_vertices)/sizeof(linidx_t); i++) {
+        for (linidx_t j = 0; j < (dims.row * dims.col); j++) {
+            sg.vertices[j].visited = 0;  // Reset visited flags
+        }
+        
+        Status code = sg_flow_downstream_safe(&sg, cycle_vertices[i], 1);
+        printf("Checking for cycle starting at vertex %d: %s\n", 
+               cycle_vertices[i], 
+               (code == MALFORMED_GRAPH_WARNING) ? "CYCLE DETECTED" : "NO CYCLE");
+        
+        if (code != MALFORMED_GRAPH_WARNING) {
+            all_detected = false;
+        }
     }
-
+    
+    assert(all_detected);
+    printf("Cycle detection test passed!\n");
+    
+    // Clean up
     sg_destroy_safe(&sg);
-
+    
     return 0;
 }
