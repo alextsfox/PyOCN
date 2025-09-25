@@ -34,18 +34,18 @@ int main(void){
         {.drained_area = 1, .adown = 5, .edges = 16, .downstream = 4, .visited = 0},
         {.drained_area = 1, .adown = 6, .edges = 16, .downstream = 4, .visited = 0},
         {.drained_area = 1, .adown = 7, .edges = 16, .downstream = 4, .visited = 0},
-        {.drained_area = 2, .adown = 8, .edges = 16, .downstream = 4, .visited = 0},
-        {.drained_area = 2, .adown = 10, .edges = 8, .downstream = 3, .visited = 0},
-        {.drained_area = 2, .adown = 9, .edges = 32, .downstream = 5, .visited = 0},
-        {.drained_area = 2, .adown = 11, .edges = 16, .downstream = 4, .visited = 0},
-        {.drained_area = 3, .adown = 12, .edges = 16, .downstream = 4, .visited = 0},
-        {.drained_area = 3, .adown = 13, .edges = 16, .downstream = 4, .visited = 0},
-        {.drained_area = 3, .adown = 14, .edges = 16, .downstream = 4, .visited = 0},
-        {.drained_area = 3, .adown = 15, .edges = 16, .downstream = 4, .visited = 0},
-        {.drained_area = 4, .adown = 13, .edges = 4, .downstream = 2, .visited = 0},
-        {.drained_area = 8, .adown = 14, .edges = 4, .downstream = 2, .visited = 0},
-        {.drained_area = 12, .adown = 15, .edges = 4, .downstream = 2, .visited = 0},
-        {.drained_area = 16, .adown = 0, .edges = 0, .downstream = 255, .visited = 0}
+        {.drained_area = 2, .adown = 8, .edges = 17, .downstream = 4, .visited = 0},
+        {.drained_area = 2, .adown = 10, .edges = 9, .downstream = 3, .visited = 0},
+        {.drained_area = 2, .adown = 9, .edges = 33, .downstream = 5, .visited = 0},
+        {.drained_area = 2, .adown = 11, .edges = 17, .downstream = 4, .visited = 0},
+        {.drained_area = 3, .adown = 12, .edges = 17, .downstream = 4, .visited = 0},
+        {.drained_area = 3, .adown = 13, .edges = 18, .downstream = 4, .visited = 0},
+        {.drained_area = 3, .adown = 14, .edges = 144, .downstream = 4, .visited = 0},
+        {.drained_area = 3, .adown = 15, .edges = 17, .downstream = 4, .visited = 0},
+        {.drained_area = 4, .adown = 13, .edges = 5, .downstream = 2, .visited = 0},
+        {.drained_area = 8, .adown = 14, .edges = 69, .downstream = 2, .visited = 0},
+        {.drained_area = 12, .adown = 15, .edges = 69, .downstream = 2, .visited = 0},
+        {.drained_area = 16, .adown = 0, .edges = 65, .downstream = 255, .visited = 0}
     };
     sg.vertices = vertices;
     sg.energy = 64.0 ;
@@ -56,7 +56,7 @@ int main(void){
 
 
     // check that we haven't created any crosses
-    linidx_t a = 5;
+    linidx_t a = 10;
     Vertex vert = sg.vertices[a];
     clockhand_t down_new = vert.downstream;
 
