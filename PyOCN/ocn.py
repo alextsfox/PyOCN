@@ -74,6 +74,15 @@ class OCN():
         """
         return np.sum(v.drained_area**self.gamma for v in self.sg._vertices)
     
+    def compute_energy_for_all_vertices(self) -> np.ndarray:
+        """
+        Computes the energy of each vertex in the OCN.
+        """
+        G = self.sg.to_networkx()
+        for node in nx.topological_sort(G):
+            G.nodes[node]['energy'] = G.nodes[node]['drained_area']**self.gamma + sum(G.nodes[p]['energy'] for p in G.predecessors(node))
+        return G
+    
     @property
     def energy(self) -> float:
         """
