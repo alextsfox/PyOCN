@@ -146,9 +146,9 @@ libocn.sg_set_lin_safe.restype = Status
 libocn.sg_set_lin.argtypes = [POINTER(StreamGraph_C), Vertex_C, linidx_t]
 libocn.sg_set_lin.restype = None
 
-# Status sg_create_empty_safe(StreamGraph *G, CartPairC root, CartPairC dims);
-libocn.sg_create_empty_safe.argtypes = [POINTER(StreamGraph_C), CartPair_C, CartPair_C]
-libocn.sg_create_empty_safe.restype = Status
+# Status sg_create_empty_safe(CartPairC dims);
+libocn.sg_create_empty_safe.argtypes = [CartPair_C]
+libocn.sg_create_empty_safe.restype = POINTER(StreamGraph_C)
 
 # Status sg_destroy_safe(StreamGraph *G);
 libocn.sg_destroy_safe.argtypes = [POINTER(StreamGraph_C)]

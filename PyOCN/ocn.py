@@ -28,14 +28,11 @@ class OCN():
         Main class for working with Optimized Channel Networks (OCNs).
         Can be initialized from an existing StreamGraph, or by specifying a shape and initial structure.
         Parameters:
-            sg (StreamGraph): An existing StreamGraph to initialize from. Overrides shape and init_structure if provided.
-            shape (tuple[int, int]): The shape of the graph (rows, columns).
-            init_structure (str | nx.DiGraph): The initial structure of the graph.
+            #TODO update to match StreamGraph docs. StreamGraph never takes an init_structure of "toy", and we want to change this so that StreamGraph only ever takes DiGraph as input. Initialization structures like I or H are passed to OCN not to StreamGraph
             gamma (float): The gamma parameter for energy calculations. Default is 0.5.
             annealing_schedule (callable): A function that takes the iteration number and returns the temperature. If None, a constant temperature of 0 is used.
-            random_state: Seed or random number generator for reproducibility. If None, uses default randomness. Can be any legal seed argument to np.random.default_rng().
-
-            See StreamGraph documentation for details on supported initial structures.
+            sg (StreamGraph): An existing StreamGraph to initialize from. Overrides shape and init_structure if provided.
+            shape, init_structure: Parameters to create a new StreamGraph if sg is not provided. See StreamGraph documentation for details.
         """
 
         if sg is not None:
@@ -47,7 +44,7 @@ class OCN():
 
         self.gamma = gamma
         self.annealing_schedule = annealing_schedule if annealing_schedule is not None else lambda t: 0.0
-        self.sg._c_graph.energy = self.compute_energy()
+        self.sg._p_c_graph.contents.energy = self.compute_energy()
 
         rng = np.random.default_rng(random_state)
         seed = rng.integers(0, 2**32 - 1)
@@ -57,7 +54,7 @@ class OCN():
     def __len__(self) -> int:
         return self.sg.size
     def __repr__(self):
-        return repr(self.sg._c_graph)
+        return repr(self.sg._p_c_graph)
     def __str__(self):
         return f"StreamGraph(dims={self.sg.dims}, root={self.sg.root}, energy={self.energy}, vertices=<{self.sg.dims[0] * self.sg.dims[1]} vertices>)"
     def __del__(self):
@@ -72,17 +69,18 @@ class OCN():
         Returns:
             float: The computed energy.
         """
-        return np.sum(v.drained_area**self.gamma for v in self.sg._vertices)
-    
+        drained_areas = nx.get_node_attributes(self.sg.dag, 'drained_area').values()
+        return np.sum(area**self.gamma for area in drained_areas)
+
     def compute_energy_for_all_vertices(self) -> np.ndarray:
         """
         Computes the energy of each vertex in the OCN.
         """
-        G = self.sg.to_networkx()
-        for node in nx.topological_sort(G):
-            G.nodes[node]['energy'] = G.nodes[node]['drained_area']**self.gamma + sum(G.nodes[p]['energy'] for p in G.predecessors(node))
-        return G
-    
+        dag = self.sg.dag
+        for node in nx.topological_sort(dag):
+            dag.nodes[node]['energy'] = dag.nodes[node]['drained_area']**self.gamma + sum(dag.nodes[p]['energy'] for p in dag.predecessors(node))
+        return dag
+
     @property
     def energy(self) -> float:
         """
@@ -90,7 +88,8 @@ class OCN():
         Returns:
             float: The computed energy.
         """
-        return self.sg._c_graph.energy
+        return self.sg._p_c_graph.contents.energy
+        # return self.compute_energy()
     
     
     def single_erosion_event(self, temperature:float):
@@ -100,7 +99,7 @@ class OCN():
             temperature (float): The temperature parameter for the erosion event. Ranges from 0 (greedy) to 1 (always accept)
         """
         check_status(_bindings.libocn.ocn_single_erosion_event(
-            byref(self.sg._c_graph), 
+            self.sg._p_c_graph, 
             byref(ctypes.c_uint32(0)), 
             self.gamma, 
             temperature
@@ -124,7 +123,7 @@ class OCN():
                 temperatures = [self.annealing_schedule(t) for t in range(completed_iterations, completed_iterations + iterations_this_loop)]
                 temp_array = (ctypes.c_double * iterations_this_loop)(*temperatures)  # ctypes syntax for creating a C-compatible array from an iterable.
                 check_status(_bindings.libocn.ocn_outer_ocn_loop(
-                    byref(self.sg._c_graph), 
+                    self.sg._p_c_graph), 
                     iterations_this_loop, 
                     self.gamma, 
                     temp_array

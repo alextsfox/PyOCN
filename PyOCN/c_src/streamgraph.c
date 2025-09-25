@@ -147,28 +147,29 @@ void sg_set_lin(StreamGraph *G, Vertex vert, linidx_t a){
 // ##############################
 // # Create/destroy streamgraph #
 // ##############################
-Status sg_create_empty_safe(StreamGraph *G, CartPair root, CartPair dims){
-    if (dims.row % 2 != 0 || dims.col % 2 != 0) return MALFORMED_GRAPH_WARNING;
-    if (G == NULL) return NULL_POINTER_ERROR;
+StreamGraph *sg_create_empty_safe(CartPair dims){
+    if (dims.row % 2 != 0 || dims.col % 2 != 0) return NULL;  // dimensions must be even
+
+    StreamGraph *G = malloc(sizeof(StreamGraph));
+    if (G == NULL) return NULL;
 
     Vertex *vertices = malloc(dims.row * dims.col * sizeof(Vertex));
-    if (vertices == NULL) return NULL_POINTER_ERROR;
-    if (root.row < 0 || root.row >= dims.row || root.col < 0 || root.col >= dims.col) return OOB_ERROR;
-    vertices[sg_cart_to_lin(root, dims)].downstream = IS_ROOT;
+    if (vertices == NULL) {
+        free(G);
+        return NULL;
+    }
 
     G->dims = dims;
-    G->root = root;
-    G->energy = 0.0;
     G->vertices = vertices;
-
-    return SUCCESS;
+    
+    return G;
 }
+
 Status sg_destroy_safe(StreamGraph *G){
-    if (G != NULL && G->vertices != NULL){
-        free(G->vertices);
-        G->vertices = NULL;
+    if (G != NULL){
+        if (G->vertices != NULL) free(G->vertices); G->vertices = NULL;
+        free(G); 
     }
-    G = NULL;
     return SUCCESS;
 }
 

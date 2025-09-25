@@ -112,13 +112,11 @@ Status sg_set_lin_safe(StreamGraph *G, Vertex vert, linidx_t a);
 void sg_set_lin(StreamGraph *G, Vertex vert, linidx_t a);
 
 /**
- * @brief Create an empty streamgraph with given dimensions and root safely.
- * @param G Pointer to the StreamGraph to initialize.
- * @param root The Cartesian coordinates of the root vertex.
+ * @brief Create an empty streamgraph with given dimensions safely.
  * @param dims The dimensions of the graph (rows, cols).
- * @return Status code indicating success or failure
+ * @return The created StreamGraph. Returns NULL if dimensions are invalid or memory allocation fails.
  */
-Status sg_create_empty_safe(StreamGraph *G, CartPair root, CartPair dims);
+StreamGraph *sg_create_empty_safe(CartPair dims);
 
 /**
  * @brief Safely destroy a streamgraph, freeing its resources.

@@ -53,11 +53,14 @@ int main(void) {
      ********************************************/
     printf("TEST 1: X-shaped Crossing Detection\n");
     
-    StreamGraph sg;
     CartPair dims = {4, 4};
-    CartPair root = {3, 3};
-    sg_create_empty_safe(&sg, root, dims);
-
+    StreamGraph *sg = sg_create_empty_safe(dims);
+    if (sg == NULL) {
+        printf("Failed to create StreamGraph.\n");
+        return 1;
+    }
+    sg->root = (CartPair){0, 0};
+    
     // Initialize with vertices that form X-shaped crossings
     Vertex vertices[16] = {
         {.drained_area = 1, .adown = 4, .edges = 16, .downstream = 4, .visited = 0},
@@ -78,15 +81,14 @@ int main(void) {
         {.drained_area = 16, .adown = 0, .edges = 65, .downstream = 255, .visited = 0}
     };
     
-    memcpy(sg.vertices, vertices, sizeof(vertices));
+    memcpy(sg->vertices, vertices, sizeof(vertices));
     
     printf("Graph with X-shaped crossing:\n");
-    sg_display(&sg, false);
+    sg_display(sg, false);
     
     // Test crossing detection
-    bool has_crossing_5 = test_for_crossing(&sg, 5);
-    bool has_crossing_6 = test_for_crossing(&sg, 6);
-    
+    bool has_crossing_5 = test_for_crossing(sg, 5);
+    bool has_crossing_6 = test_for_crossing(sg, 6);
     printf("Vertex 5 has crossing: %s\n", has_crossing_5 ? "YES" : "NO");
     printf("Vertex 6 has crossing: %s\n", has_crossing_6 ? "YES" : "NO");
     
@@ -118,9 +120,9 @@ int main(void) {
         {.drained_area = 12, .adown = 15, .edges = 69, .downstream = 2, .visited = 0},
         {.drained_area = 16, .adown = 0, .edges = 65, .downstream = 255, .visited = 0}
     };
-    
-    memcpy(sg.vertices, vertices_cycle, sizeof(vertices_cycle));
-    
+
+    memcpy(sg->vertices, vertices_cycle, sizeof(vertices_cycle));
+
     printf("Graph with cycle 5 → 6 → 10 → 9 → 5:\n");
     
     // Test cycle detection starting from different vertices in the cycle
@@ -129,10 +131,10 @@ int main(void) {
     
     for (int i = 0; i < sizeof(cycle_vertices)/sizeof(linidx_t); i++) {
         for (linidx_t j = 0; j < (dims.row * dims.col); j++) {
-            sg.vertices[j].visited = 0;  // Reset visited flags
+            sg->vertices[j].visited = 0;  // Reset visited flags
         }
-        
-        Status code = sg_flow_downstream_safe(&sg, cycle_vertices[i], 1);
+
+        Status code = sg_flow_downstream_safe(sg, cycle_vertices[i], 1);
         printf("Checking for cycle starting at vertex %d: %s\n", 
                cycle_vertices[i], 
                (code == MALFORMED_GRAPH_WARNING) ? "CYCLE DETECTED" : "NO CYCLE");
@@ -146,7 +148,7 @@ int main(void) {
     printf("Cycle detection test passed!\n");
     
     // Clean up
-    sg_destroy_safe(&sg);
+    sg_destroy_safe(sg);
     
     return 0;
 }
