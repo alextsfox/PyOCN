@@ -44,7 +44,7 @@ Status ocn_update_energy(StreamGraph *G, drainedarea_t da_inc, linidx_t a, doubl
     return SUCCESS;
 }
 
-Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature){
+Status ocn_single_erosion_event(StreamGraph *G, uint32_t *total_tries, double gamma, double temperature){
     Status code;
 
     Vertex vert, vert_down_old, vert_down_new;
@@ -53,23 +53,24 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
     
     CartPair dims = G->dims;
 
-    drainedarea_t da_inc;
     double energy_old, energy_new;
     energy_old = G->energy;
     bool accept_bad_value = ((double)rand() / (double)RAND_MAX) > (1 - temperature);  // Metro-Hastings criterion. High temperature = more likely to accept bad values
+    
+    a = rand() % (dims.row * dims.col);  // pick a random vertex
+    
+    for ((*total_tries) = 0; (*total_tries) < (dims.row) * (dims.col) * 8; (*total_tries) += 8){
+        a = (a + 1) % (dims.row * dims.col);  // try each vertex in turn, wrapping around to 0 after reaching the end
+        down_new = rand() % 8;  // pick a random new downstream direction
 
-    linidx_t i;
-    uint8_t ntries;
-    for (uint16_t total_tries = 0; total_tries < 1000; total_tries++){
-        // pick a random vertex and a random new downstream direction,
-        down_new = rand() % 8;
-        a = rand() % (dims.row * dims.col);
+
         vert = sg_get_lin(G, a);  // unsafe is ok here because a is guaranteed to be in bounds
-        
+
         down_old = vert.downstream;
         a_down_old = vert.adown;
-        da_inc = vert.drained_area;
-        for (ntries = 0; ntries < 8; ntries++){  // try a new direction each time, up to 8 times before giving up and picking a new vertex
+        drainedarea_t da_inc = vert.drained_area;
+        
+        for (uint8_t ntries = 0; ntries < 8; ntries++){  // try a new direction each time, up to 8 times before giving up and picking a new vertex
 
             down_new  = (down_new + 1) % 8;
 
@@ -82,15 +83,27 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
             vert_down_new = sg_get_lin(G, a_down_new);  // bounds check was performed by sg_change_vertex_outflow
             vert_down_old = sg_get_lin(G, a_down_old);  // bounds check was performed by sg_change_vertex_outflow
 
+            // TODO: do we actually need to check for cycles from a_down_old?
             // confirm that the new graph is well-formed (no cycles, still reaches root)
-            for (i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
-            code = sg_flow_downstream_safe(G, a_down_old, 1);
-            if (code != SUCCESS){
-                sg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
-                continue;
+            // for (linidx_t i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
+            // code = sg_flow_downstream_safe(G, a_down_old, 1);
+            // if (code != SUCCESS){
+            //     sg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
+            //     continue;
+            // }
+            // for (linidx_t i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
+            // code = sg_flow_downstream_safe(G, a, 1);  // use ncalls = 2. This way, if the two paths intersect, it won't trigger a cycle warning.
+            // if (code != SUCCESS){
+            //     sg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
+            //     continue;
+            // }
+
+            // more comprehensive cycle check: check *all* vertices
+            for (linidx_t i = 0; i < (dims.row * dims.col); i++){
+                for (linidx_t j = 0; j < (dims.row * dims.col); j++) G->vertices[j].visited = 0;
+                code = sg_flow_downstream_safe(G, i, 1);
+                if (code != SUCCESS) break;  // found a cycle, break out to try a new direction
             }
-            // for (i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
-            code = sg_flow_downstream_safe(G, a_down_new, 2);  // use ncalls = 2. This way, if the two paths intersect, it won't trigger a cycle warning.
             if (code != SUCCESS){
                 sg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
@@ -98,6 +111,7 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
 
             break;  // if we reached here, the swap resulted in a well-formed graph, so we can move on the acceptance step
         }
+
         if (code != SUCCESS) continue;  // if we exhausted all 8 directions without a successful swap, try again. do not go to acceptance step
 
         // update drained area and energy along both paths
@@ -112,16 +126,17 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
         ocn_update_energy(G, -da_inc, a_down_new, gamma);  // undo the increment
         sg_change_vertex_outflow(G, a, a_down_old);  // undo the outflow change
     }
-
-    return MALFORMED_GRAPH_WARNING;  // if we reach here, we failed to find a valid swap in many, many tries
+    return EROSION_FAILURE;  // if we reach here, we failed to find a valid swap in many, many tries
 }
 
 Status ocn_outer_ocn_loop(StreamGraph *G, uint32_t niterations, double gamma, double *annealing_schedule){
     Status code;
     uint32_t i = 0;
-    for (i = 0; i < niterations; i++){
-        code = ocn_single_erosion_event(G, gamma, annealing_schedule[i]);
-        if (code != SUCCESS) return code;  // malformed graph?
+    uint32_t total_tries = 0;
+    while (i < niterations){
+        code = ocn_single_erosion_event(G, &total_tries, gamma, annealing_schedule[i]);
+        if ((code != SUCCESS) && (code != EROSION_FAILURE)) return code;  // malformed graph?
+        i += total_tries;
     }
     return SUCCESS;
 }

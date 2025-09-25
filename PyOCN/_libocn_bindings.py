@@ -52,6 +52,7 @@ libocn = CDLL(_streamgraph_so_file)
 Status = c_uint8
 
 SUCCESS = int(Status.in_dll(libocn, "SUCCESS").value)
+EROSION_FAILURE = int(Status.in_dll(libocn, "EROSION_FAILURE").value)
 OOB_ERROR = int(Status.in_dll(libocn, "OOB_ERROR").value)
 NULL_POINTER_ERROR = int(Status.in_dll(libocn, "NULL_POINTER_ERROR").value)
 SWAP_WARNING = int(Status.in_dll(libocn, "SWAP_WARNING").value)
@@ -179,7 +180,7 @@ libocn.ocn_update_energy.argtypes = [POINTER(StreamGraph_C), drainedarea_t, lini
 libocn.ocn_update_energy.restype = Status
 
 # Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature);
-libocn.ocn_single_erosion_event.argtypes = [POINTER(StreamGraph_C), c_double, c_double]
+libocn.ocn_single_erosion_event.argtypes = [POINTER(StreamGraph_C), POINTER(c_uint32), c_double, c_double]
 libocn.ocn_single_erosion_event.restype = Status
 
 # Status ocn_outer_ocn_loop(StreamGraph *G, uint32_t niterations, double gamma, double *annealing_schedule);
@@ -200,6 +201,7 @@ libocn.rng_seed_random.restype = None
 
 __all__ = [
     "SUCCESS",
+    "EROSION_FAILURE",
     "OOB_ERROR",
     "NULL_POINTER_ERROR",
     "SWAP_WARNING",

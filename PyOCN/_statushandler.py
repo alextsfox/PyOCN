@@ -8,6 +8,7 @@ import warnings
 from ._libocn_bindings import (
     SUCCESS,
     OOB_ERROR,
+    EROSION_FAILURE,
     NULL_POINTER_ERROR,
     SWAP_WARNING,
     MALFORMED_GRAPH_WARNING,
@@ -15,6 +16,7 @@ from ._libocn_bindings import (
 
 STATUS_CODES = {
     SUCCESS: "SUCCESS",
+    EROSION_FAILURE: "EROSION_FAILURE",
     OOB_ERROR: "OOB_ERROR",
     NULL_POINTER_ERROR: "NULL_POINTER_ERROR",
     SWAP_WARNING: "SWAP_WARNING",
@@ -43,6 +45,21 @@ class NullPointerError(LibOCNError):
 class SwapWarning(RuntimeWarning):
     pass
 
+class ErosionFailureWarning(RuntimeWarning):
+    default_message = (
+        "\nErosion event failed: no accepted rerouting found. "
+        "This can happen if the acceptance probability (temperature) is too low, "
+        "or if the streamgraph is malformed in an undetected way. "
+    )
+
+    def __init__(self, custom_message=None):
+        self.custom_message = custom_message
+
+    def __str__(self):
+        if self.custom_message:
+            return f"{self.default_message}\nDetails: {self.custom_message}"
+        return self.default_message
+
 class MalformedGraphWarning(RuntimeWarning):
     default_message = (
         "\nYour streamgraph is invalid. "
@@ -68,6 +85,7 @@ STATUS_EXCEPTION_MAP = {
 STATUS_WARNING_MAP = {
     SWAP_WARNING: SwapWarning,
     MALFORMED_GRAPH_WARNING: MalformedGraphWarning,
+    EROSION_FAILURE: ErosionFailureWarning,
 }
 
 def check_status(status):

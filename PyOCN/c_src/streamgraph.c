@@ -239,6 +239,8 @@ Status sg_change_vertex_outflow(StreamGraph *G, linidx_t a, clockhand_t down_new
     return SUCCESS;
 }
 
+
+
 Status sg_flow_downstream_safe(StreamGraph *G, linidx_t a, uint8_t ncalls){
     Vertex vert;
     Status code;

@@ -5,6 +5,7 @@
 
 typedef uint8_t Status;
 extern Status SUCCESS;
+extern Status EROSION_FAILURE;
 extern Status OOB_ERROR;
 extern Status NULL_POINTER_ERROR;
 extern Status SWAP_WARNING;

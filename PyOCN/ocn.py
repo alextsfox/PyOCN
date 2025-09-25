@@ -90,7 +90,12 @@ class OCN():
         Parameters:
             temperature (float): The temperature parameter for the erosion event. Ranges from 0 (greedy) to 1 (always accept)
         """
-        check_status(_bindings.libocn.ocn_single_erosion_event(byref(self.sg._c_graph), self.gamma, temperature))
+        check_status(_bindings.libocn.ocn_single_erosion_event(
+            byref(self.sg._c_graph), 
+            byref(ctypes.c_uint32(0)), 
+            self.gamma, 
+            temperature
+        ))
 
     def outer_ocn_loop(self, n_iterations:int, max_iterations_per_loop:int=100):
         """
