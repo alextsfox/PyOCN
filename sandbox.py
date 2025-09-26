@@ -29,18 +29,19 @@ import PyOCN
 
 ocn = PyOCN.OCN.from_net_type(
     "H", 
-    dims=(76, 76), 
+    dims=(200, 200), 
     gamma=0.5, 
     annealing_schedule=1.0, 
     random_state=8473
 )
 
-for _ in trange(30000):
+
+for _ in trange(1_000_000):
     ocn.single_erosion_event(0.05)
 
-dag = ocn.to_digraph()
-print(PyOCN._streamgraph_convert.validate_digraph(dag))
+# dag = ocn.to_digraph()
+# print(PyOCN._streamgraph_convert.validate_digraph(dag))
 
-PyOCN.plot_ocn_energy_raster(ocn=ocn, norm=mpl.colors.LogNorm(vmin=1, vmax=ocn.energy))
+# PyOCN.plot_ocn_energy_raster(ocn=ocn, norm=mpl.colors.LogNorm(vmin=1, vmax=ocn.energy))
 # PyOCN.plot_ocn_as_dag(ocn, attribute='energy', with_labels=False, node_size=10)
-plt.show()
+# plt.show()
