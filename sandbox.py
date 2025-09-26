@@ -1,7 +1,5 @@
-import warnings
 import matplotlib.pyplot as plt
 import networkx as nx
-import numpy as np
 
 import PyOCN
 
@@ -43,7 +41,6 @@ G.add_edge(12, 13)
 G.add_edge(13, 14)
 G.add_edge(14, 15)
 
-ocn = PyOCN.OCN.from_digraph(G, )
-
-PyOCN.plot_streamgraph(ocn)
+ocn = PyOCN.OCN.from_digraph(G, random_state=8472)
+PyOCN.plot_ocn_as_dag(ocn)
 plt.show()

@@ -12,7 +12,7 @@ This file is part of the PyOCN project.
 from ctypes import byref
 import ctypes
 from numbers import Number
-from typing import Literal, Any
+from typing import Literal, Any, Callable
 import networkx as nx 
 
 import numpy as np
@@ -20,12 +20,12 @@ from tqdm import tqdm
 
 from ._statushandler import check_status
 from . import _libocn_bindings as _bindings
-import . import streamgraph as sg
+from . import streamgraph as sg
 
 _allowed_net_types = {"I", "H", "V", "T"}
 
 class OCN():
-    def __init__(self, dag:nx.DiGraph, gamma:float=0.5, annealing_schedule:float|callable=None, random_state=None):
+    def __init__(self, dag:nx.DiGraph, gamma:float=0.5, annealing_schedule:float|Callable=None, random_state=None):
         """
         Main class for working with Optimized Channel Networks (OCNs). 
         Provides a high-level interface to the `libocn` C library.
@@ -68,7 +68,7 @@ class OCN():
 
         # instantiate the StreamGraph_C and assign an initial energy.
         self.__p_c_graph = sg.from_digraph(dag)
-        self.__p_c_graph.contents.energy = self.compute_node_energy()
+        self.__p_c_graph.contents.energy = self.compute_energy()
 
     @classmethod
     def from_net_type(cls, net_type:str, dims:tuple, gamma=0.5, annealing_schedule=0.0, random_state=None):
@@ -120,7 +120,7 @@ class OCN():
         #TODO: too verbose?
         return f"<PyOCN.OCN object at 0x{id(self):x} with StreamGraph_C at 0x{ctypes.addressof(self.__p_c_graph.contents):x} and Vertex_C array at 0x{ctypes.addressof(self.__p_c_graph.contents.vertices):x}>"
     def __str__(self):
-        return f"OCN(gamma={self.gamma}, energy={self.energy}, dims={self.dims}, root={self.root}, dag={self.dag})"
+        return f"OCN(gamma={self.gamma}, energy={self.energy}, dims={self.dims}, root={self.root})"
     def __del__(self):
         try:
             _bindings.libocn.sg_destroy_safe(self.__p_c_graph)
@@ -141,8 +141,8 @@ class OCN():
         Returns:
             float: The computed energy.
         """
-        drained_areas = nx.get_node_attributes(self.dag, 'drained_area').values()
-        return np.sum(area**self.gamma for area in drained_areas)
+        dag = self.to_digraph()
+        return max(nx.get_node_attributes(dag, 'energy').values())
     
     @property
     def energy(self) -> float:
@@ -175,12 +175,12 @@ class OCN():
             - 'drained_area': The drained area of the node.
             - 'energy': The energy of each node.
         """
-        dag = sg.to_digraph(self.__p_c_graph)
+        dag = sg.to_digraph(self.__p_c_graph.contents)
 
         node_energies = dict()
         for node in nx.topological_sort(dag):
             da = dag.nodes[node]['drained_area']
-            pred_energy = (dag.nodes[p]['energy'] for p in dag.predecessors(node))
+            pred_energy = (node_energies[p] for p in dag.predecessors(node))
             node_energies[node] = da**self.gamma + sum(pred_energy)
         nx.set_node_attributes(dag, node_energies, 'energy')
 
