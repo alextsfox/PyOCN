@@ -11,93 +11,189 @@ This file is part of the PyOCN project.
 
 from ctypes import byref
 import ctypes
-import networkx as nx
+from numbers import Number
+from typing import Literal, Any
+import networkx as nx 
 
 import numpy as np
 from tqdm import tqdm
 
 from ._statushandler import check_status
 from . import _libocn_bindings as _bindings
-from .streamgraph import StreamGraph
+import . import streamgraph as sg
 
-
+_allowed_net_types = {"I", "H", "V", "T"}
 
 class OCN():
-    def __init__(self, sg:StreamGraph=None, shape:tuple[int, int]=None, init_structure:str|nx.DiGraph="toy", gamma:float=0.5, annealing_schedule:callable=None, random_state=None):
+    def __init__(self, dag:nx.DiGraph, gamma:float=0.5, annealing_schedule:float|callable=None, random_state=None):
         """
-        Main class for working with Optimized Channel Networks (OCNs).
-        Can be initialized from an existing StreamGraph, or by specifying a shape and initial structure.
-        Parameters:
-            #TODO update to match StreamGraph docs. StreamGraph never takes an init_structure of "toy", and we want to change this so that StreamGraph only ever takes DiGraph as input. Initialization structures like I or H are passed to OCN not to StreamGraph
-            gamma (float): The gamma parameter for energy calculations. Default is 0.5.
-            annealing_schedule (callable): A function that takes the iteration number and returns the temperature. If None, a constant temperature of 0 is used.
-            sg (StreamGraph): An existing StreamGraph to initialize from. Overrides shape and init_structure if provided.
-            shape, init_structure: Parameters to create a new StreamGraph if sg is not provided. See StreamGraph documentation for details.
+        Main class for working with Optimized Channel Networks (OCNs). 
+        Provides a high-level interface to the `libocn` C library.
+
+        Initialize a new OCN through one of the following constructors:
+            OCN.from_net_type(net_type, dims, gamma, annealing_schedule, random_state): initialize from a predefined network type.
+            OCN.from_digraph(dag, gamma, annealing_schedule, random_state): initialize from an nx.DiGraph instance.
+
+        All constructors take an initilization structure (net_type + dims, or dag) and the following:
+            - gamma (float): The gamma parameter for energy calculations. Default is 0.5.
+            - annealing_schedule (float, callable): Either (a) A function that takes the iteration number as the first positional argument and returns the temperature or (b) a constant temperature, between 0 and 1. Default is 0.0 (only accept energy-lowering moves).
+            - random_state (int, np.random.Generator, or None): Any legal input to np.random.default_rng. Used to seed the internal random number generator. Default is None (unpredictable).
+
+        Refer to the documentation for each constructor for details on the initialization structures.
         """
-
-        if sg is not None:
-            if not isinstance(sg, StreamGraph):
-                raise TypeError(f"sg must be a StreamGraph instance, got {type(sg)}")
-            self.sg = sg
-        else:
-            self.sg = StreamGraph(shape=shape, init_structure=init_structure)
-
+        
+        # validate gamma, annealing schedule, and random_state
+        if not isinstance(gamma, Number):
+            raise TypeError(f"gamma must be a scalar. Got {type(gamma)}.")
+        if not (0 <= gamma <= 1):
+            raise ValueError(f"gamma must be in the range [0, 1]. got {gamma}")
         self.gamma = gamma
-        self.annealing_schedule = annealing_schedule if annealing_schedule is not None else lambda t: 0.0
-        self.sg._p_c_graph.contents.energy = self.compute_energy()
 
+        self.annealing_schedule = lambda _: 0.0
+        if (
+            not isinstance(annealing_schedule, Number) 
+            and not callable(annealing_schedule)
+        ):
+            raise TypeError(f"annealing_schedule must be a callable or a scalar, got {type(annealing_schedule)}")
+        if isinstance(annealing_schedule, Number):
+            if not (0 <= annealing_schedule <= 1):
+                raise ValueError(f"If annealing_schedule is a scalar, it must be in the range [0, 1], got {annealing_schedule}")
+            self.annealing_schedule = lambda _: annealing_schedule
+        elif callable(annealing_schedule):
+            self.annealing_schedule = annealing_schedule
+        
         rng = np.random.default_rng(random_state)
-        seed = rng.integers(0, 2**32 - 1)
+        seed = rng.integers(0, int(2**32 - 1))
         _bindings.libocn.rng_seed(seed)
 
+        # instantiate the StreamGraph_C and assign an initial energy.
+        self.__p_c_graph = sg.from_digraph(dag)
+        self.__p_c_graph.contents.energy = self.compute_node_energy()
 
-    def __len__(self) -> int:
-        return self.sg.size
+    @classmethod
+    def from_net_type(cls, net_type:str, dims:tuple, gamma=0.5, annealing_schedule=0.0, random_state=None):
+        """
+        Initialize from a predefined network type and dimensions.
+        
+        Parameters:
+            net_type (str): The type of network to create. Must be one of TODO:ALLOWED TYPES.
+                Descriptions of allowed types:
+                    .....
+            dims (tuple): A tuple of two positive even integers specifying the dimensions of the network (rows, columns).
+            gamma (float)
+            annealing_schedule (float, callable)
+            random_state (int, np.random.Generator, or None)
+        """
+        if not isinstance(net_type, str) or net_type not in _allowed_net_types:
+            raise ValueError(f"net_type must be one of {_allowed_net_types}, got {net_type}")
+        if not isinstance(dims, tuple): raise TypeError(f"dims must be a tuple of two positive even integers, got {type(dims)}")
+        if not (
+            len(dims) == 2 
+            and all(isinstance(d, int) and d > 0 and d % 2 == 0 for d in dims)
+        ):
+            raise ValueError(f"dims must be a tuple of two positive even integers, got {dims}")
+        dag = sg.net_type_to_dag(net_type, dims)
+        return cls(dag, gamma, annealing_schedule, random_state)
+
+    @classmethod
+    def from_digraph(cls, dag:nx.DiGraph, gamma=0.5, annealing_schedule=0.0, random_state=None):
+        """
+        Initialize from an existing NetworkX DiGraph.
+        Parameters:
+            dag (nx.DiGraph): An existing directed acyclic graph (DAG) representing the stream network. Be a valid DAG for a StreamGraph (see StreamGraph for details). Additionally, must have even dimensions and at least 4 vertices.
+            gamma (float)
+            annealing_schedule (float, callable)
+            random_state (int, np.random.Generator, or None)
+
+        Notes:
+        dag must satisfy the following properties:
+            * Is a directed acyclic graph.
+            * Each node has at least one attribute, `pos`, which is a non-negative (row:int, col:int) tuple giving the location of the node in a grid.
+            * Must be a spanning tree over a dense grid of size (m x n). ie. each cell in the grid has exactly one node, each node has `out_degree=1` except the root node, which has `out_degree=0`.
+            * Each node can only connect to one of its 8 neighboring cells (cardinal or diagonal adjacency). ie. edges cannot "skip" over rows or columns.
+            * Edges cannot cross each other in the row-column plane.
+            * The grid dimensions (m, n) must both be even integers.
+        """
+        return cls(dag, gamma, annealing_schedule, random_state)
+
     def __repr__(self):
-        return repr(self.sg._p_c_graph)
+        #TODO: too verbose?
+        return f"<PyOCN.OCN object at 0x{id(self):x} with StreamGraph_C at 0x{ctypes.addressof(self.__p_c_graph.contents):x} and Vertex_C array at 0x{ctypes.addressof(self.__p_c_graph.contents.vertices):x}>"
     def __str__(self):
-        return f"StreamGraph(dims={self.sg.dims}, root={self.sg.root}, energy={self.energy}, vertices=<{self.sg.dims[0] * self.sg.dims[1]} vertices>)"
+        return f"OCN(gamma={self.gamma}, energy={self.energy}, dims={self.dims}, root={self.root}, dag={self.dag})"
     def __del__(self):
         try:
-            del self.sg
+            _bindings.libocn.sg_destroy_safe(self.__p_c_graph)
+            self.__p_c_graph = None
         except AttributeError:
             pass
-
+    def __sizeof__(self):
+        return (
+            object.__sizeof__(self) +
+            self.gamma.__sizeof__() +
+            self.annealing_schedule.__sizeof__() +
+            ctypes.sizeof(_bindings.StreamGraph_C) + ctypes.sizeof(_bindings.Vertex_C)*(self.dims[0]*self.dims[1])
+        )
+    
     def compute_energy(self) -> float:
         """
-        Computes the energy of the current OCN configuration.
+        Computes the energy of the current StreamGraph_C configuration.
         Returns:
             float: The computed energy.
         """
-        drained_areas = nx.get_node_attributes(self.sg.dag, 'drained_area').values()
+        drained_areas = nx.get_node_attributes(self.dag, 'drained_area').values()
         return np.sum(area**self.gamma for area in drained_areas)
-
-    def compute_energy_for_all_vertices(self) -> np.ndarray:
-        """
-        Computes the energy of each vertex in the OCN.
-        """
-        dag = self.sg.dag
-        for node in nx.topological_sort(dag):
-            dag.nodes[node]['energy'] = dag.nodes[node]['drained_area']**self.gamma + sum(dag.nodes[p]['energy'] for p in dag.predecessors(node))
-        return dag
-
+    
     @property
     def energy(self) -> float:
         """
-        Computes the energy of the current OCN configuration.
-        Returns:
-            float: The computed energy.
+        The energy of the current OCN. Read-only.
         """
-        return self.sg._p_c_graph.contents.energy
-        # return self.compute_energy()
+        return self.__p_c_graph.contents.energy
     
+    @property
+    def dims(self) -> tuple[int, int]:
+        """The dimensions of the StreamGraph as (rows, columns). Read-only."""
+        return (
+            int(self.__p_c_graph.contents.dims.row),
+            int(self.__p_c_graph.contents.dims.col)
+        )
+    @property
+    def root(self) -> tuple[int, int]:
+        """The (row, column) position of the root node in the StreamGraph grid. Read-only."""
+        return (
+            int(self.__p_c_graph.contents.root.row),
+            int(self.__p_c_graph.contents.root.col)
+        )
+
+    def to_digraph(self) -> nx.DiGraph:
+        """
+        Construct and return a NetworkX DiGraph representation of the current StreamGraph.
+
+        The returned DiGraph will have the following node attributes:
+            - 'pos': (row, column) position of the node in the grid.
+            - 'drained_area': The drained area of the node.
+            - 'energy': The energy of each node.
+        """
+        dag = sg.to_digraph(self.__p_c_graph)
+
+        node_energies = dict()
+        for node in nx.topological_sort(dag):
+            da = dag.nodes[node]['drained_area']
+            pred_energy = (dag.nodes[p]['energy'] for p in dag.predecessors(node))
+            node_energies[node] = da**self.gamma + sum(pred_energy)
+        nx.set_node_attributes(dag, node_energies, 'energy')
+
+        return dag
     
     def single_erosion_event(self, temperature:float):
         """
+        #TODO: implement a max_tries
         Performs a single erosion event on the OCN.
         Parameters:
             temperature (float): The temperature parameter for the erosion event. Ranges from 0 (greedy) to 1 (always accept)
         """
+        # StreamGraph *G, uint32_t *total_tries, double gamma, double temperature
         check_status(_bindings.libocn.ocn_single_erosion_event(
             self.sg._p_c_graph, 
             byref(ctypes.c_uint32(0)), 

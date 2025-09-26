@@ -43,7 +43,7 @@ G.add_edge(12, 13)
 G.add_edge(13, 14)
 G.add_edge(14, 15)
 
-ocn = PyOCN.OCN(init_structure=G, gamma=1, random_state=8472)
+ocn = PyOCN.OCN.from_digraph(G, )
 
 PyOCN.plot_streamgraph(ocn)
 plt.show()

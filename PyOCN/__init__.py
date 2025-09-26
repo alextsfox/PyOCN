@@ -1,8 +1,4 @@
-from .streamgraph import *
-from .ocn import *
-from .utils import *
-from . import streamgraph
-from . import ocn
-from . import utils
+from .ocn import OCN
+from .utils import plot_streamgraph, plot_positional_digraph
 
-__all__ = streamgraph.__all__ + ocn.__all__ + utils.__all__
+__all__ = ["OCN", "streamgraph", "plot_streamgraph", "plot_positional_digraph"]
