@@ -44,13 +44,13 @@ Status ocn_update_energy(StreamGraph *G, drainedarea_t da_inc, linidx_t a, doubl
     return SUCCESS;
 }
 
-Status ocn_single_erosion_event(StreamGraph *G, uint32_t *total_tries, double gamma, double temperature){
+Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature){
     Status code;
 
     Vertex vert;//, vert_down_old, vert_down_new;  unused?
     clockhand_t down_old, down_new;
     linidx_t a, a_down_old, a_down_new;
-    
+    drainedarea_t da_inc;
     CartPair dims = G->dims;
 
     double energy_old, energy_new;
@@ -58,22 +58,18 @@ Status ocn_single_erosion_event(StreamGraph *G, uint32_t *total_tries, double ga
     bool accept_bad_value = ((double)rand() / (double)RAND_MAX) > (1 - temperature);  // Metro-Hastings criterion. High temperature = more likely to accept bad values
     
     a = rand() % (dims.row * dims.col);  // pick a random vertex
+    down_new = rand() % 8;  // pick a random new downstream direction
 
-    // TODO: fix magic number. Consider not trying multiple vertices? Just try one vertex per call?
-    // It's okay if we fail to find a swap.
-    for ((*total_tries) = 0; (*total_tries) < 10; (*total_tries) += 8){
-        a = (a + 1) % (dims.row * dims.col);  // try each vertex in turn, wrapping around to 0 after reaching the end
-        down_new = rand() % 8;  // pick a random new downstream direction
-
-
+    
+    for (linidx_t nverts_tried = 0; nverts_tried < (dims.row * dims.col); nverts_tried++){  // try a new vertex each time, up to the number of vertices in the graph
+        a = (a + 1) % (dims.row * dims.col);
         vert = sg_get_lin(G, a);  // unsafe is ok here because a is guaranteed to be in bounds
-
+    
         down_old = vert.downstream;
         a_down_old = vert.adown;
-        drainedarea_t da_inc = vert.drained_area;
+        da_inc = vert.drained_area;
         
-        for (uint8_t ntries = 0; ntries < 8; ntries++){  // try a new direction each time, up to 8 times before giving up and picking a new vertex
-
+        for (uint8_t ntries = 0; ntries < 8; ntries++){  // try a new direction each time, up to 8 times. Count these as separate tries.
             down_new  = (down_new + 1) % 8;
 
             code = sg_change_vertex_outflow(G, a, down_new);
@@ -97,34 +93,32 @@ Status ocn_single_erosion_event(StreamGraph *G, uint32_t *total_tries, double ga
                 continue;
             }
 
-            break;  // if we reached here, the swap resulted in a well-formed graph, so we can move on the acceptance step
+            if (code == SUCCESS) goto mh_eval;  // if we reached here, the swap resulted in a well-formed graph, so we can move on the acceptance step
         }
-
-        if (code != SUCCESS) continue;  // if we exhausted all 8 directions without a successful swap, try again. do not go to acceptance step
-
-        // update drained area and energy along both paths
-        ocn_update_energy(G, -da_inc, a_down_old, gamma);  // decrement drained area along old path
-        ocn_update_energy(G, da_inc, a_down_new, gamma);  // increment drained area along new path
-        energy_new = G->energy;
-
-        if (energy_new < energy_old || accept_bad_value) return SUCCESS;
-
-        // reject swap: undo everything and try again
-        ocn_update_energy(G, da_inc, a_down_old, gamma);  // undo the decrement
-        ocn_update_energy(G, -da_inc, a_down_new, gamma);  // undo the increment
-        sg_change_vertex_outflow(G, a, down_old);  // undo the outflow change
     }
+    return MALFORMED_GRAPH_WARNING; // we tried every vertex and every direction and couldn't find a valid swap.
+
+    // update drained area and energy along both paths
+    mh_eval:
+    ocn_update_energy(G, -da_inc, a_down_old, gamma);  // decrement drained area along old path
+    ocn_update_energy(G, da_inc, a_down_new, gamma);  // increment drained area along new path
+    energy_new = G->energy;
+
+    if (energy_new < energy_old || accept_bad_value) return SUCCESS;
+
+    // reject swap: undo everything and try again
+    ocn_update_energy(G, da_inc, a_down_old, gamma);  // undo the decrement
+    ocn_update_energy(G, -da_inc, a_down_new, gamma);  // undo the increment
+    sg_change_vertex_outflow(G, a, down_old);  // undo the outflow change
+    
     return EROSION_FAILURE;  // if we reach here, we failed to find a valid swap in many, many tries
 }
 
 Status ocn_outer_ocn_loop(StreamGraph *G, uint32_t niterations, double gamma, double *annealing_schedule){
     Status code;
-    uint32_t i = 0;
-    uint32_t total_tries = 0;
-    while (i < niterations){
-        code = ocn_single_erosion_event(G, &total_tries, gamma, annealing_schedule[i]);
-        if ((code != SUCCESS) && (code != EROSION_FAILURE)) return code;  // malformed graph?
-        i += total_tries;
+    for (uint32_t i = 0; i < niterations; i++){
+        code = ocn_single_erosion_event(G, gamma, annealing_schedule[i]);
+        if ((code != SUCCESS) && (code != EROSION_FAILURE)) return code;
     }
     return SUCCESS;
 }

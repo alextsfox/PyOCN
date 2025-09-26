@@ -27,7 +27,7 @@ Status ocn_update_energy(StreamGraph *G, drainedarea_t da_inc, linidx_t a, doubl
  * @param temperature The temperature parameter for the Metropolis-Hastings acceptance criterion.
  * @return Status code indicating success or failure.
  */
-Status ocn_single_erosion_event(StreamGraph *G, uint32_t *total_tries, double gamma, double temperature);
+Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature);
 
 /**
  * @brief Perform multiple erosion events on the streamgraph.

@@ -284,8 +284,7 @@ class OCN():
         """
         # StreamGraph *G, uint32_t *total_tries, double gamma, double temperature
         check_status(_bindings.libocn.ocn_single_erosion_event(
-            self.__p_c_graph, 
-            byref(ctypes.c_uint32(0)), 
+            self.__p_c_graph,
             self.gamma, 
             temperature
         ))

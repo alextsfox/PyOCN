@@ -36,7 +36,7 @@ ocn = PyOCN.OCN.from_net_type(
 )
 
 
-for _ in trange(1_000_000):
+for _ in trange(100_000):
     ocn.single_erosion_event(0.05)
 
 # dag = ocn.to_digraph()
