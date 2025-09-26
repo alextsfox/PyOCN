@@ -45,21 +45,6 @@ class NullPointerError(LibOCNError):
 class SwapWarning(RuntimeWarning):
     pass
 
-class ErosionFailureWarning(RuntimeWarning):
-    default_message = (
-        "\nErosion event failed: no accepted rerouting found. "
-        "This can happen if the acceptance probability (temperature) is too low, "
-        "or if the streamgraph is malformed in an undetected way. "
-    )
-
-    def __init__(self, custom_message=None):
-        self.custom_message = custom_message
-
-    def __str__(self):
-        if self.custom_message:
-            return f"{self.default_message}\nDetails: {self.custom_message}"
-        return self.default_message
-
 class MalformedGraphWarning(RuntimeWarning):
     default_message = (
         "\nYour streamgraph is invalid. "
@@ -85,9 +70,10 @@ STATUS_EXCEPTION_MAP = {
 STATUS_WARNING_MAP = {
     SWAP_WARNING: SwapWarning,
     MALFORMED_GRAPH_WARNING: MalformedGraphWarning,
-    EROSION_FAILURE: ErosionFailureWarning,
 }
-
+STATUS_OKAY_MAP = {
+    EROSION_FAILURE: None, 
+}
 def check_status(status):
     """
     Checks the status code returned by libocn functions.
@@ -99,6 +85,8 @@ def check_status(status):
         raise STATUS_EXCEPTION_MAP[status](f"libocn error: {STATUS_CODES.get(status, status)} ({status})")
     elif status in STATUS_WARNING_MAP:
         warnings.warn(f"libocn warning: {STATUS_CODES.get(status, status)} ({status})", STATUS_WARNING_MAP[status])
+    elif status in STATUS_OKAY_MAP:
+        return
     else:
         raise LibOCNError(f"Unknown libocn status code: {status}")
 
