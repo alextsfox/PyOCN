@@ -86,29 +86,29 @@ Status ocn_single_erosion_event(StreamGraph *G, uint32_t *total_tries, double ga
 
             // TODO: do we actually need to check for cycles from a_down_old?
             // confirm that the new graph is well-formed (no cycles, still reaches root)
-            // for (linidx_t i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
-            // code = sg_flow_downstream_safe(G, a_down_old, 1);
-            // if (code != SUCCESS){
-            //     sg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
-            //     continue;
-            // }
-            // for (linidx_t i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
-            // code = sg_flow_downstream_safe(G, a, 1);  // use ncalls = 2. This way, if the two paths intersect, it won't trigger a cycle warning.
-            // if (code != SUCCESS){
-            //     sg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
-            //     continue;
-            // }
-
-            // more comprehensive cycle check: check *all* vertices
-            for (linidx_t i = 0; i < (dims.row * dims.col); i++){
-                for (linidx_t j = 0; j < (dims.row * dims.col); j++) G->vertices[j].visited = 0;
-                code = sg_flow_downstream_safe(G, i, 1);
-                if (code != SUCCESS) break;  // found a cycle, break out to try a new direction
-            }
+            for (linidx_t i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
+            code = sg_flow_downstream_safe(G, a_down_old, 1);
             if (code != SUCCESS){
                 sg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
             }
+            for (linidx_t i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
+            code = sg_flow_downstream_safe(G, a, 1);  // use ncalls = 2. This way, if the two paths intersect, it won't trigger a cycle warning.
+            if (code != SUCCESS){
+                sg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
+                continue;
+            }
+
+            // // more comprehensive cycle check: check *all* vertices
+            // for (linidx_t i = 0; i < (dims.row * dims.col); i++){
+            //     for (linidx_t j = 0; j < (dims.row * dims.col); j++) G->vertices[j].visited = 0;
+            //     code = sg_flow_downstream_safe(G, i, 1);
+            //     if (code != SUCCESS) break;  // found a cycle, break out to try a new direction
+            // }
+            // if (code != SUCCESS){
+            //     sg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
+            //     continue;
+            // }
 
             break;  // if we reached here, the swap resulted in a well-formed graph, so we can move on the acceptance step
         }

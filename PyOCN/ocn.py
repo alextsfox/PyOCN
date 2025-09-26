@@ -110,6 +110,8 @@ def net_type_to_dag(net_type:Literal["I", "H", "V", "T"], dims:tuple) -> nx.DiGr
         case "T":
             raise NotImplementedError("T net type not yet implemented.")
         
+    return G
+        
 
 class OCN():
     def __init__(self, dag:nx.DiGraph, gamma:float=0.5, annealing_schedule:float|Callable=None, random_state=None):
@@ -179,7 +181,7 @@ class OCN():
             and all(isinstance(d, int) and d > 0 and d % 2 == 0 for d in dims)
         ):
             raise ValueError(f"dims must be a tuple of two positive even integers, got {dims}")
-        dag = sgconv.net_type_to_dag(net_type, dims)
+        dag = net_type_to_dag(net_type, dims)
         return cls(dag, gamma, annealing_schedule, random_state)
 
     @classmethod
