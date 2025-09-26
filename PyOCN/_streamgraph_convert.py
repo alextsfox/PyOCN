@@ -11,15 +11,12 @@ This file is part of the PyOCN project.
 """
 
 from ctypes import byref, POINTER
-import itertools
-import ctypes
+from itertools import product
 
-import numpy as np
+from numpy import integer as np_integer
 import networkx as nx
 
-
 from ._statushandler import check_status
-
 from . import _libocn_bindings as _bindings
 
 # class StreamGraph:
@@ -153,7 +150,7 @@ def to_digraph(c_graph:_bindings.StreamGraph_C) -> nx.DiGraph:
         """Convert the StreamGraph_C to a NetworkX directed graph."""
         dag = nx.DiGraph()
         vert_c = _bindings.Vertex_C()
-        for r, c in itertools.product(range(c_graph.dims.row), range(c_graph.dims.col)):
+        for r, c in product(range(c_graph.dims.row), range(c_graph.dims.col)):
             a = _bindings.libocn.sg_cart_to_lin(
                 _bindings.CartPair_C(row=r, col=c), 
                 c_graph.dims
@@ -199,7 +196,7 @@ def from_digraph(G: nx.DiGraph) -> POINTER:
     if any(
         not isinstance(p, (tuple, list))  # Check if position is a tuple or list
         or len(p) != 2  # Check if it has exactly two elements
-        or not all(isinstance(x, (int, np.integer)) for x in p)  # Check if both elements are integers
+        or not all(isinstance(x, (int, np_integer)) for x in p)  # Check if both elements are integers
         or any(x < 0 for x in p)  # Check if both elements are non-negative
         for p in pos
     ):
@@ -209,7 +206,7 @@ def from_digraph(G: nx.DiGraph) -> POINTER:
     # TODO: modify for the possibility of multiple input graphs
     # spans a dense grid
     rows, cols = max(p[0] for p in pos) + 1, max(p[1] for p in pos) + 1
-    for r, c in itertools.product(range(rows), range(cols)):
+    for r, c in product(range(rows), range(cols)):
         if (r, c) not in pos:
             raise ValueError(f"Graph does not cover a dense {rows}x{cols} grid. Missing position ({r}, {c}).")
     if len(G.nodes) != rows * cols:
@@ -335,9 +332,6 @@ def from_digraph(G: nx.DiGraph) -> POINTER:
     # do not set energy
     return p_c_graph
 
-def net_type_to_dag(net_type:str, dims:tuple) -> nx.DiGraph:
-    raise NotImplementedError("net_type_to_dag is not yet implemented.")
-
 def validate_digraph(dag:nx.DiGraph) -> bool|str:
     """
     Validate the integrity of a StreamGraph.
@@ -356,7 +350,7 @@ def validate_digraph(dag:nx.DiGraph) -> bool|str:
         return str(e)
     return "Graph is valid."
 
-def _validate_streamgraph(c_graph:_bindings.StreamGraph_C) -> bool|str:
+def validate_streamgraph(c_graph:_bindings.StreamGraph_C) -> bool|str:
     """
     Validate the integrity of a StreamGraph_C structure.
 

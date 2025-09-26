@@ -20,9 +20,12 @@ from tqdm import tqdm
 
 from ._statushandler import check_status
 from . import _libocn_bindings as _bindings
-from . import streamgraph as sg
+from . import _streamgraph_convert as sgconv
 
 _allowed_net_types = {"I", "H", "V", "T"}
+
+def net_type_to_dag(net_type:str, dims:tuple) -> nx.DiGraph:
+    raise NotImplementedError("net_type_to_dag is not yet implemented.")
 
 class OCN():
     def __init__(self, dag:nx.DiGraph, gamma:float=0.5, annealing_schedule:float|Callable=None, random_state=None):
@@ -67,7 +70,7 @@ class OCN():
         _bindings.libocn.rng_seed(seed)
 
         # instantiate the StreamGraph_C and assign an initial energy.
-        self.__p_c_graph = sg.from_digraph(dag)
+        self.__p_c_graph = sgconv.from_digraph(dag)
         self.__p_c_graph.contents.energy = self.compute_energy()
 
     @classmethod
@@ -92,7 +95,7 @@ class OCN():
             and all(isinstance(d, int) and d > 0 and d % 2 == 0 for d in dims)
         ):
             raise ValueError(f"dims must be a tuple of two positive even integers, got {dims}")
-        dag = sg.net_type_to_dag(net_type, dims)
+        dag = sgconv.net_type_to_dag(net_type, dims)
         return cls(dag, gamma, annealing_schedule, random_state)
 
     @classmethod
@@ -175,7 +178,7 @@ class OCN():
             - 'drained_area': The drained area of the node.
             - 'energy': The energy of each node.
         """
-        dag = sg.to_digraph(self.__p_c_graph.contents)
+        dag = sgconv.to_digraph(self.__p_c_graph.contents)
 
         node_energies = dict()
         for node in nx.topological_sort(dag):
@@ -195,7 +198,7 @@ class OCN():
         """
         # StreamGraph *G, uint32_t *total_tries, double gamma, double temperature
         check_status(_bindings.libocn.ocn_single_erosion_event(
-            self.sg._p_c_graph, 
+            self.__p_c_graph, 
             byref(ctypes.c_uint32(0)), 
             self.gamma, 
             temperature
@@ -219,7 +222,7 @@ class OCN():
                 temperatures = [self.annealing_schedule(t) for t in range(completed_iterations, completed_iterations + iterations_this_loop)]
                 temp_array = (ctypes.c_double * iterations_this_loop)(*temperatures)  # ctypes syntax for creating a C-compatible array from an iterable.
                 check_status(_bindings.libocn.ocn_outer_ocn_loop(
-                    self.sg._p_c_graph, 
+                    self.__p_c_graph, 
                     iterations_this_loop, 
                     self.gamma, 
                     temp_array

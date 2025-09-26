@@ -1,42 +1,64 @@
+from typing import Any
+
 import matplotlib.pyplot as plt
 import networkx as nx
 from matplotlib.patches import ArrowStyle
+import warnings
+
 
 from .ocn import OCN
 
-def plot_ocn_as_dag(ocn:OCN, ax=None):
-    """Plot the OCN as a directed acyclic graph (DAG) using networkx."""
-    dag = ocn.to_digraph()
-    return plot_positional_digraph(dag, ax=ax)
-
-def plot_positional_digraph(dag:nx.DiGraph, ax=None):
-    """Plot a directed acyclic graph (DAG) with nodes positioned according to their 'pos' attribute and sized by drained area."""
+def _pos_to_xy(dag:nx.DiGraph) -> dict[Any, tuple[float, float]]:
+    """Convert 'pos' attributes from (row, col) to (x, y) for plotting."""
     pos = nx.get_node_attributes(dag, 'pos')
-
-    # Transpose from (row, col) to (x, y) for plotting
     nrows = max(r for r, _ in pos.values()) + 1
     for node, (r, c) in pos.items():
         pos[node] = (c, nrows - r - 1)  
+    return pos
 
-    drained_areas = dict()
-    for node in nx.topological_sort(dag):
-        preds = list(dag.predecessors(node))
-        drained_areas[node] = 1 + sum(drained_areas[p] for p in preds)
-    max_area = max(drained_areas.values())
-    drained_areas = {k: v/max_area for k, v in drained_areas.items()}
+def plot_ocn_as_dag(ocn:OCN, attribute=None, ax=None, norm=None, **kwargs):
+    """Plot the OCN as a directed acyclic graph (DAG) using networkx.
+    
+    Parameters
+    ----------
+    ocn: OCN
+        The OCN instance to plot.
+    attribute: str, optional
+        Node attribute to coloring nodes by (e.g., 'drained_area' or 'energy').
+    ax: matplotlib axes, optional
+        Axes to plot on. If None, a new figure and axes are created.
+    norm: matplotlib.colors.Normalize, optional
+        Normalization for node colors if attribute is specified.
+    **kwargs: additional keyword arguments (e.g. cmap, vmin, vmax).
+    """
+    
+    dag = ocn.to_digraph()
+    pos = _pos_to_xy(dag)
 
-    sizes = {k: 50 + da*1000 for k, da in drained_areas.items()}
-    lws = {k: 1 + da*5 for k, da in drained_areas.items()}
     if ax is None:
         _, ax = plt.subplots()
+
+    node_color = "C0"
+    if attribute is not None:
+        node_color = list(nx.get_node_attributes(dag, attribute).values())
+
+    if norm is not None:
+        if ("vmin" in kwargs or "vmax" in kwargs):
+            warnings.warn("norm is specified, ignoring vmin/vmax.")
+        kwargs["vmin"] = 0
+        kwargs["vmax"] = 1
+        node_color = norm(node_color)
+
+    p = nx.draw_networkx(dag, node_color=node_color, pos=pos, ax=ax, **kwargs)
+    return p, ax
     
-    p = nx.draw_networkx(
-        dag, 
-        pos=pos, 
-        node_size=list(sizes.values()), 
-        width=list(lws.values()), 
-        with_labels=False, 
-        arrowstyle=ArrowStyle("-|>", head_length=1.5, head_width=0.5), 
-        ax=ax
-    )
+
+def plot_positional_digraph(dag:nx.DiGraph, ax=None, **kwargs):
+    """Plot a directed acyclic graph (DAG) with nodes positioned according to their 'pos' attribute and sized by drained area."""
+    pos = _pos_to_xy(dag)
+
+    if ax is None:
+        _, ax = plt.subplots()
+
+    p = nx.draw_networkx(dag, pos=pos, ax=ax, **kwargs)
     return p, ax
