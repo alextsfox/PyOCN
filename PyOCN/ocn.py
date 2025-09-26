@@ -9,6 +9,8 @@ Copyright: (c) 2025 Alexander S Fox. All rights reserved.
 This file is part of the PyOCN project.
 """
 
+from itertools import product
+
 from ctypes import byref
 import ctypes
 from numbers import Number
@@ -24,8 +26,90 @@ from . import _streamgraph_convert as sgconv
 
 _allowed_net_types = {"I", "H", "V", "T"}
 
-def net_type_to_dag(net_type:str, dims:tuple) -> nx.DiGraph:
-    raise NotImplementedError("net_type_to_dag is not yet implemented.")
+#TODO: add ability to move root?
+def net_type_to_dag(net_type:Literal["I", "H", "V", "T"], dims:tuple) -> nx.DiGraph:
+    """Create a NetworkX DiGraph representing a predefined network type and dimensions.
+    Parameters:
+        net_type (str): The type of network to create. Must be one of "I", "H", "V", "T".
+            Descriptions of allowed types:
+                "I": 
+
+                    O--O--O--O--O 
+                          |
+                    O--O--O--O--O
+                          |
+                    O--O--O--O--O
+                          |
+                    O--O--X--O--O
+
+                "V": 
+                    O  O  O  O  O 
+                     \  \ | /  /
+                    O  O  O  O  O
+                     \  \ | /  /
+                    O  O  O  O  O
+                     \  \ | /  /
+                    O--O--X--O--O
+
+                "H": 
+                    O  O  O  O 
+                    |  |  | /
+                    O  O  O--O
+                    |  | /   
+                    O  O--O--O
+                    | /     
+                    X--O--O--O
+
+
+
+                "T": Channels flowing towards the center from three corners.
+        dims (tuple): A tuple of two positive even integers specifying the dimensions of the network (rows, columns).
+    """
+    rows, cols = dims
+    G = nx.DiGraph()
+    match net_type:
+        case "I":
+            jroot = cols // 2
+            for i, j in product(range(rows), range(cols)):
+                n = i*cols + j
+                G.add_node(n, pos=(i, j))
+                if j < jroot:
+                    G.add_edge(n, n+1)
+                elif j > jroot:
+                    G.add_edge(n, n-1)
+                elif i > 0:
+                    G.add_edge(n, n - cols)
+
+        case "V":
+            jroot = cols // 2
+            for i, j in product(range(rows), range(cols)):
+                n = i*cols + j
+                G.add_node(n, pos=(i, j))
+                if i > 0:
+                    if j < jroot:
+                        G.add_edge(n, n - cols + 1)
+                    elif j > jroot:
+                        G.add_edge(n, n - cols - 1)
+                    else:
+                        G.add_edge(n, n - cols)
+                else:
+                    if j < jroot:
+                        G.add_edge(n, n + 1)
+                    elif j > jroot:
+                        G.add_edge(n, n - 1)
+        case "H": # hip roof is like V, but flowing towards a corner.
+            for i, j in product(range(rows), range(cols)):
+                n = i*cols + j
+                G.add_node(n, pos=(i, j))
+                if i == j and i > 0:  # main diagonal
+                    G.add_edge(n, n - cols - 1)
+                elif i > j:
+                    G.add_edge(n, n - cols)
+                elif j > i:
+                    G.add_edge(n, n - 1)
+        case "T":
+            raise NotImplementedError("T net type not yet implemented.")
+        
 
 class OCN():
     def __init__(self, dag:nx.DiGraph, gamma:float=0.5, annealing_schedule:float|Callable=None, random_state=None):

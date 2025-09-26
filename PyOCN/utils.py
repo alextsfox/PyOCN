@@ -1,5 +1,6 @@
 from typing import Any
 
+import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
 from matplotlib.patches import ArrowStyle
@@ -51,6 +52,29 @@ def plot_ocn_as_dag(ocn:OCN, attribute=None, ax=None, norm=None, **kwargs):
 
     p = nx.draw_networkx(dag, node_color=node_color, pos=pos, ax=ax, **kwargs)
     return p, ax
+
+def plot_ocn_energy_raster(ocn:OCN, ax=None, **kwargs):
+    """Plot a raster of the OCN, colored by cell energy.
+    
+    Parameters
+    ----------
+    ocn: OCN
+        The OCN instance to plot.
+    ax: matplotlib axes, optional
+        Axes to plot on. If None, a new figure and axes are created.
+    **kwargs: additional keyword arguments passed to pcolormesh.
+    """
+
+    dag = ocn.to_digraph()
+    energy = np.zeros(ocn.dims)
+    for node in dag.nodes:
+        r, c = dag.nodes[node]['pos']
+        energy[r, c] = dag.nodes[node]['energy']
+    if ax is None:
+        _, ax = plt.subplots()
+
+    ax.imshow(energy, **kwargs)
+    return ax
     
 
 def plot_positional_digraph(dag:nx.DiGraph, ax=None, **kwargs):
