@@ -4,7 +4,7 @@ from .utils import net_type_to_dag
 
 __all__ = [
     "OCN", 
-    "streamgraph", 
+    "flowgrid", 
     "plot_ocn_as_dag", 
     "plot_positional_digraph", 
     "plot_ocn_energy_raster",

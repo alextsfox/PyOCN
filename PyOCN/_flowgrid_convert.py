@@ -1,8 +1,8 @@
 #TODO: allow users to provide multiple DAGs that partition a space.
 """
-streamgraph.py
+flowgrid.py
 
-High-level Python interface for StreamGraph structures from the libocn C library.
+High-level Python interface for FlowGrid structures from the libocn C library.
 
 Author: Alexander S Fox
 Copyright: (c) 2025 Alexander S Fox. All rights reserved.
@@ -21,18 +21,18 @@ import numpy as np
 from ._statushandler import check_status
 from . import _libocn_bindings as _bindings
 
-def to_digraph(c_graph:_bindings.StreamGraph_C) -> nx.DiGraph:
-        """Convert the StreamGraph_C to a NetworkX directed graph."""
+def to_digraph(c_graph:_bindings.FlowGrid_C) -> nx.DiGraph:
+        """Convert the FlowGrid_C to a NetworkX directed graph."""
 
         dag = nx.DiGraph()
         vert_c = _bindings.Vertex_C()
         pbar = product(range(c_graph.dims.row), range(c_graph.dims.col))
         for r, c in pbar:
-            a = _bindings.libocn.sg_cart_to_lin(
+            a = _bindings.libocn.fg_cart_to_lin(
                 _bindings.CartPair_C(row=r, col=c), 
                 c_graph.dims
             )
-            check_status(_bindings.libocn.sg_get_lin_safe(
+            check_status(_bindings.libocn.fg_get_lin_safe(
                 byref(vert_c), 
                 byref(c_graph),
                 a,
@@ -53,13 +53,13 @@ def to_digraph(c_graph:_bindings.StreamGraph_C) -> nx.DiGraph:
 
 def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
     """
-    Convert a NetworkX directed graph into a StreamGraph_C. Called by the OCN constructor.
+    Convert a NetworkX directed graph into a FlowGrid_C. Called by the OCN constructor.
     Returns:
-        p_c_graph: pointer to the created C StreamGraph structure.
+        p_c_graph: pointer to the created C FlowGrid structure.
     """
 
     if verbose:
-        print("Converting DiGraph to StreamGraph_C...")
+        print("Converting DiGraph to FlowGrid_C...")
         print("--------------------------------------")
 
     # TODO modify for the possibility of multiple input graphs
@@ -162,7 +162,7 @@ def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
         if len(succs):
             nsucc = succs[0]
             G.nodes[n]["downstream"] = direction_bit(G.nodes[n]["pos"], G.nodes[nsucc]["pos"])
-            G.nodes[n]["adown"] = _bindings.libocn.sg_cart_to_lin(
+            G.nodes[n]["adown"] = _bindings.libocn.fg_cart_to_lin(
                 _bindings.CartPair_C(row=G.nodes[nsucc]["pos"][0], col=G.nodes[nsucc]["pos"][1]),
                 _bindings.CartPair_C(row=rows, col=cols)
             )
@@ -202,13 +202,13 @@ def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
     if verbose:
         print("\tChecked for crossing edges.")
 
-    # By now, the graph is validated and has all necessary attributes to create the C StreamGraph structure.
-    p_c_graph = _bindings.libocn.sg_create_empty_safe(_bindings.CartPair_C(row=rows, col=cols))
+    # By now, the graph is validated and has all necessary attributes to create the C FlowGrid structure.
+    p_c_graph = _bindings.libocn.fg_create_empty_safe(_bindings.CartPair_C(row=rows, col=cols))
     if not p_c_graph:
-        raise MemoryError("Failed to allocate memory for StreamGraph_C.")
+        raise MemoryError("Failed to allocate memory for FlowGrid_C.")
     for n in G.nodes:
         r, c = G.nodes[n]["pos"]
-        a = _bindings.libocn.sg_cart_to_lin(
+        a = _bindings.libocn.fg_cart_to_lin(
             _bindings.CartPair_C(row=r, col=c),
             _bindings.CartPair_C(row=rows, col=cols)
         )
@@ -220,9 +220,9 @@ def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
             visited=G.nodes[n]["visited"],
         )
         try:
-            check_status(_bindings.libocn.sg_set_lin_safe(p_c_graph, v_c, a))
+            check_status(_bindings.libocn.fg_set_lin_safe(p_c_graph, v_c, a))
         except Exception as e:
-            _bindings.libocn.sg_destroy_safe(p_c_graph)
+            _bindings.libocn.fg_destroy_safe(p_c_graph)
             p_c_graph = None
             raise e
         
@@ -232,13 +232,13 @@ def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
     # do not set energy
 
     if verbose:
-        print("\tSuccessfully created StreamGraph_C from DiGraph.")
+        print("\tSuccessfully created FlowGrid_C from DiGraph.")
 
     return p_c_graph
 
 def validate_digraph(dag:nx.DiGraph, verbose:bool=False) -> bool|str:
     """
-    Validate the integrity of a StreamGraph.
+    Validate the integrity of a FlowGrid.
 
     Parameters:
         dag (nx.DiGraph): The directed acyclic graph to validate.
@@ -248,18 +248,18 @@ def validate_digraph(dag:nx.DiGraph, verbose:bool=False) -> bool|str:
     """
     try:
         p_c_graph = from_digraph(dag, verbose=verbose)
-        _bindings.libocn.sg_destroy_safe(p_c_graph)
+        _bindings.libocn.fg_destroy_safe(p_c_graph)
         p_c_graph = None
-    except Exception as e:  # _digraph_to_streamgraph_c will destroy p_c_graph on failure
+    except Exception as e:  # _digraph_to_flowgrid_c will destroy p_c_graph on failure
         return str(e)
     return "Graph is valid."
 
-def validate_streamgraph(c_graph:_bindings.StreamGraph_C, verbose:bool=False) -> bool|str:
+def validate_flowgrid(c_graph:_bindings.FlowGrid_C, verbose:bool=False) -> bool|str:
     """
-    Validate the integrity of a StreamGraph_C structure.
+    Validate the integrity of a FlowGrid_C structure.
 
     Parameters:
-        c_graph (StreamGraph_C): The StreamGraph_C structure to validate.
+        c_graph (FlowGrid_C): The FlowGrid_C structure to validate.
 
     Returns:
         either True if valid, or an error message string if invalid.
@@ -267,8 +267,8 @@ def validate_streamgraph(c_graph:_bindings.StreamGraph_C, verbose:bool=False) ->
     try:
         dag = to_digraph(c_graph, verbose=verbose)
         p_c_graph = from_digraph(dag, verbose=verbose)
-        _bindings.libocn.sg_destroy_safe(p_c_graph)
+        _bindings.libocn.fg_destroy_safe(p_c_graph)
         p_c_graph = None
-    except Exception as e:  # _digraph_to_streamgraph_c will destroy p_c_graph on failure
+    except Exception as e:  # _digraph_to_flowgrid_c will destroy p_c_graph on failure
         return str(e)
     return "Graph is valid."

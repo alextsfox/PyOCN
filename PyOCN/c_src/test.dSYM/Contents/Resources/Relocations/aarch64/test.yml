@@ -13,7 +13,7 @@ relocations:
   - { offset: 0x63E, size: 0x8, addend: 0x0, symName: _NULL_POINTER_ERROR, symObjAddr: 0x1, symBinAddr: 0x100008001, symSize: 0x0 }
   - { offset: 0x653, size: 0x8, addend: 0x0, symName: _SWAP_WARNING, symObjAddr: 0x2, symBinAddr: 0x100008002, symSize: 0x0 }
   - { offset: 0x668, size: 0x8, addend: 0x0, symName: _MALFORMED_GRAPH_WARNING, symObjAddr: 0x3, symBinAddr: 0x100008003, symSize: 0x0 }
-  - { offset: 0x697, size: 0x8, addend: 0x0, symName: _sg_cart_to_lin, symObjAddr: 0x0, symBinAddr: 0x1000016FC, symSize: 0x38 }
+  - { offset: 0x697, size: 0x8, addend: 0x0, symName: _fg_cart_to_lin, symObjAddr: 0x0, symBinAddr: 0x1000016FC, symSize: 0x38 }
   - { offset: 0x6B0, size: 0x8, addend: 0x0, symName: _IS_ROOT, symObjAddr: 0x2544, symBinAddr: 0x100008004, symSize: 0x0 }
   - { offset: 0x6E2, size: 0x8, addend: 0x0, symName: _row_offsets, symObjAddr: 0x2548, symBinAddr: 0x100003EA0, symSize: 0x0 }
   - { offset: 0x721, size: 0x8, addend: 0x0, symName: _col_offsets, symObjAddr: 0x2558, symBinAddr: 0x100003EB0, symSize: 0x0 }
@@ -40,22 +40,22 @@ relocations:
   - { offset: 0x955, size: 0x8, addend: 0x0, symName: _NO_ARROW_UTF8, symObjAddr: 0x25B4, symBinAddr: 0x100003F0C, symSize: 0x0 }
   - { offset: 0x96B, size: 0x8, addend: 0x0, symName: _NODE_UTF8, symObjAddr: 0x25B8, symBinAddr: 0x100003F10, symSize: 0x0 }
   - { offset: 0x981, size: 0x8, addend: 0x0, symName: _ROOT_NODE_UTF8, symObjAddr: 0x25BC, symBinAddr: 0x100003F14, symSize: 0x0 }
-  - { offset: 0x9A7, size: 0x8, addend: 0x0, symName: _sg_cart_to_lin, symObjAddr: 0x0, symBinAddr: 0x1000016FC, symSize: 0x38 }
-  - { offset: 0x9DD, size: 0x8, addend: 0x0, symName: _sg_lin_to_cart, symObjAddr: 0x38, symBinAddr: 0x100001734, symSize: 0x4C }
-  - { offset: 0xA21, size: 0x8, addend: 0x0, symName: _sg_clockhand_to_lin_safe, symObjAddr: 0x84, symBinAddr: 0x100001780, symSize: 0x144 }
-  - { offset: 0xAB9, size: 0x8, addend: 0x0, symName: _sg_get_cart_safe, symObjAddr: 0x1C8, symBinAddr: 0x1000018C4, symSize: 0x130 }
-  - { offset: 0xB0B, size: 0x8, addend: 0x0, symName: _sg_get_cart, symObjAddr: 0x2F8, symBinAddr: 0x1000019F4, symSize: 0xD0 }
-  - { offset: 0xB4F, size: 0x8, addend: 0x0, symName: _sg_set_cart_safe, symObjAddr: 0x3C8, symBinAddr: 0x100001AC4, symSize: 0x168 }
-  - { offset: 0xBA1, size: 0x8, addend: 0x0, symName: _sg_set_cart, symObjAddr: 0x530, symBinAddr: 0x100001C2C, symSize: 0xC0 }
-  - { offset: 0xBEF, size: 0x8, addend: 0x0, symName: _sg_get_lin_safe, symObjAddr: 0x5F0, symBinAddr: 0x100001CEC, symSize: 0xD4 }
-  - { offset: 0xC33, size: 0x8, addend: 0x0, symName: _sg_get_lin, symObjAddr: 0x6C4, symBinAddr: 0x100001DC0, symSize: 0xA4 }
-  - { offset: 0xC69, size: 0x8, addend: 0x0, symName: _sg_set_lin_safe, symObjAddr: 0x768, symBinAddr: 0x100001E64, symSize: 0x118 }
-  - { offset: 0xCAD, size: 0x8, addend: 0x0, symName: _sg_set_lin, symObjAddr: 0x880, symBinAddr: 0x100001F7C, symSize: 0x94 }
-  - { offset: 0xCED, size: 0x8, addend: 0x0, symName: _sg_create_empty_safe, symObjAddr: 0x914, symBinAddr: 0x100002010, symSize: 0x1F4 }
-  - { offset: 0xD3F, size: 0x8, addend: 0x0, symName: _sg_destroy_safe, symObjAddr: 0xB08, symBinAddr: 0x100002204, symSize: 0x70 }
-  - { offset: 0xD67, size: 0x8, addend: 0x0, symName: _sg_change_vertex_outflow, symObjAddr: 0xB78, symBinAddr: 0x100002274, symSize: 0x4AC }
-  - { offset: 0xE42, size: 0x8, addend: 0x0, symName: _sg_flow_downstream_safe, symObjAddr: 0x105C, symBinAddr: 0x100002758, symSize: 0x18C }
-  - { offset: 0xEA2, size: 0x8, addend: 0x0, symName: _sg_display_bad, symObjAddr: 0x11E8, symBinAddr: 0x1000028E4, symSize: 0x5FC }
-  - { offset: 0xFC1, size: 0x8, addend: 0x0, symName: _sg_make_test_graph, symObjAddr: 0x17E4, symBinAddr: 0x100002EE0, symSize: 0x3E0 }
-  - { offset: 0x10E1, size: 0x8, addend: 0x0, symName: _sg_display, symObjAddr: 0x1BC4, symBinAddr: 0x1000032C0, symSize: 0x980 }
+  - { offset: 0x9A7, size: 0x8, addend: 0x0, symName: _fg_cart_to_lin, symObjAddr: 0x0, symBinAddr: 0x1000016FC, symSize: 0x38 }
+  - { offset: 0x9DD, size: 0x8, addend: 0x0, symName: _fg_lin_to_cart, symObjAddr: 0x38, symBinAddr: 0x100001734, symSize: 0x4C }
+  - { offset: 0xA21, size: 0x8, addend: 0x0, symName: _fg_clockhand_to_lin_safe, symObjAddr: 0x84, symBinAddr: 0x100001780, symSize: 0x144 }
+  - { offset: 0xAB9, size: 0x8, addend: 0x0, symName: _fg_get_cart_safe, symObjAddr: 0x1C8, symBinAddr: 0x1000018C4, symSize: 0x130 }
+  - { offset: 0xB0B, size: 0x8, addend: 0x0, symName: _fg_get_cart, symObjAddr: 0x2F8, symBinAddr: 0x1000019F4, symSize: 0xD0 }
+  - { offset: 0xB4F, size: 0x8, addend: 0x0, symName: _fg_set_cart_safe, symObjAddr: 0x3C8, symBinAddr: 0x100001AC4, symSize: 0x168 }
+  - { offset: 0xBA1, size: 0x8, addend: 0x0, symName: _fg_set_cart, symObjAddr: 0x530, symBinAddr: 0x100001C2C, symSize: 0xC0 }
+  - { offset: 0xBEF, size: 0x8, addend: 0x0, symName: _fg_get_lin_safe, symObjAddr: 0x5F0, symBinAddr: 0x100001CEC, symSize: 0xD4 }
+  - { offset: 0xC33, size: 0x8, addend: 0x0, symName: _fg_get_lin, symObjAddr: 0x6C4, symBinAddr: 0x100001DC0, symSize: 0xA4 }
+  - { offset: 0xC69, size: 0x8, addend: 0x0, symName: _fg_set_lin_safe, symObjAddr: 0x768, symBinAddr: 0x100001E64, symSize: 0x118 }
+  - { offset: 0xCAD, size: 0x8, addend: 0x0, symName: _fg_set_lin, symObjAddr: 0x880, symBinAddr: 0x100001F7C, symSize: 0x94 }
+  - { offset: 0xCED, size: 0x8, addend: 0x0, symName: _fg_create_empty_safe, symObjAddr: 0x914, symBinAddr: 0x100002010, symSize: 0x1F4 }
+  - { offset: 0xD3F, size: 0x8, addend: 0x0, symName: _fg_destroy_safe, symObjAddr: 0xB08, symBinAddr: 0x100002204, symSize: 0x70 }
+  - { offset: 0xD67, size: 0x8, addend: 0x0, symName: _fg_change_vertex_outflow, symObjAddr: 0xB78, symBinAddr: 0x100002274, symSize: 0x4AC }
+  - { offset: 0xE42, size: 0x8, addend: 0x0, symName: _fg_flow_downstream_safe, symObjAddr: 0x105C, symBinAddr: 0x100002758, symSize: 0x18C }
+  - { offset: 0xEA2, size: 0x8, addend: 0x0, symName: _fg_display_bad, symObjAddr: 0x11E8, symBinAddr: 0x1000028E4, symSize: 0x5FC }
+  - { offset: 0xFC1, size: 0x8, addend: 0x0, symName: _fg_make_test_graph, symObjAddr: 0x17E4, symBinAddr: 0x100002EE0, symSize: 0x3E0 }
+  - { offset: 0x10E1, size: 0x8, addend: 0x0, symName: _fg_display, symObjAddr: 0x1BC4, symBinAddr: 0x1000032C0, symSize: 0x980 }
 ...

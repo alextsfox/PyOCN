@@ -47,7 +47,7 @@ class SwapWarning(RuntimeWarning):
 
 class MalformedGraphWarning(RuntimeWarning):
     default_message = (
-        "\nYour streamgraph is invalid. "
+        "\nYour flowgrid is invalid. "
         "This can be due to either cycles in the graph, "
         "the root node not having access to all nodes, "
         "incorrect dimensions (must have even rows and columns), "

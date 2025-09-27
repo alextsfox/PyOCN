@@ -11,24 +11,24 @@
 #include <locale.h>
 
 #include "status.h"
-#include "streamgraph.h"
+#include "flowgrid.h"
 #include "ocn.h"
 
-Status ocn_update_energy(StreamGraph *G, drainedarea_t da_inc, linidx_t a, double gamma){
+Status ocn_update_energy(FlowGrid *G, drainedarea_t da_inc, linidx_t a, double gamma){
     Vertex vert;
     drainedarea_t da;
-    vert = sg_get_lin(G, a);
+    vert = fg_get_lin(G, a);
     int sanity_counter = 0;
     while (vert.downstream != IS_ROOT){
         // update drained area of the vertex and energy of the graph.
         da = vert.drained_area;
         G->energy += pow((double)(da + da_inc), gamma) - pow((double)da, gamma);  // update energy
         vert.drained_area += da_inc;  // update drained area of vertex
-        sg_set_lin(G, vert, a);
+        fg_set_lin(G, vert, a);
 
         // get next vertex
         a = vert.adown;
-        vert = sg_get_lin(G, a);
+        vert = fg_get_lin(G, a);
 
         sanity_counter++;
         if (sanity_counter > (G->dims.row * G->dims.col)){
@@ -39,12 +39,12 @@ Status ocn_update_energy(StreamGraph *G, drainedarea_t da_inc, linidx_t a, doubl
     da = vert.drained_area;
     G->energy += pow((double)(da + da_inc), gamma) - pow((double)da, gamma);  // update energy
     vert.drained_area += da_inc;  // update drained area of vertex
-    sg_set_lin(G, vert, a);
+    fg_set_lin(G, vert, a);
 
     return SUCCESS;
 }
 
-Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature){
+Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     Status code;
 
     Vertex vert;//, vert_down_old, vert_down_new;  unused?
@@ -62,7 +62,7 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
     
     for (linidx_t nverts_tried = 0; nverts_tried < (dims.row * dims.col); nverts_tried++){  // try a new vertex each time, up to the number of vertices in the graph
         a = (a + 1) % (dims.row * dims.col);
-        vert = sg_get_lin(G, a);  // unsafe is ok here because a is guaranteed to be in bounds
+        vert = fg_get_lin(G, a);  // unsafe is ok here because a is guaranteed to be in bounds
     
         down_old = vert.downstream;
         a_down_old = vert.adown;
@@ -71,24 +71,24 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
         for (uint8_t ntries = 0; ntries < 8; ntries++){  // try a new direction each time, up to 8 times. Count these as separate tries.
             down_new  = (down_new + 1) % 8;
 
-            code = sg_change_vertex_outflow(G, a, down_new);
+            code = fg_change_vertex_outflow(G, a, down_new);
             if (code != SUCCESS) continue;
             
             // retrieve the downstream vertices
-            vert = sg_get_lin(G, a);
+            vert = fg_get_lin(G, a);
             a_down_new = vert.adown;
 
             // confirm that the new graph is well-formed (no cycles, still reaches root)
             for (linidx_t i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
-            code = sg_flow_downstream_safe(G, a_down_old, 1);
+            code = fg_flow_downstream_safe(G, a_down_old, 1);
             if (code != SUCCESS){
-                sg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
+                fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
             }
             // for (linidx_t i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
-            code = sg_flow_downstream_safe(G, a, 2);  // can use n_calls = 1 again because we reset visited flags
+            code = fg_flow_downstream_safe(G, a, 2);  // can use n_calls = 1 again because we reset visited flags
             if (code != SUCCESS){
-                sg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
+                fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
             }
 
@@ -112,12 +112,12 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
     // reject swap: undo everything and try again
     ocn_update_energy(G, da_inc, a_down_old, gamma);  // undo the decrement
     ocn_update_energy(G, -da_inc, a_down_new, gamma);  // undo the increment
-    sg_change_vertex_outflow(G, a, down_old);  // undo the outflow change
+    fg_change_vertex_outflow(G, a, down_old);  // undo the outflow change
     
     return EROSION_FAILURE;  // if we reach here, we failed to find a valid swap in many, many tries
 }
 
-Status ocn_outer_ocn_loop(StreamGraph *G, double *energy_history, uint32_t niterations, double gamma, double *annealing_schedule){
+Status ocn_outer_ocn_loop(FlowGrid *G, double *energy_history, uint32_t niterations, double gamma, double *annealing_schedule){
     Status code;
 
     if (energy_history == NULL) return NULL_POINTER_ERROR;

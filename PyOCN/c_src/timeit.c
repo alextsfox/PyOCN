@@ -3,7 +3,7 @@
 
 #include <time.h>
 
-#define TIMEIT(msg, reps, block) \
+#define TIMEIT(mfg. reps, block) \
     do { \
         double min_time = 1.0e30; \
         double max_time = -1.0e30; \
@@ -38,7 +38,7 @@
         } \
         printf( \
             "%s: %.2f/%.2f/%.2f%s\n", \
-            msg, \
+            mfg. \
             min_time * scale, \
             avg_time * scale, \
             max_time * scale, \

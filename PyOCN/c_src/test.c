@@ -7,18 +7,18 @@
 #include <locale.h>
 
 #include "status.h"
-#include "streamgraph.h"
+#include "flowgrid.h"
 #include "ocn.h"
 #include "rng.h"
 
 // Helper function to test for stream crossings
-bool test_for_crossing(StreamGraph* sg, linidx_t a) {
-    CartPair dims = sg->dims;
-    Vertex vert = sg->vertices[a];
+bool test_for_crossing(FlowGrid* fg. linidx_t a) {
+    CartPair dims = fg->dims;
+    Vertex vert = fg->vertices[a];
     clockhand_t down_new = vert.downstream;
 
     Vertex cross_check_vert;
-    CartPair check_row_col = sg_lin_to_cart(a, dims);
+    CartPair check_row_col = fg_lin_to_cart(a, dims);
     
     // Check appropriate vertex based on flow direction
     if (down_new == 1) {
@@ -33,7 +33,7 @@ bool test_for_crossing(StreamGraph* sg, linidx_t a) {
         return false; // Not a diagonal flow
     }
 
-    sg_get_cart_safe(&cross_check_vert, sg, check_row_col);
+    fg_get_cart_safe(&cross_check_vert, fg. check_row_col);
     
     // Check for crossing streams
     if (down_new == 1 && (cross_check_vert.edges & (1u << 3))) return true;  // NE flow: N vertex has SE edge
@@ -46,7 +46,7 @@ bool test_for_crossing(StreamGraph* sg, linidx_t a) {
 
 int main(void) {
     setlocale(LC_ALL, "");
-    printf("Running StreamGraph tests...\n\n");
+    printf("Running FlowGrid tests...\n\n");
     
     /********************************************
      * TEST 1: X-shaped Crossing Detection
@@ -54,12 +54,12 @@ int main(void) {
     printf("TEST 1: X-shaped Crossing Detection\n");
     
     CartPair dims = {4, 4};
-    StreamGraph *sg = sg_create_empty_safe(dims);
-    if (sg == NULL) {
-        printf("Failed to create StreamGraph.\n");
+    FlowGrid *fg = fg_create_empty_safe(dims);
+    if (fg == NULL) {
+        printf("Failed to create FlowGrid.\n");
         return 1;
     }
-    sg->root = (CartPair){0, 0};
+    fg->root = (CartPair){0, 0};
     
     // Initialize with vertices that form X-shaped crossings
     Vertex vertices[16] = {
@@ -81,14 +81,14 @@ int main(void) {
         {.drained_area = 16, .adown = 0, .edges = 65, .downstream = 255, .visited = 0}
     };
     
-    memcpy(sg->vertices, vertices, sizeof(vertices));
+    memcpy(fg->vertices, vertices, sizeof(vertices));
     
     printf("Graph with X-shaped crossing:\n");
-    sg_display(sg, false);
+    fg_display(fg. false);
     
     // Test crossing detection
-    bool has_crossing_5 = test_for_crossing(sg, 5);
-    bool has_crossing_6 = test_for_crossing(sg, 6);
+    bool has_crossing_5 = test_for_crossing(fg. 5);
+    bool has_crossing_6 = test_for_crossing(fg. 6);
     printf("Vertex 5 has crossing: %s\n", has_crossing_5 ? "YES" : "NO");
     printf("Vertex 6 has crossing: %s\n", has_crossing_6 ? "YES" : "NO");
     
@@ -121,7 +121,7 @@ int main(void) {
         {.drained_area = 16, .adown = 0, .edges = 65, .downstream = 255, .visited = 0}
     };
 
-    memcpy(sg->vertices, vertices_cycle, sizeof(vertices_cycle));
+    memcpy(fg->vertices, vertices_cycle, sizeof(vertices_cycle));
 
     printf("Graph with cycle 5 → 6 → 10 → 9 → 5:\n");
     
@@ -131,10 +131,10 @@ int main(void) {
     
     for (int i = 0; i < sizeof(cycle_vertices)/sizeof(linidx_t); i++) {
         for (linidx_t j = 0; j < (dims.row * dims.col); j++) {
-            sg->vertices[j].visited = 0;  // Reset visited flags
+            fg->vertices[j].visited = 0;  // Reset visited flags
         }
 
-        Status code = sg_flow_downstream_safe(sg, cycle_vertices[i], 1);
+        Status code = fg_flow_downstream_safe(fg. cycle_vertices[i], 1);
         printf("Checking for cycle starting at vertex %d: %s\n", 
                cycle_vertices[i], 
                (code == MALFORMED_GRAPH_WARNING) ? "CYCLE DETECTED" : "NO CYCLE");
@@ -148,7 +148,7 @@ int main(void) {
     printf("Cycle detection test passed!\n");
     
     // Clean up
-    sg_destroy_safe(sg);
+    fg_destroy_safe(fg);
     
     return 0;
 }

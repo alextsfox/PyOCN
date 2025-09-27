@@ -1,12 +1,14 @@
-from typing import Any
+from __future__ import annotations
+
+from typing import Any, TYPE_CHECKING
 
 import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
 import warnings
 
-
-from .ocn import OCN
+if TYPE_CHECKING:
+    from .ocn import OCN
 
 def _pos_to_xy(dag:nx.DiGraph) -> dict[Any, tuple[float, float]]:
     """Convert 'pos' attributes from (row, col) to (x, y) for plotting."""

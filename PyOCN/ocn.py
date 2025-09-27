@@ -22,7 +22,7 @@ from tqdm import tqdm
 from ._statushandler import check_status
 from .utils import create_cooling_schedule, net_type_to_dag
 from . import _libocn_bindings as _bindings
-from . import _streamgraph_convert as sgconv
+from . import _flowgrid_convert as fgconv
         
 class OCN():
     def __init__(self, dag:nx.DiGraph, gamma:float=0.5, random_state=None, verbosity:int=0):
@@ -53,9 +53,9 @@ class OCN():
         seed = rng.integers(0, int(2**32 - 1))
         _bindings.libocn.rng_seed(seed)
 
-        # instantiate the StreamGraph_C and assign an initial energy.
+        # instantiate the FlowGrid_C and assign an initial energy.
         self.verbosity = verbosity
-        self.__p_c_graph = sgconv.from_digraph(dag, verbose=(verbosity > 1))
+        self.__p_c_graph = fgconv.from_digraph(dag, verbose=(verbosity > 1))
         self.__p_c_graph.contents.energy = self.compute_energy()
 
     @classmethod
@@ -88,7 +88,7 @@ class OCN():
         """
         Initialize from an existing NetworkX DiGraph.
         Parameters:
-            dag (nx.DiGraph): An existing directed acyclic graph (DAG) representing the stream network. Be a valid DAG for a StreamGraph (see StreamGraph for details). Additionally, must have even dimensions and at least 4 vertices.
+            dag (nx.DiGraph): An existing directed acyclic graph (DAG) representing the stream network. Be a valid DAG for a FlowGrid (see FlowGrid for details). Additionally, must have even dimensions and at least 4 vertices.
             gamma (float)
             random_state (int, np.random.Generator, or None)
 
@@ -105,12 +105,12 @@ class OCN():
 
     def __repr__(self):
         #TODO: too verbose?
-        return f"<PyOCN.OCN object at 0x{id(self):x} with StreamGraph_C at 0x{ctypes.addressof(self.__p_c_graph.contents):x} and Vertex_C array at 0x{ctypes.addressof(self.__p_c_graph.contents.vertices):x}>"
+        return f"<PyOCN.OCN object at 0x{id(self):x} with FlowGrid_C at 0x{ctypes.addressof(self.__p_c_graph.contents):x} and Vertex_C array at 0x{ctypes.addressof(self.__p_c_graph.contents.vertices):x}>"
     def __str__(self):
         return f"OCN(gamma={self.gamma}, energy={self.energy}, dims={self.dims}, root={self.root})"
     def __del__(self):
         try:
-            _bindings.libocn.sg_destroy_safe(self.__p_c_graph)
+            _bindings.libocn.fg_destroy_safe(self.__p_c_graph)
             self.__p_c_graph = None
         except AttributeError:
             pass
@@ -118,12 +118,12 @@ class OCN():
         return (
             object.__sizeof__(self) +
             self.gamma.__sizeof__() +
-            ctypes.sizeof(_bindings.StreamGraph_C) + ctypes.sizeof(_bindings.Vertex_C)*(self.dims[0]*self.dims[1])
+            ctypes.sizeof(_bindings.FlowGrid_C) + ctypes.sizeof(_bindings.Vertex_C)*(self.dims[0]*self.dims[1])
         )
     
     def compute_energy(self) -> float:
         """
-        Computes the energy of the current StreamGraph_C configuration.
+        Computes the energy of the current FlowGrid_C configuration.
         Returns:
             float: The computed energy.
         """
@@ -139,14 +139,14 @@ class OCN():
     
     @property
     def dims(self) -> tuple[int, int]:
-        """The dimensions of the StreamGraph as (rows, columns). Read-only."""
+        """The dimensions of the FlowGrid as (rows, columns). Read-only."""
         return (
             int(self.__p_c_graph.contents.dims.row),
             int(self.__p_c_graph.contents.dims.col)
         )
     @property
     def root(self) -> tuple[int, int]:
-        """The (row, column) position of the root node in the StreamGraph grid. Read-only."""
+        """The (row, column) position of the root node in the FlowGrid grid. Read-only."""
         return (
             int(self.__p_c_graph.contents.root.row),
             int(self.__p_c_graph.contents.root.col)
@@ -154,14 +154,14 @@ class OCN():
 
     def to_digraph(self) -> nx.DiGraph:
         """
-        Construct and return a NetworkX DiGraph representation of the current StreamGraph.
+        Construct and return a NetworkX DiGraph representation of the current FlowGrid.
 
         The returned DiGraph will have the following node attributes:
             - 'pos': (row, column) position of the node in the grid.
             - 'drained_area': The drained area of the node.
             - 'energy': The energy of each node.
         """
-        dag = sgconv.to_digraph(self.__p_c_graph.contents)
+        dag = fgconv.to_digraph(self.__p_c_graph.contents)
 
         node_energies = dict()
         for node in nx.topological_sort(dag):
@@ -179,7 +179,7 @@ class OCN():
         Parameters:
             temperature (float): The temperature parameter for the erosion event. Ranges from 0 (greedy) to 1 (always accept)
         """
-        # StreamGraph *G, uint32_t *total_tries, double gamma, double temperature
+        # FlowGrid *G, uint32_t *total_tries, double gamma, double temperature
         check_status(_bindings.libocn.ocn_single_erosion_event(
             self.__p_c_graph,
             self.gamma, 
