@@ -32,11 +32,12 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
 /**
  * @brief Perform multiple erosion events on the streamgraph.
  * @param G Pointer to the StreamGraph.
+ * @param energy_history An array to store the energy of the graph after each iteration. Length must be at least niterations.
  * @param niterations The number of erosion events to perform.
  * @param gamma The exponent used in the energy calculation.
  * @param annealing_schedule An array of temperatures (ranging from 0-1) to use for each iteration. Length must be at least niterations.
  * @return Status code indicating success or failure
  */
-Status ocn_outer_ocn_loop(StreamGraph *G, uint32_t niterations, double gamma, double *annealing_schedule);
+Status ocn_outer_ocn_loop(StreamGraph *G, double *energy_history, uint32_t niterations, double gamma, double *annealing_schedule);
 
 #endif // OCN_H

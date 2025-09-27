@@ -10,14 +10,15 @@ import PyOCN
 
 ocn = PyOCN.OCN.from_net_type(
     "H", 
-    dims=(200, 200), 
+    dims=(150, 150), 
     random_state=8473,
     verbosity=2
 )
 
-ocn.fit(n_iterations=5000)
+energy = ocn.fit(report_energy_interval=3000)
+plt.plot(energy)
 
-PyOCN.plot_ocn_energy_raster(ocn=ocn, norm=mpl.colors.LogNorm(vmin=1, vmax=ocn.energy), cmap="terrain_r")
+# PyOCN.plot_ocn_energy_raster(ocn=ocn, norm=mpl.colors.LogNorm(vmin=1, vmax=ocn.energy), cmap="terrain_r")
 # # PyOCN.plot_ocn_as_dag(ocn, attribute='energy', with_labels=False, node_size=10)
-# plt.show()
+plt.show()
 

@@ -195,8 +195,8 @@ class OCN():
         cooling_rate:float=1.0,
         constant_phase:float=0.0,
         pbar:bool=True,
-        max_iterations_per_loop:int=2_500,
-    ):
+        report_energy_interval:int=1000,
+    ) -> np.ndarray:
         """
         Optimize the OCN using simulated annealing. This method simulated n_iterations erosion events, using a simulated annealing algorithm to accept or reject each event.
 
@@ -235,7 +235,10 @@ class OCN():
             constant_phase (float): The fraction of the total iterations to spend at constant temperature before cooling begins. Must be in [0, 1]. Default is 0.0 (start cooling immediately).
             pbar (bool): Whether to display a progress bar. Default is True.
             max_iterations_per_loop (int): Maximum number of iterations to perform per block. Default is 2,500. This limits memory usage when optimizing large OCNs.
+            report_energy_interval (int): Interval at which to report energy in the progress bar. Default is 1,000.
         """
+        max_iterations_per_loop = report_energy_interval
+
         if n_iterations is None:
             n_iterations = int(40*self.dims[0]*self.dims[1])
         if not (isinstance(n_iterations, int) and n_iterations > 0):
@@ -252,12 +255,18 @@ class OCN():
             warnings.warn("Using cooling_rate < 0.5 and constant_phase > 0.1 with may cause convergence issues. Consider increasing n_iterations.")
 
         completed_iterations = 0
+        energy_out = np.empty(n_iterations//report_energy_interval + 1, dtype=np.float64)
+        energy_out[0] = self.energy
+        
+        energy_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
+        energy_ptr = energy_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+
+        anneal_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
+        anneal_ptr = anneal_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         with tqdm(total=n_iterations, desc="OCN Optimization", unit_scale=True, dynamic_ncols=True, disable=not (pbar or self.verbosity >= 1)) as pbar:
             pbar.set_postfix({"Energy": self.energy, "P(Accept)": 1.0})
             pbar.update(0)
             
-            anneal_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
-            anneal_ptr = anneal_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
             while completed_iterations < n_iterations:
                 iterations_this_loop = min(max_iterations_per_loop, n_iterations - completed_iterations)
                 anneal_buf[:iterations_this_loop] = cooling_schedule(
@@ -265,14 +274,24 @@ class OCN():
                 )
                 check_status(_bindings.libocn.ocn_outer_ocn_loop(
                     self.__p_c_graph, 
+                    energy_ptr,
                     iterations_this_loop, 
                     self.gamma, 
                     anneal_ptr
                 ))
                 completed_iterations += iterations_this_loop
 
+                # copy energies to output array
+                s = slice(
+                    (completed_iterations - iterations_this_loop)//report_energy_interval + 1,
+                    completed_iterations//report_energy_interval + 1,
+                    1
+                )
+                energy_out[s] = energy_buf[:iterations_this_loop:report_energy_interval]
+
                 pbar.set_postfix({"Energy": self.energy, "T": anneal_buf[iterations_this_loop - 1]})
                 pbar.update(iterations_this_loop)
+        return energy_out
         
 
 __all__ = [

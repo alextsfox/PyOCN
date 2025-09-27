@@ -178,8 +178,8 @@ libocn.ocn_update_energy.restype = Status
 libocn.ocn_single_erosion_event.argtypes = [POINTER(StreamGraph_C), c_double, c_double]
 libocn.ocn_single_erosion_event.restype = Status
 
-# Status ocn_outer_ocn_loop(StreamGraph *G, uint32_t niterations, double gamma, double *annealing_schedule);
-libocn.ocn_outer_ocn_loop.argtypes = [POINTER(StreamGraph_C), c_uint32, c_double, POINTER(c_double)]
+# Status ocn_outer_ocn_loop(StreamGraph *G, double *energy_history, uint32_t niterations, double gamma, double *annealing_schedule);
+libocn.ocn_outer_ocn_loop.argtypes = [POINTER(StreamGraph_C), POINTER(c_double), c_uint32, c_double, POINTER(c_double)]
 libocn.ocn_outer_ocn_loop.restype = Status
 
 ########################

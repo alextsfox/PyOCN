@@ -85,8 +85,8 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
                 sg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
             }
-            for (linidx_t i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
-            code = sg_flow_downstream_safe(G, a, 1);  // can use n_calls = 1 again because we reset visited flags
+            // for (linidx_t i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
+            code = sg_flow_downstream_safe(G, a, 2);  // can use n_calls = 1 again because we reset visited flags
             if (code != SUCCESS){
                 sg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
@@ -117,11 +117,15 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
     return EROSION_FAILURE;  // if we reach here, we failed to find a valid swap in many, many tries
 }
 
-Status ocn_outer_ocn_loop(StreamGraph *G, uint32_t niterations, double gamma, double *annealing_schedule){
+Status ocn_outer_ocn_loop(StreamGraph *G, double *energy_history, uint32_t niterations, double gamma, double *annealing_schedule){
     Status code;
+
+    if (energy_history == NULL) return NULL_POINTER_ERROR;
+
     for (uint32_t i = 0; i < niterations; i++){
         code = ocn_single_erosion_event(G, gamma, annealing_schedule[i]);
         if ((code != SUCCESS) && (code != EROSION_FAILURE)) return code;
+        energy_history[i] = G->energy;
     }
     return SUCCESS;
 }
