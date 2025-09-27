@@ -22,7 +22,7 @@ mv libocn.so ../libocn.so
 rm -f ocn.o flowgrid.o status.o rng.o
 ```
 
-If you have any questions or comments, please open an issue on the GitHub repository: https://github.com/alexfox/pyocn/issues or contact me directly at https://www.afox.land
+If you have any questions or comments, please open an issue on the GitHub repository: https://github.com/alexfox/PyOCN/issues or contact me directly at https://www.afox.land
 
 # libocn
 The backend of PyOCN is the libocn C library. libocn implements the core algorithms for generating and manipulating OCNs. Unlike the OCNet R package which uses an adjacency matrix implementation in R for manipulating the network (based on the SPArse Matrix library), the libocn C library directly uses a directed acyclic graph (DAG) to represent the network. This structure represents the network as a grid of cells with associated flow directions. Each cell has an associated outflow direction (given as an integer, 0-7, representing the 8 possible directions to neighboring cells) and a list of the directions of its neighbors (given as an 8-bit integer, where each bit indicates whether there is a connection to the corresponding neighbor). This representation allows for efficient traversal and manipulation of the network, without the overhead of storing and manipulating large adjacency matrices. libocn also implements functions to traverse and manipulate the network structure according to the simulated annealing algorithm described in the orginal paper.
