@@ -62,7 +62,6 @@ def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
         print("Converting DiGraph to FlowGrid_C...")
         print("--------------------------------------")
 
-    # TODO modify for the possibility of multiple input graphs
     # is a DAG
     if not isinstance(G, nx.DiGraph):
         raise TypeError(f"G must be a networkx.DiGraph, got {type(G)}")
@@ -72,7 +71,6 @@ def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
     if verbose:
         print("\tGraph is a directed acyclic graph.")
     
-    # TODO: modify for the possibility of multiple input graphs
     # pos attribute is valid
     pos = list(nx.get_node_attributes(G, "pos").values())
     if len(pos) != len(G.nodes):
@@ -89,7 +87,6 @@ def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
     if verbose:
         print("\tGraph 'pos' attributes are valid.")
 
-    # TODO: modify for the possibility of multiple input graphs
     # spans a dense grid
     rows, cols = max(p[0] for p in pos) + 1, max(p[1] for p in pos) + 1
 
@@ -101,7 +98,6 @@ def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
     if verbose:
         print(f"\tGraph covers a dense {rows}x{cols} grid.")
 
-    # TODO modify for the possibility of multiple input graphs
     # is a spanning tree
     if any(G.out_degree(u) > 1 for u in G.nodes):
         raise ValueError("Graph must be a spanning tree (each node has out_degree <= 1).")
@@ -112,7 +108,6 @@ def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
     if verbose:
         print("\tGraph is a spanning tree.")
 
-    # TODO modify for the possibility of multiple input graphs
     # edges only connect to adjacent nodes (no skipping)
     for u, v in G.edges:
         r1, c1 = G.nodes[u]["pos"]
@@ -123,7 +118,6 @@ def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
     if verbose:
         print("\tEdges connect only to adjacent nodes).")
 
-    # TODO modify for the possibility of multiple input graphs
     # compute the drained area, adown, edges, downstream, and visited attributes for each node.
     # checking for crosses can come later: easier with edges defined.
     for n in nx.topological_sort(G):
@@ -169,8 +163,7 @@ def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
 
     if verbose:
         print("\tComputed node attributes (drained_area, adown, edges, downstream, visited).")
-
-    # TODO modify for the possibility of multiple input graphs
+        
     # check that edges do not cross each other
     for n in G.nodes:
         r, c = G.nodes[n]["pos"]

@@ -174,7 +174,6 @@ class OCN():
     
     def single_erosion_event(self, temperature:float):
         """
-        #TODO: implement a max_tries
         Performs a single erosion event on the OCN.
         Parameters:
             temperature (float): The temperature parameter for the erosion event. Ranges from 0 (greedy) to 1 (always accept)
