@@ -125,7 +125,7 @@ def plot_ocn_energy_raster(ocn: OCN, ax=None, **kwargs):
         energy[r, c] = dag.nodes[node]['energy']
 
     if "cmap" not in kwargs:
-        kwargs["cmap"] = "terrain"
+        kwargs["cmap"] = "terrain_r"
         
     if ax is None:
         _, ax = plt.subplots()

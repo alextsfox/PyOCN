@@ -311,7 +311,7 @@ class OCN:
         cooling_rate:float=1.0,
         constant_phase:float=0.0,
         pbar:bool=True,
-        report_energy_interval:int=1000,
+        energy_reports:int=1000,
     ) -> np.ndarray:
         """
         Optimize the OCN using simulated annealing.
@@ -326,6 +326,8 @@ class OCN:
         ----------
         n_iterations : int, optional
             Total number of iterations. Defaults to ``40 * rows * cols``.
+            Always at least ``energy_reports * 10`` (this should only matter for
+            extremely small grids, where ``rows * cols < 256``).
         cooling_rate : float, default 1.0
             Exponential decay rate parameter for the annealing schedule (in [0, 1]).
         constant_phase : float, default 0.0
@@ -375,12 +377,16 @@ class OCN:
         of iterations, and :math:`C` is ``constant_phase``. Decreasing-energy
         moves (:math:`\Delta E < 0`) are always accepted.
         """
-        max_iterations_per_loop = report_energy_interval
-
         if n_iterations is None:
             n_iterations = int(40*self.dims[0]*self.dims[1])
         if not (isinstance(n_iterations, int) and n_iterations > 0):
             raise ValueError(f"n_iterations must be a positive integer, got {n_iterations}")
+        n_iterations = max(energy_reports*10, n_iterations)
+
+        report_energy_interval = n_iterations // energy_reports
+
+        max_iterations_per_loop = report_energy_interval
+
         
         cooling_schedule = create_cooling_schedule(
             ocn=self,
