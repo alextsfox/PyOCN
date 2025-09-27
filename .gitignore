@@ -13,3 +13,8 @@ TODO*
 */__pycache__/
 
 .DS_Store
+
+*.so
+*.dylib
+*.o
+*.dll

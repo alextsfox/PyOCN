@@ -20,6 +20,41 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 </style>
 
 
@@ -35,35 +70,6 @@ ul.task-list li input[type="checkbox"] {
 <link href="readme_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="readme_files/libs/bootstrap/bootstrap-be9206a58a27969b3ea3001da8f26fef.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 
-  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
-
-<script type="text/javascript">
-const typesetMath = (el) => {
-  if (window.MathJax) {
-    // MathJax Typeset
-    window.MathJax.typeset([el]);
-  } else if (window.katex) {
-    // KaTeX Render
-    var mathElements = el.getElementsByClassName("math");
-    var macros = [];
-    for (var i = 0; i < mathElements.length; i++) {
-      var texText = mathElements[i].firstChild;
-      if (mathElements[i].tagName == "SPAN") {
-        window.katex.render(texText.data, mathElements[i], {
-          displayMode: mathElements[i].classList.contains('display'),
-          throwOnError: false,
-          macros: macros,
-          fleqn: false
-        });
-      }
-    }
-  }
-}
-window.Quarto = {
-  typesetMath
-};
-</script>
 
 </head>
 
@@ -76,18 +82,59 @@ window.Quarto = {
 
 
 
-<section id="ocn" class="level1">
-<h1>OCN</h1>
-<p>Program to generate optimal channel networks.</p>
-<p>https://onlinelibrary-wiley-com.uwyo.idm.oclc.org/doi/full/10.1002/ece3.6479</p>
-<p>Let us consider a regular lattice made up of <span class="math inline">\(N\)</span> cells, where each cell represents the generic node <span class="math inline">\(i\)</span> of the network. Each node <span class="math inline">\(i\)</span> is connected via a link to one of its nearest neighbors. The energy dissipation across the <span class="math inline">\(i\)</span>th network link is proportional to <span class="math inline">\(Q_i \Delta h_i\)</span>, where <span class="math inline">\(Q_i\)</span> is the landscape-forming discharge in the link, and <span class="math inline">\(\Delta h_i = s_i L_i\)</span> the corresponding elevation drop, with <span class="math inline">\(s_i\)</span> identifying slope and <span class="math inline">\(L_i\)</span> link length. By assuming <span class="math inline">\(Q_i \sim A_i\)</span>, where <span class="math inline">\(A_i\)</span> is the area drained by link <span class="math inline">\(i\)</span>, and the slope–area relationship <span class="math inline">\(s_i \sim A^{\gamma - 1}\)</span>, the functional representing total energy expenditure across a landscape formed by <span class="math inline">\(N\)</span> cells reads.</p>
-<p><span class="math display">\[
-\displaystyle
-H = \sum_{i}^N A_i^\gamma \tag{1}
-\]</span></p>
-<p>Note that link lengths do not appear in the above formula, as they can be considered constant with no loss of generality. The OCN configuration is defined by an adjacency matrix <span class="math inline">\(W\)</span> whose corresponding set of drainage areas <span class="math inline">\(A=[A_1,\dots,A_n]\)</span> yields a local, dynamically accessible minimum of Equation (1). Note that the correspondence between <span class="math inline">\(A\)</span> and the adjacency matrix <span class="math inline">\(W\)</span> of a tree is subsumed by the relationship <span class="math inline">\(I_N-W^TA=1\)</span>, where <span class="math inline">\(I_N\)</span> is the identity matrix of order <span class="math inline">\(N\)</span>, and 1 a <span class="math inline">\(N\)</span>-dimensional vector of ones.</p>
-<p>Minimization of Equation (1) is operated by means of a simulated annealing technique: starting from a feasible initial flow configuration (i.e., a spanning tree), a link at a time is rewired to one of its nearest neighbors; if the obtained configuration is a spanning tree, <span class="math inline">\(H\)</span> is computed; the new configuration is accepted if it lowers total energy expenditure; if this is not the case, the new configuration can still be accepted with a probability controlled by the cooling schedule of the simulated annealing algorithm. Such myopic search, which only explores close configurations, actually mimics the type of optimization that nature performs, at least in fluvial landscapes. Notably, restricting the search of a network yielding a minimum of Equation (1) to spanning, loopless configurations entails no approximation, because every spanning tree is a local minimum of total energy dissipation. The shape of the so-obtained OCN retains the heritage of the initial flow configuration, although the extent to which this occurs is partly controlled by the cooling schedule adopted. This underpins the concept of feasible optimality, that is, the search for dynamically accessible configurations.</p>
-<p>Coding challanges: * Implement a 2D Array structre in C with basic operations (addition, subtraction, multiplication, division, negation, element access, setting, slicing, copying) (DONE) * Implement a spanning tree structure in C with basic operations (adding/removing edges, checking for cycles, finding paths, swapping/permuting edges) * Implement the OCN algorithm using simulated annealing to minimize the energy functional H * Implement input/output functions to read/write arrays and trees from/to files</p>
+<section id="pyocn" class="level1">
+<h1>PyOCN</h1>
+<ol start="3" type="a">
+<li>2024 Alexander S. Fox</li>
+</ol>
+<p>This is a package to generate optimal channel networks (OCNs), based on the algorithm described in Carraro et al.&nbsp;(2020). <em>Generation and application of river network analogues for use in ecology and evolution. Ecology and Evolution.</em> doi:10.1002/ece3.6479 and mirrors much of the functionality of the OCNet R package (https://lucarraro.github.io/OCNet/).</p>
+<p>This is a work in progress. I plan to release this as a package on PyPI in the near future. For now, you can clone the repository and build the package from source.</p>
+<p>To compile libocn with <code>gcc</code> on MacOS or Linux, run the following commands from the root directory:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> PyOCN/c_src</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> build.sh</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>or alternatively:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> PyOCN/c_src</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">gcc</span> <span class="at">-fPIC</span> <span class="at">-O3</span> <span class="at">-flto</span> <span class="at">-c</span> ocn.c flowgrid.c status.c rng.c</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="fu">gcc</span> <span class="at">-shared</span> <span class="at">-O3</span> <span class="at">-flto</span> <span class="at">-o</span> libocn.so ocn.o flowgrid.o status.o rng.o</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="fu">mv</span> libocn.so ../libocn.so</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="fu">rm</span> <span class="at">-f</span> ocn.o flowgrid.o status.o rng.o</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>If you have any questions or comments, please open an issue or contact me directly at https://www.afox.land</p>
+</section>
+<section id="ocn-algorithm" class="level1">
+<h1>OCN Algorithm</h1>
+<p>An initial stream network is generated as a directed acyclic graph (DAG) that is a spanning tree over a 2d grid of cells. Each cell in the grid (except the root) has a single outgoing edge that connects to one of its 8 neighboring cells. The OCN algorithm then iteratively modifies the DAG by randomly selecting a cell and changing its outflow to point to a different neighbor, ensuring that the spanning tree structure is maintained (<em>i.e.&nbsp;no cycles are introduced and each cell has a single outflow, except for the root node</em>). The total energy before and after the change is calculated based on the cumulative drained area:</p>
+<p>( E[n] = _{i} A[n]_i^ )</p>
+<p>Where (A[n]_i) is the cumulative drained area at node (i) in configuration (n), and () is a parameter that influences the shape of the network (default is 0.5). The change is accepted or rejected based on the Metropolis criterion, which depends on the change in energy and a temperature parameter that decreases over time (simulated annealing). This process continues until a stopping criterion is met, such as a maximum number of iterations or convergence of the energy value.</p>
+</section>
+<section id="libocn" class="level1">
+<h1>libocn</h1>
+<p>The backend of PyOCN is the libocn C library. libocn implements the core algorithms for generating and manipulating OCNs. Unlike the OCNet R package which uses an adjacency matrix implementation in R for manipulating the network (based on the SPArse Matrix library), the libocn C library directly uses a directed acyclic graph (DAG) to represent the network. This structure represents the network as a grid of cells with associated flow directions. Each cell has an associated outflow direction (given as an integer, 0-7, representing the 8 possible directions to neighboring cells) and a list of the directions of its neighbors (given as an 8-bit integer, where each bit indicates whether there is a connection to the corresponding neighbor). This representation allows for efficient traversal and manipulation of the network, without the overhead of storing and manipulating large adjacency matrices. libocn also implements functions to traverse and manipulate the network structure according to the simulated annealing algorithm described in the orginal paper.</p>
+<p>Optimizing a 512 x 512 grid to generate an OCN takes about 30 minutes on a laptop (MacBook Pro M1 Pro, 16GB RAM). Processing a 256 x 256 grid takes about 2 minutes.</p>
+</section>
+<section id="pyocn-1" class="level1">
+<h1>PyOCN</h1>
+<p>The PyOCN frontend is a Python package that provides a high-level interface to the libocn C library. It allows users to easily generate, manipulate, and analyze OCNs. PyOCN uses the NetworkX library to expose the network graph and provides additional functions to export the graph to various formats, including as raster images. (TODO: implement export to gtif, rasterio)</p>
+</section>
+<section id="citing-pyocn" class="level1">
+<h1>Citing PyOCN</h1>
+<p>If you use PyOCN in your research, please cite this software package as:</p>
+<pre><code>@software{fox_pyocn_2025,
+  author = {Fox, Alexander S.},
+  title = {{PyOCN and libocn}},
+  url = {https://github.com/alexfox/pyocn},
+  date = {2025-10-01},
+} </code></pre>
+<p>in addition to the original paper:</p>
+<pre><code>@article{carraro_generation_2020,
+    title = {Generation and application of river network analogues for use in ecology and evolution},
+    volume = {10},
+    doi = {10.1002/ece3.6479},
+    number = {14},
+    journal = {Ecology and Evolution},
+    author = {Carraro, Luca and Bertuzzo, Enrico and Fronhofer, Emanuel A. and Furrer, Reinhard and Gounand, Isabelle and Rinaldo, Andrea and Altermatt, Florian},
+    year = {2020},
+    pages = {7537--7550},
+}</code></pre>
 </section>
 
 </main>
