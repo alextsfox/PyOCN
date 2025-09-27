@@ -77,8 +77,6 @@ class FlowGrid_C(Structure):
         ("vertices", POINTER(Vertex_C)),  # Vertex*
     ]
 
-
-
 # linidx_t fg_cart_to_lin(CartPairC coords, CartPairC dims);
 libocn.fg_cart_to_lin.argtypes = [CartPair_C, CartPair_C]
 libocn.fg_cart_to_lin.restype = linidx_t
