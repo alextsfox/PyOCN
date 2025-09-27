@@ -1,7 +1,12 @@
-/readme_files/
 /.vscode/
 
+/readme_files/
+readme.html
+
+/TODO_files/
 TODO*
+
+
 
 **/__pycache__/
 /__pycache__/
