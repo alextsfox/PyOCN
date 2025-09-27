@@ -48,31 +48,35 @@ const OffsetPair offsets[8] = {
 /*
  * Converts cartesian (row, col) to linear index in block-tiled memory
  */
-const cartidx_t TILE_SIZE = 2;
-linidx_t sg_cart_to_lin(cartidx_t row, cartidx_t col, cartidx_t m, cartidx_t n){
-    div_t r_divT = div(row, TILE_SIZE);
-    div_t c_divT = div(col, TILE_SIZE);
-    linidx_t k = r_divT.quot * n/TILE_SIZE + c_divT.quot;
-    linidx_t a = (TILE_SIZE * TILE_SIZE * k) + (TILE_SIZE * r_divT.rem) + c_divT.rem;
-    return a;
-}
-// for now, we just use normal row-major order until we finish debugging the main algorithm
+// const cartidx_t TILE_SIZE = 2;
 // linidx_t sg_cart_to_lin(CartPair coords, CartPair dims){
-//     return (coords.row * dims.col + coords.col);
+//     cartidx_t row = coords.row;
+//     cartidx_t col = coords.col;
+//     cartidx_t n = dims.col;
+//     cartidx_t m = dims.row;
+//     div_t r_divT = div(row, TILE_SIZE);
+//     div_t c_divT = div(col, TILE_SIZE);
+//     linidx_t k = r_divT.quot * n/TILE_SIZE + c_divT.quot;
+//     linidx_t a = (TILE_SIZE * TILE_SIZE * k) + (TILE_SIZE * r_divT.rem) + c_divT.rem;
+//     return a;
 // }
-// CartPair sg_lin_to_cart(linidx_t a, CartPair dims){
-//     div_t adiv = div(a, dims.col);
-//     return (CartPair){adiv.quot, adiv.rem};
-// }
-CartPair sg_lin_to_cart(linidx_t a, CartPair dims){
-    cartidx_t p = a % TILE_SIZE;
-    cartidx_t q = (a / TILE_SIZE) % TILE_SIZE;
-    cartidx_t k = a / (TILE_SIZE * TILE_SIZE);
-
-    cartidx_t j = p + 2 * (k % (dims.col / TILE_SIZE));
-    cartidx_t i = q + 2 * (k / (dims.col / TILE_SIZE));
-    return (CartPair){i, j};
+// for now, we just use normal row-major order until we finish debugging the main algorithm
+linidx_t sg_cart_to_lin(CartPair coords, CartPair dims){
+    return (coords.row * dims.col + coords.col);
 }
+CartPair sg_lin_to_cart(linidx_t a, CartPair dims){
+    div_t adiv = div(a, dims.col);
+    return (CartPair){adiv.quot, adiv.rem};
+}
+// CartPair sg_lin_to_cart(linidx_t a, CartPair dims){
+//     cartidx_t p = a % TILE_SIZE;
+//     cartidx_t q = (a / TILE_SIZE) % TILE_SIZE;
+//     cartidx_t k = a / (TILE_SIZE * TILE_SIZE);
+
+//     cartidx_t j = p + 2 * (k % (dims.col / TILE_SIZE));
+//     cartidx_t i = q + 2 * (k / (dims.col / TILE_SIZE));
+//     return (CartPair){i, j};
+// }
 Status sg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims){
     CartPair row_col = sg_lin_to_cart(a, dims);
     OffsetPair offset = offsets[down];

@@ -10,7 +10,7 @@ import PyOCN
 
 ocn = PyOCN.OCN.from_net_type(
     "H", 
-    dims=(150, 150), 
+    dims=(152, 152), 
     random_state=8473,
     verbosity=2
 )
