@@ -1,3 +1,9 @@
+/**
+ * @file status.h
+ * @author Alexander S Fox
+ * @brief Header file for status/return codes used in the library.
+ */
+
 #ifndef STATUS_H
 #define STATUS_H
 

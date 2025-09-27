@@ -1,6 +1,6 @@
 #TODO: allow users to provide multiple DAGs that partition a space.
 """
-Functions for converting between NetworkX directed graphs and FlowGrid_C structures.
+Functions for converting between NetworkX graphs and FlowGrid_C structures.
 """
 
 from ctypes import byref, POINTER

@@ -1,3 +1,8 @@
+/**
+ * @file ocn.h
+ * @author Alexander S Fox
+ * @brief Header file for OCN optimization.
+ */
 #ifndef OCN_H
 #define OCN_H
 

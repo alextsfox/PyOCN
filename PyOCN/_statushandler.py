@@ -1,5 +1,5 @@
 """
-Expose public exceptions & warnings
+libocn exeption handling
 """
 
 import warnings

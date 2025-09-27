@@ -1,3 +1,8 @@
+/**
+ * @file rng.h
+ * @author Alexander S Fox
+ * @brief Header file for random number generator functions.
+ */
 #ifndef RNG_H
 #define RNG_H
 

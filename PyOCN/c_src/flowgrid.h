@@ -1,3 +1,9 @@
+/**
+ * @file flowgrid.h
+ * @author Alexander S Fox
+ * @brief Header file for FlowGrid structure and related functions.
+ */
+
 #ifndef STREAMGRAPH_H
 #define STREAMGRAPH_H
 
@@ -12,6 +18,14 @@ typedef uint8_t localedges_t;
 typedef uint8_t clockhand_t;
 extern clockhand_t IS_ROOT;
 
+/**
+ * @brief Vertex structure representing a node in the flow grid.
+ * - drained_area: The area drained by this vertex.
+ * - adown: The linear index of the downstream vertex.
+ * - edges: A bitmask representing the presence of edges in the 8 possible directions.
+ * - downstream: The clockhand direction of the downstream flow (0-7) or IS_ROOT (255) if it is a root node.
+ * - visited: A flag used for traversal algorithms
+ */
 typedef struct {
     drainedarea_t drained_area;  // 4B
     linidx_t adown;  // 4B
@@ -20,6 +34,13 @@ typedef struct {
     uint8_t visited;  // 1B
 } Vertex;
 
+/**
+ * @brief FlowGrid structure representing the entire flow grid.
+ * - dims: The dimensions of the grid (rows, cols).
+ * - root: The Cartesian coordinates of the root node.
+ * - energy: The energy of the flow grid.
+ * - vertices: A pointer to an array of Vertex structures representing the nodes in the grid.
+ */
 typedef struct {
     CartPair dims;
     CartPair root;
@@ -149,18 +170,5 @@ Status fg_flow_downstream_safe(FlowGrid *G, linidx_t a, uint8_t ncalls);
  * @param use_utf8 If true, use UTF-8 characters for better visuals; otherwise, use ASCII.
  */
 void fg_display(FlowGrid *G, bool use_utf8);
-
-/**
- * @brief Create a simple test graph for demonstration purposes.
- * O  O  O  O
- * |  |  |  |
- * O  O  O  O
- * |  |  |  |
- * O  O  O  O
- * |  |  |  |
- * O--O--O--X
- * @return Pointer to the newly created FlowGrid.
- */
-FlowGrid *fg_make_test_graph();
 
 #endif // STREAMGRAPH_H

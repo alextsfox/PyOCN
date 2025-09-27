@@ -1,9 +1,3 @@
-// naming convention
-// defines: ALL_CAPS
-// struct types: PascalCase
-// simple types: flatcase_t
-// functions + variables: snake_case
-
 #ifndef STREAMGRAPH_C
 #define STREAMGRAPH_C
 
