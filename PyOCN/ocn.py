@@ -9,13 +9,10 @@ Copyright: (c) 2025 Alexander S Fox. All rights reserved.
 This file is part of the PyOCN project.
 """
 
-from itertools import product
 import warnings
 
-from ctypes import byref
 import ctypes
 from numbers import Number
-from typing import Literal, Any, Callable
 import networkx as nx 
 
 import numpy as np

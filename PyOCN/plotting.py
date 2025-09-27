@@ -3,7 +3,6 @@ from typing import Any
 import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
-from matplotlib.patches import ArrowStyle
 import warnings
 
 

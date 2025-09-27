@@ -1,12 +1,12 @@
 from __future__ import annotations
 from itertools import product
-from typing import Literal, Any, Callable, TYPE_CHECKING
+from typing import Literal, Callable, TYPE_CHECKING
 import networkx as nx
 import numpy as np
 from tqdm import tqdm
 
 if TYPE_CHECKING:
-    from . import OCN
+    from .ocn import OCN
 
 _allowed_net_types = {"I", "H", "V", "T"}
 
