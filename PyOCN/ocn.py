@@ -1,12 +1,26 @@
 """
-ocn.py
+High-level Optimized Channel Network (OCN) interface.
 
-High-level Python interface for working with Optimized Channel Networks (OCNs) from the libocn C library.
+This module provides a high-level interface to the underlying
+``libocn`` C library. The :class:`OCN` class can be used for 
+constructing and optimizing river network models using 
+simulated annealing.
 
-Author: Alexander S Fox
-Copyright: (c) 2025 Alexander S Fox. All rights reserved.
+Notes
+-----
+- The underlying data structure managed by :class:`OCN` is a FlowGrid owned by
+    ``libocn``. Pointer lifetime and destruction are handled safely within this
+    class.
+- Many operations convert to a NetworkX ``DiGraph`` for convenience. These
+    conversions are slow, and are intended for inspection, analysis, 
+    and visualization rather than tight inner loops.
 
-This file is part of the PyOCN project.
+See Also
+--------
+PyOCN.utils
+        Helper functions for OCN fitting and construction
+PyOCN.plotting
+        Helper functions for visualization and plotting
 """
 
 import warnings
@@ -24,22 +38,47 @@ from .utils import create_cooling_schedule, net_type_to_dag
 from . import _libocn_bindings as _bindings
 from . import _flowgrid_convert as fgconv
         
-class OCN():
-    def __init__(self, dag:nx.DiGraph, gamma:float=0.5, random_state=None, verbosity:int=0):
+class OCN:
+    """
+    Optimized Channel Network wrapper around ``libocn``.
+
+    Use :meth:`OCN.from_net_type` or :meth:`OCN.from_digraph` to construct an
+    instance. The class manages the C-side FlowGrid pointer and offers methods
+    to compute energy, perform erosion events, and optimize via simulated
+    annealing.
+
+    Parameters
+    ----------
+    dag : nx.DiGraph
+        Directed acyclic graph (DAG) over a dense grid that defines the initial
+        stream network. See :meth:`OCN.from_digraph` for the graph requirements.
+    gamma : float, default 0.5
+        Exponent in the energy model, typically in the range [0, 1].
+    random_state : int | numpy.random.Generator | None, optional
+        Seed or generator for the internal RNG used by ``libocn``. ``None``
+        yields nondeterministic seeding.
+    verbosity : int, default 0
+        Verbosity level for underlying library output (0–2). Higher values may
+        produce diagnostic prints.
+
+    Attributes
+    ----------
+    energy : float
+        Current energy of the network (read-only property).
+    dims : tuple[int, int]
+        Grid dimensions (rows, cols) of the FlowGrid (read-only property).
+    root : tuple[int, int]
+        Row/column coordinates of the root node in the grid (read-only
+        property).
+    """
+    def __init__(self, dag: nx.DiGraph, gamma: float = 0.5, random_state=None, verbosity: int = 0):
         """
-        Main class for working with Optimized Channel Networks (OCNs). 
-        Provides a high-level interface to the `libocn` C library.
+        Construct an :class:`OCN` from a valid NetworkX ``DiGraph``.
 
-        Initialize a new OCN through one of the following constructors:
-            OCN.from_net_type(net_type, dims, gamma, annealing_schedule, random_state): initialize from a predefined network type.
-            OCN.from_digraph(dag, gamma, annealing_schedule, random_state): initialize from an nx.DiGraph instance.
-
-        All constructors take an initilization structure (net_type + dims, or dag) and the following:
-            - gamma (float): The gamma parameter for energy calculations. Default is 0.5.
-            - random_state (int, np.random.Generator, or None): Any legal input to np.random.default_rng. Used to seed the internal random number generator. Default is None (unpredictable).
-            - verbosity (int): Level of verbosity for libocn output. Ranges from 0-2. Default is 0 (no output). Higher values produce more output.
-
-        Refer to the documentation for each constructor for details on the initialization structures.
+        Notes
+        -----
+        Please use the classmethods :meth:`OCN.from_net_type` or
+        :meth:`OCN.from_digraph` to instantiate an OCN.
         """
         
         # validate gamma, annealing schedule, and random_state
@@ -61,45 +100,86 @@ class OCN():
     @classmethod
     def from_net_type(cls, net_type:str, dims:tuple, gamma=0.5, random_state=None, verbosity:int=0):
         """
-        Initialize from a predefined network type and dimensions.
-        
-        Parameters:
-            net_type (str): The type of network to create. Must be one of TODO:ALLOWED TYPES.
-                Descriptions of allowed types:
-                    .....
-            dims (tuple): A tuple of two positive even integers specifying the dimensions of the network (rows, columns).
-            gamma (float)
-            random_state (int, np.random.Generator, or None)
+        Create an :class:`OCN` from a predefined network type and dimensions.
+
+        Parameters
+        ----------
+        net_type : str
+            Name of the network template to generate. See
+            :func:`~PyOCN.utils.net_type_to_dag` for supported types.
+        dims : tuple[int, int]
+            Grid dimensions (rows, cols). Both must be positive even integers.
+        gamma : float, default 0.5
+            Exponent in the energy model.
+        random_state : int | numpy.random.Generator | None, optional
+            Seed or generator for RNG seeding.
+        verbosity : int, default 0
+            Verbosity level (0–2) for underlying library output.
+
+        Returns
+        -------
+        OCN
+            A newly constructed instance initialized from the specified
+            template and dimensions.
+
+        Raises
+        ------
+        TypeError
+            If ``dims`` is not a tuple.
+        ValueError
+            If ``dims`` is not two positive even integers.
         """
-        if not isinstance(dims, tuple): raise TypeError(f"dims must be a tuple of two positive even integers, got {type(dims)}")
+        if not isinstance(dims, tuple):
+            raise TypeError(f"dims must be a tuple of two positive even integers, got {type(dims)}")
         if not (
             len(dims) == 2 
             and all(isinstance(d, int) and d > 0 and d % 2 == 0 for d in dims)
         ):
             raise ValueError(f"dims must be a tuple of two positive even integers, got {dims}")
         
-        if verbosity == 1: print(f"Creating {net_type} network DiGraph with dimensions {dims}...", end="")
+        if verbosity == 1:
+            print(f"Creating {net_type} network DiGraph with dimensions {dims}...", end="")
         dag = net_type_to_dag(net_type, dims)
-        if verbosity == 1: print(" Done.")
+        if verbosity == 1:
+            print(" Done.")
         return cls(dag, gamma, random_state, verbosity=verbosity)
 
     @classmethod
-    def from_digraph(cls, dag:nx.DiGraph, gamma=0.5, random_state=None, verbosity:int=0):
+    def from_digraph(cls, dag: nx.DiGraph, gamma=0.5, random_state=None, verbosity: int = 0):
         """
-        Initialize from an existing NetworkX DiGraph.
-        Parameters:
-            dag (nx.DiGraph): An existing directed acyclic graph (DAG) representing the stream network. Be a valid DAG for a FlowGrid (see FlowGrid for details). Additionally, must have even dimensions and at least 4 vertices.
-            gamma (float)
-            random_state (int, np.random.Generator, or None)
+        Create an :class:`OCN` from an existing NetworkX ``DiGraph``.
 
-        Notes:
-        dag must satisfy the following properties:
-            * Is a directed acyclic graph.
-            * Each node has at least one attribute, `pos`, which is a non-negative (row:int, col:int) tuple giving the location of the node in a grid.
-            * Must be a spanning tree over a dense grid of size (m x n). ie. each cell in the grid has exactly one node, each node has `out_degree=1` except the root node, which has `out_degree=0`.
-            * Each node can only connect to one of its 8 neighboring cells (cardinal or diagonal adjacency). ie. edges cannot "skip" over rows or columns.
-            * Edges cannot cross each other in the row-column plane.
-            * The grid dimensions (m, n) must both be even integers.
+        Parameters
+        ----------
+        dag : nx.DiGraph
+            Directed acyclic graph (DAG) representing the stream network.
+        gamma : float, default 0.5
+            Exponent in the energy model.
+        random_state : int | numpy.random.Generator | None, optional
+            Seed or generator for RNG seeding.
+        verbosity : int, default 0
+            Verbosity level (0–2) for underlying library output.
+
+        Returns
+        -------
+        OCN
+            A newly constructed instance encapsulating the provided graph.
+
+        Notes
+        -----
+        The input graph must satisfy all of the following:
+
+        - It is a directed acyclic graph (DAG).
+        - Each node has attribute ``pos=(row:int, col:int)`` specifying its
+          grid position with non-negative coordinates.
+        - It forms a spanning tree over a dense grid of shape ``(m, n)``: each
+          grid cell corresponds to exactly one node; each non-root node has
+          ``out_degree == 1``; the root has ``out_degree == 0``.
+        - Edges connect only to one of the 8 neighbors (cardinal or diagonal),
+          i.e., no jumps over rows or columns.
+        - Edges do not cross in the row-column plane.
+        - Both ``m`` and ``n`` are even integers, and there are at least four
+          vertices.
         """
         return cls(dag, gamma, random_state, verbosity=verbosity)
 
@@ -123,9 +203,17 @@ class OCN():
     
     def compute_energy(self) -> float:
         """
-        Computes the energy of the current FlowGrid_C configuration.
-        Returns:
-            float: The computed energy.
+        Compute the current energy of the network.
+
+        Returns
+        -------
+        float
+            The computed energy value.
+
+        Notes
+        -----
+        This constructs a temporary ``DiGraph`` view to aggregate node
+        energies from drained areas using the exponent ``gamma``.
         """
         dag = self.to_digraph()
         return max(nx.get_node_attributes(dag, 'energy').values())
@@ -133,20 +221,39 @@ class OCN():
     @property
     def energy(self) -> float:
         """
-        The energy of the current OCN. Read-only.
+        Energy of the current OCN (read-only).
+
+        Returns
+        -------
+        float
+            Current energy.
         """
         return self.__p_c_graph.contents.energy
     
     @property
     def dims(self) -> tuple[int, int]:
-        """The dimensions of the FlowGrid as (rows, columns). Read-only."""
+        """
+        Grid dimensions of the FlowGrid (read-only).
+
+        Returns
+        -------
+        tuple[int, int]
+            ``(rows, cols)``.
+        """
         return (
             int(self.__p_c_graph.contents.dims.row),
             int(self.__p_c_graph.contents.dims.col)
         )
     @property
     def root(self) -> tuple[int, int]:
-        """The (row, column) position of the root node in the FlowGrid grid. Read-only."""
+        """
+        Root position in the grid (read-only).
+
+        Returns
+        -------
+        tuple[int, int]
+            ``(row, col)`` coordinates of the root node.
+        """
         return (
             int(self.__p_c_graph.contents.root.row),
             int(self.__p_c_graph.contents.root.col)
@@ -154,12 +261,16 @@ class OCN():
 
     def to_digraph(self) -> nx.DiGraph:
         """
-        Construct and return a NetworkX DiGraph representation of the current FlowGrid.
+        Create a NetworkX ``DiGraph`` view of the current grid.
 
-        The returned DiGraph will have the following node attributes:
-            - 'pos': (row, column) position of the node in the grid.
-            - 'drained_area': The drained area of the node.
-            - 'energy': The energy of each node.
+        Returns
+        -------
+        nx.DiGraph
+            A DAG with the following node attributes per node:
+
+            - ``pos``: ``(row, col)`` grid position
+            - ``drained_area``: drained area value
+            - ``energy``: cumulative energy at the node
         """
         dag = fgconv.to_digraph(self.__p_c_graph.contents)
 
@@ -174,9 +285,18 @@ class OCN():
     
     def single_erosion_event(self, temperature:float):
         """
-        Performs a single erosion event on the OCN.
-        Parameters:
-            temperature (float): The temperature parameter for the erosion event. Ranges from 0 (greedy) to 1 (always accept)
+        Perform a single erosion event at a given temperature.
+
+        Parameters
+        ----------
+        temperature : float
+            Temperature parameter governing acceptance probability. Typical
+            range is a fraction of ocn.energy.
+
+        Raises
+        ------
+        LibOCNError
+            If the underlying C routine reports an error status.
         """
         # FlowGrid *G, uint32_t *total_tries, double gamma, double temperature
         check_status(_bindings.libocn.ocn_single_erosion_event(
@@ -194,44 +314,66 @@ class OCN():
         report_energy_interval:int=1000,
     ) -> np.ndarray:
         """
-        Optimize the OCN using simulated annealing. This method simulated n_iterations erosion events, using a simulated annealing algorithm to accept or reject each event.
+        Optimize the OCN using simulated annealing.
 
-        
-        ## Simulated annealing algorithm details:
+        This performs ``n_iterations`` erosion events, accepting or rejecting
+        proposals according to a temperature schedule. A proposal consists of
+        changing the outflow direction of a randomly selected vertex. The
+        new outflow direction is chosen uniformly from the valid neighbors.
+        A proposal is valid if it maintains a well-formed graph structure.
 
-        At each iteration, a single erosion event is proposed, and the change in energy $\Delta E$ is computed.
-        Erosion events are accepted or rejected with probability:
+        Parameters
+        ----------
+        n_iterations : int, optional
+            Total number of iterations. Defaults to ``40 * rows * cols``.
+        cooling_rate : float, default 1.0
+            Exponential decay rate parameter for the annealing schedule (in [0, 1]).
+        constant_phase : float, default 0.0
+            Fraction of iterations to hold temperature constant before
+            exponential decay begins (in [0, 1]).
+        pbar : bool, default True
+            Whether to display a progress bar.
+        report_energy_interval : int, default 1000
+            Interval (in iterations) at which energy is sampled into the
+            returned array.
 
-        $$
-        P(accept) = e^{-\Delta E / T}
-        $$
+        Returns
+        -------
+        numpy.ndarray
+            Array of sampled energy values with shape
+            ``(n_iterations // report_energy_interval + 1,)``. The first entry
+            is the initial energy before optimization begins.
 
-        Where $T$ is the current temperature, which is held constant for a short time after initialization, before decaying exponentially:
+        Raises
+        ------
+        ValueError
 
-        $$
-        T(i) =
-        \begin{cases}
-        E_0 & \text{if } i < C \cdot N \\
-        E_0 \cdot e^{i - C \cdot N} & \mathrm{if } i \geq C \cdot N
-        \end{cases}
-        $$
+        Warns
+        -----
+        UserWarning
 
-        Where $E_0$ is the initial energy of the OCN, $N$ is the total number of iterations, and $i$ is the current iteration.
+        Notes
+        -----
+        At iteration ``i``, a proposal with energy change :math:`\Delta E` is
+        accepted with probability
 
-        Note that changes that decrease energy are always accepted, since $P(accept) > 1$ for $\Delta E < 0$.
+        .. math::
 
-        To ensure convergence, it is recommended to use a cooling rate between 0.5 and 10 and a constant phase <= 0.3. 
-        A slow cooling rate and long constant phase can cause the network configuration to depart more significantly from the initial state. 
-        If cooling_rate < 0.5 and constant_phase > 0.1 are used, it is suggested to increase n_iterations with respect to the default value in order to guarantee convergence.
+            P(\text{accept}) = e^{-\Delta E / T(i)}.
 
+        The temperature schedule is piecewise, held constant initially and then
+        decaying exponentially:
 
-        Parameters:
-            n_iterations (int, optional): Total number of iterations to perform. Default is 40 * rows * columns.
-            cooling_rate (float): The cooling rate for the annealing schedule. Must be in [0, 1]. Default is 1.0.
-            constant_phase (float): The fraction of the total iterations to spend at constant temperature before cooling begins. Must be in [0, 1]. Default is 0.0 (start cooling immediately).
-            pbar (bool): Whether to display a progress bar. Default is True.
-            max_iterations_per_loop (int): Maximum number of iterations to perform per block. Default is 2,500. This limits memory usage when optimizing large OCNs.
-            report_energy_interval (int): Interval at which to report energy in the progress bar. Default is 1,000.
+        .. math::
+
+            T(i) = \begin{cases}
+                E_0 & i < C N \\
+                E_0 \cdot e^{\;i - C N} & i \ge C N
+            \end{cases}
+
+        where :math:`E_0` is the initial energy, :math:`N` is the total number
+        of iterations, and :math:`C` is ``constant_phase``. Decreasing-energy
+        moves (:math:`\Delta E < 0`) are always accepted.
         """
         max_iterations_per_loop = report_energy_interval
 

@@ -1,3 +1,7 @@
+"""
+Utility functions for working with OCNs.
+"""
+
 from __future__ import annotations
 from itertools import product
 from typing import Literal, Callable, TYPE_CHECKING
@@ -11,43 +15,72 @@ if TYPE_CHECKING:
 _allowed_net_types = {"I", "H", "V", "T"}
 
 #TODO: add ability to move root?
-def net_type_to_dag(net_type:Literal["I", "H", "V", "T"], dims:tuple, pbar=False) -> nx.DiGraph:
-    """Create a NetworkX DiGraph representing a predefined network type and dimensions.
-    Parameters:
-        net_type (str): The type of network to create. Must be one of "I", "H", "V", "T".
-            Descriptions of allowed types:
-                "I": 
+def net_type_to_dag(net_type:Literal["I", "H", "V", "T"], dims:tuple, pbar: bool = False) -> nx.DiGraph:
+    """Create a predefined OCN initialization network as a NetworkX DiGraph.
 
-                    O--O--O--O--O 
-                          |
-                    O--O--O--O--O
-                          |
-                    O--O--O--O--O
-                          |
-                    O--O--X--O--O
+    Parameters
+    ----------
+    net_type : {"I", "H", "V", "T"}
+        The type of network to create.
+        Descriptions of allowed types:
 
-                "V": 
-                    O  O  O  O  O 
-                     \  \ | /  /
-                    O  O  O  O  O
-                     \  \ | /  /
-                    O  O  O  O  O
-                     \  \ | /  /
-                    O--O--X--O--O
+        - "I":
 
-                "H": 
-                    O  O  O  O 
-                    |  |  | /
-                    O  O  O--O
-                    |  | /   
-                    O  O--O--O
-                    | /     
-                    X--O--O--O
+          ::
 
+              O--O--O--O--O
+                    |
+              O--O--O--O--O
+                    |
+              O--O--O--O--O
+                    |
+              O--O--X--O--O
 
+        - "V":
 
-                "T": Channels flowing towards the center from three corners.
-        dims (tuple): A tuple of two positive even integers specifying the dimensions of the network (rows, columns).
+          ::
+
+              O  O  O  O  O
+               \  \ | /  /
+              O  O  O  O  O
+               \  \ | /  /
+              O  O  O  O  O
+               \  \ | /  /
+              O--O--X--O--O
+
+        - "H":
+
+          ::
+
+              O  O  O  O
+              |  |  | /
+              O  O  O--O
+              |  | /
+              O  O--O--O
+              | /
+              X--O--O--O
+
+        - "T": Not implemented yet.
+
+    dims : tuple
+        The network dimensions as ``(rows, cols)``. Both must be positive even integers.
+    pbar : bool, default False
+        If True, display a progress bar while constructing the graph.
+
+    Returns
+    -------
+    networkx.DiGraph
+        A directed acyclic graph representing a valid initial OCN configuration.
+
+    Raises
+    ------
+    ValueError
+        If ``net_type`` is invalid or ``dims`` are not two positive even integers.
+
+    Notes
+    -----
+    The returned graph assigns each grid cell exactly one node with a ``pos``
+    attribute equal to ``(row, col)``.
     """
     rows, cols = dims
     G = nx.DiGraph()
@@ -100,30 +133,46 @@ def net_type_to_dag(net_type:Literal["I", "H", "V", "T"], dims:tuple, pbar=False
     return G
 
 def create_cooling_schedule(
-    ocn:OCN,
-    constant_phase:float, 
-    n_iterations:int, 
-    cooling_rate:float, 
-) -> Callable[[int], float|np.ndarray]:
-    """
-    Simulated annealing temperature. 
-    The function that expresses the temperature of the simulated annealing process is as follows:
+    ocn: OCN,
+    constant_phase: float,
+    n_iterations: int,
+    cooling_rate: float,
+) -> Callable[[int], float | np.ndarray]:
+    """Create a simulated-annealing cooling schedule for OCN optimization.
 
-    if i <= initialNoCoolingPhase*nIter:
-    Temperature[i] = Energy[1]
+    This returns a callable ``schedule(i)`` that returns the temperature at
+    iteration ``i``. The schedule consists of a constant-temperature phase
+    followed by an exponentially decaying phase.
 
-    if initialNoCoolingPhase*nIter < i <= nIter:
-    Temperature[i] = Energy[1]*(-coolingRate*(i - InitialNocoolingPhase*nIter)/nNodes)
+    Parameters
+    ----------
+    ocn : OCN
+        The OCN instance (used to infer the number of nodes, ``rows*cols``).
+    constant_phase : float
+        Fraction of iterations (``0 <= fraction <= 1``) during which the
+        temperature remains constant at ``Energy[0]``.
+    n_iterations : int
+        Total number of optimization iterations.
+    cooling_rate : float
+        Positive decay rate controlling the exponential temperature decrease
+        after the constant phase.
 
-    where i is the index of the current iteration 
-    and Energy[1] = sum(A^expEnergy), 
-    with A denoting the vector of drainage areas corresponding to the initial state of the network. 
-    According to the simulated annealing principle, a new network configuration obtained at iteration i 
-    is accepted with probability equal to exp((Energy[i] - Energy[i-1])/Temperature[i]) 
-    if Energy[i] < Energy[i-1]. 
-    To ensure convergence, it is recommended to use coolingRate values between 0.5 and 10 and initialNoCoolingPhase <= 0.3. 
-    Low coolingRate and high initialNoCoolingPhase values cause the network configuration to depart more significantly from the initial state. 
-    If coolingRate < 0.5 and initialNoCoolingPhase > 0.1 are used, it is suggested to increase nIter with respect to the default value in order to guarantee convergence.
+    Returns
+    -------
+    Callable[[int], float] | numpy.ndarray
+        A function mapping an iteration index ``i`` to a temperature value. If
+        vectorized evaluation is used, may return a NumPy array of temperatures.
+
+    Notes
+    -----
+    The exponential phase follows the form
+
+    .. math::
+
+        T_i = E_0 \exp\left(-\frac{\text{cooling\_rate}\,(i - n_0)}{N}\right),
+
+    where ``E0`` is the initial energy, ``n0`` is the number of iterations in
+    the constant phase, and ``N = rows * cols``.
     """
     n_constant = int(constant_phase * n_iterations)
     nnodes = ocn.dims[0] * ocn.dims[1]

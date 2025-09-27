@@ -1,13 +1,6 @@
 #TODO: allow users to provide multiple DAGs that partition a space.
 """
-flowgrid.py
-
-High-level Python interface for FlowGrid structures from the libocn C library.
-
-Author: Alexander S Fox
-Copyright: (c) 2025 Alexander S Fox. All rights reserved.
-
-This file is part of the PyOCN project.
+Functions for converting between NetworkX directed graphs and FlowGrid_C structures.
 """
 
 from ctypes import byref, POINTER
@@ -163,7 +156,7 @@ def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
 
     if verbose:
         print("\tComputed node attributes (drained_area, adown, edges, downstream, visited).")
-        
+
     # check that edges do not cross each other
     for n in G.nodes:
         r, c = G.nodes[n]["pos"]

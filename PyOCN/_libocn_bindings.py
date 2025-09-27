@@ -1,22 +1,6 @@
 """
-_FlowGridC.py
-
-Bindings for the FlowGrid C library, providing ctypes-based access to C data structures and functions
-for stream graph manipulation and analysis.
-
-Classes:
-    _CartPairC    -- ctypes Structure mapping the C CartPairC struct
-    _VertexC      -- ctypes Structure mapping the C Vertex struct
-    _FlowGridC -- ctypes Structure mapping the C FlowGrid struct
-
-
-Usage:
-    Loads the shared library 'libocn' and sets up function signatures for use in Python.
-
-Author: Alexander S Fox
-Copyright: (c) 2025 Alexander S Fox. All rights reserved.
-
-This file is part of the OCN project.
+Bindings for the libocn C library, 
+providing ctypes-based access to C data structures and functions.
 """
 
 import numpy as np
