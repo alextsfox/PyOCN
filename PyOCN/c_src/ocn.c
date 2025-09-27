@@ -86,7 +86,7 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
                 continue;
             }
             // for (linidx_t i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
-            code = fg_flow_downstream_safe(G, a, 2);  // can use n_calls = 1 again because we reset visited flags
+            code = fg_flow_downstream_safe(G, a, 2);
             if (code != SUCCESS){
                 fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;

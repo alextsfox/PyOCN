@@ -1,20 +1,42 @@
-# OCN
-Program to generate optimal channel networks.
+This is a package to generate optimal channel networks, based on the algorithm described in Generation and application of river network analogues for use in ecology and evolution. Ecology and Evolution. doi:10.1002/ece3.6479 and on the OCNet R package (https://lucarraro.github.io/OCNet/).
 
-https://onlinelibrary-wiley-com.uwyo.idm.oclc.org/doi/full/10.1002/ece3.6479
+# libocn
+libocn is a C library that implements the core algorithms for generating and manipulating optimal channel networks (OCNs). It provides efficient data structures and functions to create, modify, and analyze OCNs.
 
-Let us consider a regular lattice made up of $N$ cells, where each cell represents the generic node $i$ of the network. Each node $i$ is connected via a link to one of its nearest neighbors. The energy dissipation across the $i$th network link is proportional to $Q_i \Delta h_i$, where $Q_i$ is the landscape-forming discharge in the link, and $\Delta h_i = s_i L_i$ the corresponding elevation drop, with $s_i$ identifying slope and $L_i$ link length. By assuming $Q_i \sim A_i$, where $A_i$ is the area drained by link $i$, and the slope–area relationship $s_i \sim A^{\gamma - 1}$, the functional representing total energy expenditure across a landscape formed by $N$ cells reads.
+Unlike the OCNet R package which uses an adjacency matrix implementation in R for manipulating the network (based on the SPARse Matrix library), the backend of PyOCN is the libocn C library, which uses
+a custom data structure (FlowGrid) to represent the network. This structure represents the network graph directly, as a grid of cells with associated flow directions. Each cell has an associated outflow direction (given as an integer, 0-7, representing the 8 possible directions to neighboring cells) and a list of connected neighbors (given as an 8-bit integer, where each bit indicates whether there is a connection to the corresponding neighbor). This representation allows for efficient traversal and manipulation of the network, without the overhead of storing and manipulating large adjacency matrices. libocn also implements functions to traverse and manipulate the network structure according to the simulated annealing algorithm described in the orginal paper.
 
-$$
-H = \sum_{i}^N A_i^\gamma \tag{1}
-$$
+Optimizing a 512 x 512 grid to generate an OCN takes about 30 minutes on a laptop (MacBook Pro M1 Pro, 16GB RAM). Processing a 256 x 256 grid takes about 2 minutes.
 
-Note that link lengths do not appear in the above formula, as they can be considered constant with no loss of generality. The OCN configuration is defined by an adjacency matrix $W$ whose corresponding set of drainage areas $A=[A_1,\dots,A_n]$ yields a local, dynamically accessible minimum of Equation (1). Note that the correspondence between $A$ and the adjacency matrix $W$ of a tree is subsumed by the relationship $I_N-W^TA=1$, where $I_N$ is the identity matrix of order $N$, and 1 a $N$-dimensional vector of ones.
+# PyOCN
+PyOCN is a Python package that provides a high-level interface to the libocn C library. It allows users to easily generate, manipulate, and analyze OCNs within Python. PyOCN uses the NetworkX library to expose the network graph and provides additional functions to export the graph in various formats, including as raster images.
 
-Minimization of Equation (1) is operated by means of a simulated annealing technique: starting from a feasible initial flow configuration (i.e., a spanning tree), a link at a time is rewired to one of its nearest neighbors; if the obtained configuration is a spanning tree, $H$ is computed; the new configuration is accepted if it lowers total energy expenditure; if this is not the case, the new configuration can still be accepted with a probability controlled by the cooling schedule of the simulated annealing algorithm. Such myopic search, which only explores close configurations, actually mimics the type of optimization that nature performs, at least in fluvial landscapes. Notably, restricting the search of a network yielding a minimum of Equation (1) to spanning, loopless configurations entails no approximation, because every spanning tree is a local minimum of total energy dissipation. The shape of the so-obtained OCN retains the heritage of the initial flow configuration, although the extent to which this occurs is partly controlled by the cooling schedule adopted. This underpins the concept of feasible optimality, that is, the search for dynamically accessible configurations.
+<!-- # Citing PyOCN
+If you use PyOCN in your research, please cite this software package as:
 
-Coding challanges:
-* Implement a 2D Array structre in C with basic operations (addition, subtraction, multiplication, division, negation, element access, setting, slicing, copying) (DONE)
-* Implement a spanning tree structure in C with basic operations (adding/removing edges, checking for cycles, finding paths, swapping/permuting edges)
-* Implement the OCN algorithm using simulated annealing to minimize the energy functional H
-* Implement input/output functions to read/write arrays and trees from/to files
+```
+@software{fox_pyocn_2025,
+  author = {Fox, Alexander S.},
+  title = {{PyOCN}: A Python package for generating and manipulating optimal channel networks},
+  url = {https://github.com/alexfox/pyocn},
+  version = {0.1.0},
+  date = {2025-10-01},
+} 
+```
+
+in addition to the original paper:
+
+```
+@article{carraro_generation_2020,
+	title = {Generation and application of river network analogues for use in ecology and evolution},
+	volume = {10},
+	doi = {10.1002/ece3.6479},
+	number = {14},
+	journal = {Ecology and Evolution},
+	author = {Carraro, Luca and Bertuzzo, Enrico and Fronhofer, Emanuel A. and Furrer, Reinhard and Gounand, Isabelle and Rinaldo, Andrea and Altermatt, Florian},
+	year = {2020},
+	pages = {7537--7550},
+}
+```
+
+-->

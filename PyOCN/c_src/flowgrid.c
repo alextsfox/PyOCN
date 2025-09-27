@@ -261,6 +261,7 @@ Status fg_flow_downstream_safe(FlowGrid *G, linidx_t a, uint8_t ncalls){
     while (vert.downstream != IS_ROOT){
         // if we find ourselves in a cycle, exit immediately and signal to the caller
         if (vert.visited == ncalls) return MALFORMED_GRAPH_WARNING;
+        else if ((vert.visited == ncalls - 1) && (vert.visited != 0)) return SUCCESS; // already fully visited this node in a previous call, so we can exit early
         
         vert.visited += ncalls;
         fg_set_lin(G, vert, a);  // unsafe is ok here because we already checked bounds
