@@ -55,7 +55,6 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
 
     double energy_old, energy_new;
     energy_old = G->energy;
-    bool accept_bad_value = ((double)rand() / (double)RAND_MAX) > (1 - temperature);  // Metro-Hastings criterion. High temperature = more likely to accept bad values
     
     a = rand() % (dims.row * dims.col);  // pick a random vertex
     down_new = rand() % 8;  // pick a random new downstream direction
@@ -104,7 +103,11 @@ Status ocn_single_erosion_event(StreamGraph *G, double gamma, double temperature
     ocn_update_energy(G, da_inc, a_down_new, gamma);  // increment drained area along new path
     energy_new = G->energy;
 
-    if (energy_new < energy_old || accept_bad_value) return SUCCESS;
+    // simulated annealing: accept with prob = exp(-delta_energy / temperature). note that p > 1 if energy decreases.
+    double u = (double)rand() / (double)RAND_MAX;
+    double delta_energy = energy_new - energy_old;
+    double p = exp(-delta_energy / temperature);
+    if (u < p) return SUCCESS;
 
     // reject swap: undo everything and try again
     ocn_update_energy(G, da_inc, a_down_old, gamma);  // undo the decrement

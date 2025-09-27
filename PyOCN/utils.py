@@ -1,92 +1,140 @@
-from typing import Any
-
-import numpy as np
-import matplotlib.pyplot as plt
+from __future__ import annotations
+from itertools import product
+from typing import Literal, Any, Callable, TYPE_CHECKING
 import networkx as nx
-from matplotlib.patches import ArrowStyle
-import warnings
+import numpy as np
+
+if TYPE_CHECKING:
+    from . import OCN
+
+_allowed_net_types = {"I", "H", "V", "T"}
+
+#TODO: add ability to move root?
+def net_type_to_dag(net_type:Literal["I", "H", "V", "T"], dims:tuple) -> nx.DiGraph:
+    """Create a NetworkX DiGraph representing a predefined network type and dimensions.
+    Parameters:
+        net_type (str): The type of network to create. Must be one of "I", "H", "V", "T".
+            Descriptions of allowed types:
+                "I": 
+
+                    O--O--O--O--O 
+                          |
+                    O--O--O--O--O
+                          |
+                    O--O--O--O--O
+                          |
+                    O--O--X--O--O
+
+                "V": 
+                    O  O  O  O  O 
+                     \  \ | /  /
+                    O  O  O  O  O
+                     \  \ | /  /
+                    O  O  O  O  O
+                     \  \ | /  /
+                    O--O--X--O--O
+
+                "H": 
+                    O  O  O  O 
+                    |  |  | /
+                    O  O  O--O
+                    |  | /   
+                    O  O--O--O
+                    | /     
+                    X--O--O--O
 
 
-from .ocn import OCN
 
-def _pos_to_xy(dag:nx.DiGraph) -> dict[Any, tuple[float, float]]:
-    """Convert 'pos' attributes from (row, col) to (x, y) for plotting."""
-    pos = nx.get_node_attributes(dag, 'pos')
-    nrows = max(r for r, _ in pos.values()) + 1
-    for node, (r, c) in pos.items():
-        pos[node] = (c, nrows - r - 1)  
-    return pos
-
-def plot_ocn_as_dag(ocn:OCN, attribute=None, ax=None, norm=None, **kwargs):
-    """Plot the OCN as a directed acyclic graph (DAG) using networkx.
-    
-    Parameters
-    ----------
-    ocn: OCN
-        The OCN instance to plot.
-    attribute: str, optional
-        Node attribute to coloring nodes by (e.g., 'drained_area' or 'energy').
-    ax: matplotlib axes, optional
-        Axes to plot on. If None, a new figure and axes are created.
-    norm: matplotlib.colors.Normalize, optional
-        Normalization for node colors if attribute is specified.
-    **kwargs: additional keyword arguments (e.g. cmap, vmin, vmax).
+                "T": Channels flowing towards the center from three corners.
+        dims (tuple): A tuple of two positive even integers specifying the dimensions of the network (rows, columns).
     """
-    
-    dag = ocn.to_digraph()
-    pos = _pos_to_xy(dag)
+    rows, cols = dims
+    G = nx.DiGraph()
+    match net_type:
+        case "I":
+            jroot = cols // 2
+            for i, j in product(range(rows), range(cols)):
+                n = i*cols + j
+                G.add_node(n, pos=(i, j))
+                if j < jroot:
+                    G.add_edge(n, n+1)
+                elif j > jroot:
+                    G.add_edge(n, n-1)
+                elif i > 0:
+                    G.add_edge(n, n - cols)
 
-    if ax is None:
-        _, ax = plt.subplots()
-
-    node_color = "C0"
-    if attribute is not None:
-        node_color = list(nx.get_node_attributes(dag, attribute).values())
-
-    if norm is not None:
-        if ("vmin" in kwargs or "vmax" in kwargs):
-            warnings.warn("norm is specified, ignoring vmin/vmax.")
-        kwargs["vmin"] = 0
-        kwargs["vmax"] = 1
-        node_color = norm(node_color)
-
-    p = nx.draw_networkx(dag, node_color=node_color, pos=pos, ax=ax, **kwargs)
-    return p, ax
-
-def plot_ocn_energy_raster(ocn:OCN, ax=None, **kwargs):
-    """Plot a raster of the OCN, colored by cell energy.
-    
-    Parameters
-    ----------
-    ocn: OCN
-        The OCN instance to plot.
-    ax: matplotlib axes, optional
-        Axes to plot on. If None, a new figure and axes are created.
-    **kwargs: additional keyword arguments passed to pcolormesh.
-    """
-
-    dag = ocn.to_digraph()
-    energy = np.zeros(ocn.dims)
-    for node in dag.nodes:
-        r, c = dag.nodes[node]['pos']
-        energy[r, c] = dag.nodes[node]['energy']
-
-    if "cmap" not in kwargs:
-        kwargs["cmap"] = "terrain"
+        case "V":
+            jroot = cols // 2
+            for i, j in product(range(rows), range(cols)):
+                n = i*cols + j
+                G.add_node(n, pos=(i, j))
+                if i > 0:
+                    if j < jroot:
+                        G.add_edge(n, n - cols + 1)
+                    elif j > jroot:
+                        G.add_edge(n, n - cols - 1)
+                    else:
+                        G.add_edge(n, n - cols)
+                else:
+                    if j < jroot:
+                        G.add_edge(n, n + 1)
+                    elif j > jroot:
+                        G.add_edge(n, n - 1)
+        case "H": # hip roof is like V, but flowing towards a corner.
+            for i, j in product(range(rows), range(cols)):
+                n = i*cols + j
+                G.add_node(n, pos=(i, j))
+                if i == j and i > 0:  # main diagonal
+                    G.add_edge(n, n - cols - 1)
+                elif i > j:
+                    G.add_edge(n, n - cols)
+                elif j > i:
+                    G.add_edge(n, n - 1)
+        case "T":
+            raise NotImplementedError("T net type not yet implemented.")
+        case _:
+            raise ValueError(f"Invalid net_type {net_type}. Must be one of {_allowed_net_types}.")
         
-    if ax is None:
-        _, ax = plt.subplots()
+    return G
 
-    ax.imshow(energy, **kwargs)
-    return ax
+def create_cooling_schedule(
+    ocn:OCN,
+    constant_phase:float, 
+    n_iterations:int, 
+    cooling_rate:float, 
+) -> Callable[[int], float|np.ndarray]:
+    """
+    Simulated annealing temperature. 
+    The function that expresses the temperature of the simulated annealing process is as follows:
+
+    if i <= initialNoCoolingPhase*nIter:
+    Temperature[i] = Energy[1]
+
+    if initialNoCoolingPhase*nIter < i <= nIter:
+    Temperature[i] = Energy[1]*(-coolingRate*(i - InitialNocoolingPhase*nIter)/nNodes)
+
+    where i is the index of the current iteration 
+    and Energy[1] = sum(A^expEnergy), 
+    with A denoting the vector of drainage areas corresponding to the initial state of the network. 
+    According to the simulated annealing principle, a new network configuration obtained at iteration i 
+    is accepted with probability equal to exp((Energy[i] - Energy[i-1])/Temperature[i]) 
+    if Energy[i] < Energy[i-1]. 
+    To ensure convergence, it is recommended to use coolingRate values between 0.5 and 10 and initialNoCoolingPhase <= 0.3. 
+    Low coolingRate and high initialNoCoolingPhase values cause the network configuration to depart more significantly from the initial state. 
+    If coolingRate < 0.5 and initialNoCoolingPhase > 0.1 are used, it is suggested to increase nIter with respect to the default value in order to guarantee convergence.
+    """
+    n_constant = int(constant_phase * n_iterations)
+
+    constant_phase = np.full(n_constant, ocn.energy)
+
+    # Second part: cooling phase with exponential decay
+    remaining_iters = n_iterations - n_constant
+    iter_indices = np.arange(1, remaining_iters + 1)
+    cooling_phase = ocn.energy * np.exp(-cooling_rate * iter_indices / (ocn.dims[0] * ocn.dims[1]))
+
+    temperature_schedule = np.concatenate([constant_phase, cooling_phase])
+
+    def schedule(i):
+        return temperature_schedule[i]
     
-
-def plot_positional_digraph(dag:nx.DiGraph, ax=None, **kwargs):
-    """Plot a directed acyclic graph (DAG) with nodes positioned according to their 'pos' attribute and sized by drained area."""
-    pos = _pos_to_xy(dag)
-
-    if ax is None:
-        _, ax = plt.subplots()
-
-    p = nx.draw_networkx(dag, pos=pos, ax=ax, **kwargs)
-    return p, ax
+    return schedule

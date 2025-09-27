@@ -10,6 +10,7 @@ This file is part of the PyOCN project.
 """
 
 from itertools import product
+import warnings
 
 from ctypes import byref
 import ctypes
@@ -20,101 +21,14 @@ import networkx as nx
 import numpy as np
 from tqdm import tqdm
 
+
 from ._statushandler import check_status
+from .utils import create_cooling_schedule, net_type_to_dag
 from . import _libocn_bindings as _bindings
 from . import _streamgraph_convert as sgconv
-
-_allowed_net_types = {"I", "H", "V", "T"}
-
-#TODO: add ability to move root?
-def net_type_to_dag(net_type:Literal["I", "H", "V", "T"], dims:tuple) -> nx.DiGraph:
-    """Create a NetworkX DiGraph representing a predefined network type and dimensions.
-    Parameters:
-        net_type (str): The type of network to create. Must be one of "I", "H", "V", "T".
-            Descriptions of allowed types:
-                "I": 
-
-                    O--O--O--O--O 
-                          |
-                    O--O--O--O--O
-                          |
-                    O--O--O--O--O
-                          |
-                    O--O--X--O--O
-
-                "V": 
-                    O  O  O  O  O 
-                     \  \ | /  /
-                    O  O  O  O  O
-                     \  \ | /  /
-                    O  O  O  O  O
-                     \  \ | /  /
-                    O--O--X--O--O
-
-                "H": 
-                    O  O  O  O 
-                    |  |  | /
-                    O  O  O--O
-                    |  | /   
-                    O  O--O--O
-                    | /     
-                    X--O--O--O
-
-
-
-                "T": Channels flowing towards the center from three corners.
-        dims (tuple): A tuple of two positive even integers specifying the dimensions of the network (rows, columns).
-    """
-    rows, cols = dims
-    G = nx.DiGraph()
-    match net_type:
-        case "I":
-            jroot = cols // 2
-            for i, j in product(range(rows), range(cols)):
-                n = i*cols + j
-                G.add_node(n, pos=(i, j))
-                if j < jroot:
-                    G.add_edge(n, n+1)
-                elif j > jroot:
-                    G.add_edge(n, n-1)
-                elif i > 0:
-                    G.add_edge(n, n - cols)
-
-        case "V":
-            jroot = cols // 2
-            for i, j in product(range(rows), range(cols)):
-                n = i*cols + j
-                G.add_node(n, pos=(i, j))
-                if i > 0:
-                    if j < jroot:
-                        G.add_edge(n, n - cols + 1)
-                    elif j > jroot:
-                        G.add_edge(n, n - cols - 1)
-                    else:
-                        G.add_edge(n, n - cols)
-                else:
-                    if j < jroot:
-                        G.add_edge(n, n + 1)
-                    elif j > jroot:
-                        G.add_edge(n, n - 1)
-        case "H": # hip roof is like V, but flowing towards a corner.
-            for i, j in product(range(rows), range(cols)):
-                n = i*cols + j
-                G.add_node(n, pos=(i, j))
-                if i == j and i > 0:  # main diagonal
-                    G.add_edge(n, n - cols - 1)
-                elif i > j:
-                    G.add_edge(n, n - cols)
-                elif j > i:
-                    G.add_edge(n, n - 1)
-        case "T":
-            raise NotImplementedError("T net type not yet implemented.")
         
-    return G
-        
-
 class OCN():
-    def __init__(self, dag:nx.DiGraph, gamma:float=0.5, annealing_schedule:float|Callable=None, random_state=None):
+    def __init__(self, dag:nx.DiGraph, gamma:float=0.5, random_state=None):
         """
         Main class for working with Optimized Channel Networks (OCNs). 
         Provides a high-level interface to the `libocn` C library.
@@ -125,7 +39,6 @@ class OCN():
 
         All constructors take an initilization structure (net_type + dims, or dag) and the following:
             - gamma (float): The gamma parameter for energy calculations. Default is 0.5.
-            - annealing_schedule (float, callable): Either (a) A function that takes the iteration number as the first positional argument and returns the temperature or (b) a constant temperature, between 0 and 1. Default is 0.0 (only accept energy-lowering moves).
             - random_state (int, np.random.Generator, or None): Any legal input to np.random.default_rng. Used to seed the internal random number generator. Default is None (unpredictable).
 
         Refer to the documentation for each constructor for details on the initialization structures.
@@ -137,19 +50,6 @@ class OCN():
         if not (0 <= gamma <= 1):
             raise ValueError(f"gamma must be in the range [0, 1]. got {gamma}")
         self.gamma = gamma
-
-        self.annealing_schedule = lambda _: 0.0
-        if (
-            not isinstance(annealing_schedule, Number) 
-            and not callable(annealing_schedule)
-        ):
-            raise TypeError(f"annealing_schedule must be a callable or a scalar, got {type(annealing_schedule)}")
-        if isinstance(annealing_schedule, Number):
-            if not (0 <= annealing_schedule <= 1):
-                raise ValueError(f"If annealing_schedule is a scalar, it must be in the range [0, 1], got {annealing_schedule}")
-            self.annealing_schedule = lambda _: annealing_schedule
-        elif callable(annealing_schedule):
-            self.annealing_schedule = annealing_schedule
         
         rng = np.random.default_rng(random_state)
         seed = rng.integers(0, int(2**32 - 1))
@@ -160,7 +60,7 @@ class OCN():
         self.__p_c_graph.contents.energy = self.compute_energy()
 
     @classmethod
-    def from_net_type(cls, net_type:str, dims:tuple, gamma=0.5, annealing_schedule=0.0, random_state=None):
+    def from_net_type(cls, net_type:str, dims:tuple, gamma=0.5, random_state=None):
         """
         Initialize from a predefined network type and dimensions.
         
@@ -170,11 +70,8 @@ class OCN():
                     .....
             dims (tuple): A tuple of two positive even integers specifying the dimensions of the network (rows, columns).
             gamma (float)
-            annealing_schedule (float, callable)
             random_state (int, np.random.Generator, or None)
         """
-        if not isinstance(net_type, str) or net_type not in _allowed_net_types:
-            raise ValueError(f"net_type must be one of {_allowed_net_types}, got {net_type}")
         if not isinstance(dims, tuple): raise TypeError(f"dims must be a tuple of two positive even integers, got {type(dims)}")
         if not (
             len(dims) == 2 
@@ -182,16 +79,15 @@ class OCN():
         ):
             raise ValueError(f"dims must be a tuple of two positive even integers, got {dims}")
         dag = net_type_to_dag(net_type, dims)
-        return cls(dag, gamma, annealing_schedule, random_state)
+        return cls(dag, gamma, random_state)
 
     @classmethod
-    def from_digraph(cls, dag:nx.DiGraph, gamma=0.5, annealing_schedule=0.0, random_state=None):
+    def from_digraph(cls, dag:nx.DiGraph, gamma=0.5, random_state=None):
         """
         Initialize from an existing NetworkX DiGraph.
         Parameters:
             dag (nx.DiGraph): An existing directed acyclic graph (DAG) representing the stream network. Be a valid DAG for a StreamGraph (see StreamGraph for details). Additionally, must have even dimensions and at least 4 vertices.
             gamma (float)
-            annealing_schedule (float, callable)
             random_state (int, np.random.Generator, or None)
 
         Notes:
@@ -203,7 +99,7 @@ class OCN():
             * Edges cannot cross each other in the row-column plane.
             * The grid dimensions (m, n) must both be even integers.
         """
-        return cls(dag, gamma, annealing_schedule, random_state)
+        return cls(dag, gamma, random_state)
 
     def __repr__(self):
         #TODO: too verbose?
@@ -220,7 +116,6 @@ class OCN():
         return (
             object.__sizeof__(self) +
             self.gamma.__sizeof__() +
-            self.annealing_schedule.__sizeof__() +
             ctypes.sizeof(_bindings.StreamGraph_C) + ctypes.sizeof(_bindings.Vertex_C)*(self.dims[0]*self.dims[1])
         )
     
@@ -289,22 +184,76 @@ class OCN():
             temperature
         ))
 
-    def outer_ocn_loop(self, n_iterations:int, max_iterations_per_loop:int=100):
+    def fit(
+        self,
+        n_iterations:int=None,
+        cooling_rate:float=1.0,
+        constant_phase:float=0.0,
+        pbar:bool=True,
+        max_iterations_per_loop:int=2_500,
+    ):
         """
-        Performs multiple erosion events with an annealing schedule. If n_iterations is large (>max_iterations_per_loop), this will break the processing into chunks to avoid excessive memory usage.
-        Parameters:
-            n_iterations (int): The number of erosion events to perform.
-            max_iterations_per_loop (int): The maximum number of iterations to perform in a single call to the underlying C function. Default is 1000.
-        """
+        Optimize the OCN using simulated annealing. This method simulated n_iterations erosion events, using a simulated annealing algorithm to accept or reject each event.
 
+        
+        ## Simulated annealing algorithm details:
+
+        At each iteration, a single erosion event is proposed, and the change in energy $\Delta E$ is computed.
+        Erosion events are accepted or rejected with probability:
+
+        $$
+        P(accept) = e^{-\Delta E / T}
+        $$
+
+        Where $T$ is the current temperature, which is held constant for a short time after initialization, before decaying exponentially:
+
+        $$
+        T(i) =
+        \begin{cases}
+        E_0 & \text{if } i < C \cdot N \\
+        E_0 \cdot e^{i - C \cdot N} & \mathrm{if } i \geq C \cdot N
+        \end{cases}
+        $$
+
+        Where $E_0$ is the initial energy of the OCN, $N$ is the total number of iterations, and $i$ is the current iteration.
+
+        Note that changes that decrease energy are always accepted, since $P(accept) > 1$ for $\Delta E < 0$.
+
+        To ensure convergence, it is recommended to use a cooling rate between 0.5 and 10 and a constant phase <= 0.3. 
+        A slow cooling rate and long constant phase can cause the network configuration to depart more significantly from the initial state. 
+        If cooling_rate < 0.5 and constant_phase > 0.1 are used, it is suggested to increase n_iterations with respect to the default value in order to guarantee convergence.
+
+
+        Parameters:
+            n_iterations (int, optional): Total number of iterations to perform. Default is 40 * rows * columns.
+            cooling_rate (float): The cooling rate for the annealing schedule. Must be in [0, 1]. Default is 1.0.
+            constant_phase (float): The fraction of the total iterations to spend at constant temperature before cooling begins. Must be in [0, 1]. Default is 0.0 (start cooling immediately).
+            pbar (bool): Whether to display a progress bar. Default is True.
+            max_iterations_per_loop (int): Maximum number of iterations to perform per block. Default is 2,500. This limits memory usage when optimizing large OCNs.
+        """
+        if n_iterations is None:
+            n_iterations = int(40*self.dims[0]*self.dims[1])
+        if not (isinstance(n_iterations, int) and n_iterations > 0):
+            raise ValueError(f"n_iterations must be a positive integer, got {n_iterations}")
+        
+        cooling_schedule = create_cooling_schedule(
+            ocn=self,
+            constant_phase=constant_phase,
+            n_iterations=n_iterations,
+            cooling_rate=cooling_rate,
+        )
+
+        if (cooling_rate < 0.5 or constant_phase > 0.1) and n_iterations <= 50*self.dims[0]*self.dims[1]:
+            warnings.warn("Using cooling_rate < 0.5 and constant_phase > 0.1 with may cause convergence issues. Consider increasing n_iterations.")
+            
         completed_iterations = 0
-        with tqdm(total=n_iterations, desc="OCN Optimization") as pbar:
-            pbar.set_postfix({"H": self.energy})
+        with tqdm(total=n_iterations, desc="OCN Optimization", unit_scale=True, dynamic_ncols=True, disable=not pbar) as pbar:
+            pbar.set_postfix({"Energy": self.energy})
             pbar.update(0)
             
             while completed_iterations < n_iterations:
                 iterations_this_loop = min(max_iterations_per_loop, n_iterations - completed_iterations)
-                temperatures = [self.annealing_schedule(t) for t in range(completed_iterations, completed_iterations + iterations_this_loop)]
+                temperatures = cooling_schedule(range(completed_iterations, completed_iterations + iterations_this_loop))
                 temp_array = (ctypes.c_double * iterations_this_loop)(*temperatures)  # ctypes syntax for creating a C-compatible array from an iterable.
                 check_status(_bindings.libocn.ocn_outer_ocn_loop(
                     self.__p_c_graph, 
@@ -314,7 +263,7 @@ class OCN():
                 ))
                 completed_iterations += iterations_this_loop
                 
-                pbar.set_postfix({"H": self.energy})
+                pbar.set_postfix({"Energy": self.energy})
                 pbar.update(iterations_this_loop)
         
 

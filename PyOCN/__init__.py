@@ -1,10 +1,12 @@
 from .ocn import OCN
-from .utils import plot_ocn_as_dag, plot_positional_digraph, plot_ocn_energy_raster
+from .plotting import plot_ocn_as_dag, plot_positional_digraph, plot_ocn_energy_raster
+from .utils import net_type_to_dag
 
 __all__ = [
     "OCN", 
     "streamgraph", 
     "plot_ocn_as_dag", 
     "plot_positional_digraph", 
-    "plot_ocn_energy_raster"
+    "plot_ocn_energy_raster",
+    "net_type_to_dag",
 ]
