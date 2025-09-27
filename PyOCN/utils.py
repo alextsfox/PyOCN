@@ -3,6 +3,7 @@ from itertools import product
 from typing import Literal, Any, Callable, TYPE_CHECKING
 import networkx as nx
 import numpy as np
+from tqdm import tqdm
 
 if TYPE_CHECKING:
     from . import OCN
@@ -10,7 +11,7 @@ if TYPE_CHECKING:
 _allowed_net_types = {"I", "H", "V", "T"}
 
 #TODO: add ability to move root?
-def net_type_to_dag(net_type:Literal["I", "H", "V", "T"], dims:tuple) -> nx.DiGraph:
+def net_type_to_dag(net_type:Literal["I", "H", "V", "T"], dims:tuple, pbar=False) -> nx.DiGraph:
     """Create a NetworkX DiGraph representing a predefined network type and dimensions.
     Parameters:
         net_type (str): The type of network to create. Must be one of "I", "H", "V", "T".
@@ -50,10 +51,11 @@ def net_type_to_dag(net_type:Literal["I", "H", "V", "T"], dims:tuple) -> nx.DiGr
     """
     rows, cols = dims
     G = nx.DiGraph()
+    pbar = tqdm(product(range(rows), range(cols)), total=rows*cols, disable=not pbar, desc="Creating DAG")
     match net_type:
         case "I":
             jroot = cols // 2
-            for i, j in product(range(rows), range(cols)):
+            for i, j in pbar:
                 n = i*cols + j
                 G.add_node(n, pos=(i, j))
                 if j < jroot:
@@ -65,7 +67,7 @@ def net_type_to_dag(net_type:Literal["I", "H", "V", "T"], dims:tuple) -> nx.DiGr
 
         case "V":
             jroot = cols // 2
-            for i, j in product(range(rows), range(cols)):
+            for i, j in pbar:
                 n = i*cols + j
                 G.add_node(n, pos=(i, j))
                 if i > 0:
@@ -81,7 +83,7 @@ def net_type_to_dag(net_type:Literal["I", "H", "V", "T"], dims:tuple) -> nx.DiGr
                     elif j > jroot:
                         G.add_edge(n, n - 1)
         case "H": # hip roof is like V, but flowing towards a corner.
-            for i, j in product(range(rows), range(cols)):
+            for i, j in pbar:
                 n = i*cols + j
                 G.add_node(n, pos=(i, j))
                 if i == j and i > 0:  # main diagonal
@@ -124,17 +126,14 @@ def create_cooling_schedule(
     If coolingRate < 0.5 and initialNoCoolingPhase > 0.1 are used, it is suggested to increase nIter with respect to the default value in order to guarantee convergence.
     """
     n_constant = int(constant_phase * n_iterations)
+    nnodes = ocn.dims[0] * ocn.dims[1]
 
-    constant_phase = np.full(n_constant, ocn.energy)
+    term1 = -cooling_rate / nnodes
+    term2 = cooling_rate * n_constant / nnodes
 
-    # Second part: cooling phase with exponential decay
-    remaining_iters = n_iterations - n_constant
-    iter_indices = np.arange(1, remaining_iters + 1)
-    cooling_phase = ocn.energy * np.exp(-cooling_rate * iter_indices / (ocn.dims[0] * ocn.dims[1]))
-
-    temperature_schedule = np.concatenate([constant_phase, cooling_phase])
+    e0 = ocn.energy
 
     def schedule(i):
-        return temperature_schedule[i]
-    
+        return np.where(i < n_constant, e0, e0 * np.exp(term1*i + term2))
+
     return schedule

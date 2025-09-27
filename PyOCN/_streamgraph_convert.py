@@ -15,142 +15,19 @@ from itertools import product
 
 from numpy import integer as np_integer
 import networkx as nx
+from tqdm import tqdm
+import numpy as np
 
 from ._statushandler import check_status
 from . import _libocn_bindings as _bindings
 
-# class StreamGraph:
-#     def __init__(self, dag:nx.DiGraph):
-#         """
-#         The StreamGraph class acts as a view into the underlying C StreamGraph structure.
-
-#         To instantiate a new StreamGraph, provide a NetworkX directed graph (nx.DiGraph object) satisfying certain properties:
-#             * Is a directed acyclic graph (ie. no cycles)
-#             * Each node has at least one attribute, `pos`, which is a (row:int, col:int) tuple giving the location of the node in a grid.
-#             * The graph must be a spanning tree over a dense grid of size (m x n). ie. each cell in the grid has exactly one node, each node has `out_degree=1` except the root node, which has `out_degree=0`.  TODO: relax this?
-#             * Each node can only connect to one of its 8 neighboring cells (cardinal or diagonal adjacency). ie. edges cannot "skip" over rows or columns.
-#             * Edges cannot cross each other in the row-column plane.
-
-#             These constraints are checked when initializing from a DiGraph, throwing an exception if any are violated.
-
-#         Attributes:
-#             dag (nx.DiGraph): The stream graph represented as a NetworkX DiGraph. Nodes in dag always have the following attributes:
-#                 - pos (tuple[int, int]): The (row, column) position of the node in the grid.
-#                 - drained_area (int): The total drained area (number of nodes, including itself) upstream of the node.
-#                 - any additional attributes provided by the user are preserved.
-#             root (tuple[int, int]): The (row, column) position of the root node.
-#             dims (tuple[int, int]): The dimensions of the graph as (rows, columns).
-#             size (int): The total number of vertices in the graph.
-
-#         Important note regarding this class: StreamGraph is intended to act as a view into the underlying C StreamGraph structure, and is not intended to be modified directly.
-        
-#         Important note regarding the dag attribute:
-#         Internal changes to the attributes of .dag will not be reflected in the fundamental StreamGraph structure.
-#         To update the internal state of the StreamGraph, you should explicitly set the .dag attribute.
-
-#         If modification of the .dag throws an exception, the underlying structure will remain unchanged.
-
-#         Example:
-#             sg = StreamGraph(dag)
-            
-#             # WRONG: this will *not* work as expected
-#             # sg.dag.add_edge(5, 10)
-            
-#             # CORRECT:
-#             nx_dag = sg.dag
-#             nx_dag.add_edge(5, 10)
-#             sg.dag = nx_dag
-#         """
-#         (
-#             self._p_c_graph_graph, 
-#             self._dag, 
-#             self._dims, 
-#             self._size, 
-#             self._root 
-#         ) = self._convert_dag(dag)
-
-#     def _convert_dag(self, dag:nx.DiGraph) -> tuple[POINTER, nx.DiGraph, tuple[int, int], int, tuple[int, int]]:
-#         """Helper class to convert a nx.DiGraph into a StreamGraph_C structure and extract metadata."""
-#         p_c_graph = from_digraph(dag)
-#         dag = dag
-#         dims = (
-#             int(p_c_graph.contents.dims.row), 
-#             int(p_c_graph.contents.dims.col)
-#         )
-#         size = dims[0] * dims[1]
-#         root = (
-#             int(p_c_graph.contents.root.row), 
-#             int(p_c_graph.contents.root.col)
-#         )
-#         return p_c_graph, dag, dims, size, root
-    
-#     def __sizeof__(self):
-#         return (
-#             object.__sizeof__(self) +
-#             self._dag.__sizeof__() + 
-#             self._dims.__sizeof__() +
-#             self._size.__sizeof__() +
-#             self._root.__sizeof__() +
-#             ctypes.sizeof(_bindings.StreamGraph_C) + ctypes.sizeof(_bindings.Vertex_C)*self.size
-#         )
-
-#     def __repr__(self):
-#         sg_id = f"0x{id(self):x}"
-#         graph_id = "NULL"
-#         vertices_id = "NULL"
-#         if self._p_c_graph_graph:
-#             graph_id = f"0x{self._p_c_graph_graph.value:x}"
-#             if self._p_c_graph_graph.contents.vertices:
-#                 vertices_id = f"0x{self._p_c_graph_graph.contents.vertices.value:x}"
-#         return f"<PyOCN.StreamGraph object at {sg_id} with graph={graph_id} and vertices={vertices_id}>"
-#     def __str__(self):
-#         return f"StreamGraph(dims={self.dims}, root={self.root}, dag={self.dag})"
-    
-
-#     @property
-#     def dag(self) -> nx.DiGraph:
-#         return self._to_networkx() 
-
-#     @property
-#     def dims(self) -> tuple[int, int]: return self._dims
-#     @property
-#     def size(self) -> int: return self._size
-#     @property
-#     def root(self) -> tuple[int, int]: return self._root
-
-#     def _to_networkx(self) -> nx.DiGraph:
-#         """Convert the StreamGraph to a NetworkX directed graph."""
-#         dag = nx.DiGraph()
-#         vert_c = _bindings.Vertex_C()
-#         for r, c in itertools.product(range(self.dims[0]), range(self.dims[1])):
-#             a = _bindings.libocn.sg_cart_to_lin(
-#                 _bindings.CartPair_C(row=r, col=c), 
-#                 self._p_c_graph_graph.contents.dims
-#             )
-#             check_status(_bindings.libocn.sg_get_lin_safe(
-#                 byref(vert_c), 
-#                 self._p_c_graph_graph,
-#                 a,
-#             ))
-#             dag.add_node(
-#                 a, 
-#                 pos=(r, c), 
-#                 drained_area=vert_c.drained_area,
-#                 _adown=vert_c.adown,
-#                 _edges=vert_c.edges,
-#                 _downstream=vert_c.downstream,
-#                 _visited=vert_c.visited,
-#             )
-#             if vert_c.downstream != _bindings.IS_ROOT:
-#                 dag.add_edge(a, vert_c.adown)
-        
-#         return dag
-
 def to_digraph(c_graph:_bindings.StreamGraph_C) -> nx.DiGraph:
         """Convert the StreamGraph_C to a NetworkX directed graph."""
+
         dag = nx.DiGraph()
         vert_c = _bindings.Vertex_C()
-        for r, c in product(range(c_graph.dims.row), range(c_graph.dims.col)):
+        pbar = product(range(c_graph.dims.row), range(c_graph.dims.col))
+        for r, c in pbar:
             a = _bindings.libocn.sg_cart_to_lin(
                 _bindings.CartPair_C(row=r, col=c), 
                 c_graph.dims
@@ -174,19 +51,26 @@ def to_digraph(c_graph:_bindings.StreamGraph_C) -> nx.DiGraph:
         
         return dag
 
-def from_digraph(G: nx.DiGraph) -> POINTER:
+def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
     """
     Convert a NetworkX directed graph into a StreamGraph_C. Called by the OCN constructor.
     Returns:
         p_c_graph: pointer to the created C StreamGraph structure.
     """
-    
+
+    if verbose:
+        print("Converting DiGraph to StreamGraph_C...")
+        print("--------------------------------------")
+
     # TODO modify for the possibility of multiple input graphs
     # is a DAG
     if not isinstance(G, nx.DiGraph):
         raise TypeError(f"G must be a networkx.DiGraph, got {type(G)}")
     if not nx.is_directed_acyclic_graph(G):
         raise ValueError("Graph must be a DAG.")
+    
+    if verbose:
+        print("\tGraph is a directed acyclic graph.")
     
     # TODO: modify for the possibility of multiple input graphs
     # pos attribute is valid
@@ -202,15 +86,20 @@ def from_digraph(G: nx.DiGraph) -> POINTER:
     ):
         raise ValueError("All graph node 'pos' attributes must be non-negative (row:int, col:int) tuples.")
     
+    if verbose:
+        print("\tGraph 'pos' attributes are valid.")
 
     # TODO: modify for the possibility of multiple input graphs
     # spans a dense grid
     rows, cols = max(p[0] for p in pos) + 1, max(p[1] for p in pos) + 1
-    for r, c in product(range(rows), range(cols)):
-        if (r, c) not in pos:
-            raise ValueError(f"Graph does not cover a dense {rows}x{cols} grid. Missing position ({r}, {c}).")
+
+    if set(product(range(rows), range(cols))).difference(set(pos)):
+        raise ValueError(f"Graph does not cover a dense {rows}x{cols} grid.")
     if len(G.nodes) != rows * cols:
         raise ValueError(f"Graph does not cover a dense {rows}x{cols} grid (expected {rows*cols} nodes, got {len(G.nodes)}).")
+
+    if verbose:
+        print(f"\tGraph covers a dense {rows}x{cols} grid.")
 
     # TODO modify for the possibility of multiple input graphs
     # is a spanning tree
@@ -220,6 +109,9 @@ def from_digraph(G: nx.DiGraph) -> POINTER:
     if len(roots) != 1:
         raise ValueError(f"Graph must be a spanning tree (graph must have exactly one root (out_degree=0)). Found {len(roots)}.")
     
+    if verbose:
+        print("\tGraph is a spanning tree.")
+
     # TODO modify for the possibility of multiple input graphs
     # edges only connect to adjacent nodes (no skipping)
     for u, v in G.edges:
@@ -228,6 +120,8 @@ def from_digraph(G: nx.DiGraph) -> POINTER:
         if max(abs(r1 - r2), abs(c1 - c2)) != 1:
             raise ValueError(f"Edge ({u}->{v}) connects non-adjacent nodes at positions {(r1,c1)} and {(r2,c2)}.")
     
+    if verbose:
+        print("\tEdges connect only to adjacent nodes).")
 
     # TODO modify for the possibility of multiple input graphs
     # compute the drained area, adown, edges, downstream, and visited attributes for each node.
@@ -273,6 +167,9 @@ def from_digraph(G: nx.DiGraph) -> POINTER:
                 _bindings.CartPair_C(row=rows, col=cols)
             )
 
+    if verbose:
+        print("\tComputed node attributes (drained_area, adown, edges, downstream, visited).")
+
     # TODO modify for the possibility of multiple input graphs
     # check that edges do not cross each other
     for n in G.nodes:
@@ -302,6 +199,9 @@ def from_digraph(G: nx.DiGraph) -> POINTER:
         ):
             raise ValueError(f"Edge ({n}->{succs[0]}) crosses edge from node at position {(r_check, c_check)}.")
 
+    if verbose:
+        print("\tChecked for crossing edges.")
+
     # By now, the graph is validated and has all necessary attributes to create the C StreamGraph structure.
     p_c_graph = _bindings.libocn.sg_create_empty_safe(_bindings.CartPair_C(row=rows, col=cols))
     if not p_c_graph:
@@ -330,9 +230,13 @@ def from_digraph(G: nx.DiGraph) -> POINTER:
     p_c_graph.contents.root = _bindings.CartPair_C(row=G.nodes[roots[0]]["pos"][0], col=G.nodes[roots[0]]["pos"][1])
     
     # do not set energy
+
+    if verbose:
+        print("\tSuccessfully created StreamGraph_C from DiGraph.")
+
     return p_c_graph
 
-def validate_digraph(dag:nx.DiGraph) -> bool|str:
+def validate_digraph(dag:nx.DiGraph, verbose:bool=False) -> bool|str:
     """
     Validate the integrity of a StreamGraph.
 
@@ -343,14 +247,14 @@ def validate_digraph(dag:nx.DiGraph) -> bool|str:
         either True if valid, or an error message string if invalid.
     """
     try:
-        p_c_graph = from_digraph(dag)
+        p_c_graph = from_digraph(dag, verbose=verbose)
         _bindings.libocn.sg_destroy_safe(p_c_graph)
         p_c_graph = None
     except Exception as e:  # _digraph_to_streamgraph_c will destroy p_c_graph on failure
         return str(e)
     return "Graph is valid."
 
-def validate_streamgraph(c_graph:_bindings.StreamGraph_C) -> bool|str:
+def validate_streamgraph(c_graph:_bindings.StreamGraph_C, verbose:bool=False) -> bool|str:
     """
     Validate the integrity of a StreamGraph_C structure.
 
@@ -361,8 +265,8 @@ def validate_streamgraph(c_graph:_bindings.StreamGraph_C) -> bool|str:
         either True if valid, or an error message string if invalid.
     """
     try:
-        dag = to_digraph(c_graph)
-        p_c_graph = from_digraph(dag)
+        dag = to_digraph(c_graph, verbose=verbose)
+        p_c_graph = from_digraph(dag, verbose=verbose)
         _bindings.libocn.sg_destroy_safe(p_c_graph)
         p_c_graph = None
     except Exception as e:  # _digraph_to_streamgraph_c will destroy p_c_graph on failure

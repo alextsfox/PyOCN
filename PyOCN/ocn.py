@@ -28,7 +28,7 @@ from . import _libocn_bindings as _bindings
 from . import _streamgraph_convert as sgconv
         
 class OCN():
-    def __init__(self, dag:nx.DiGraph, gamma:float=0.5, random_state=None):
+    def __init__(self, dag:nx.DiGraph, gamma:float=0.5, random_state=None, verbosity:int=0):
         """
         Main class for working with Optimized Channel Networks (OCNs). 
         Provides a high-level interface to the `libocn` C library.
@@ -40,6 +40,7 @@ class OCN():
         All constructors take an initilization structure (net_type + dims, or dag) and the following:
             - gamma (float): The gamma parameter for energy calculations. Default is 0.5.
             - random_state (int, np.random.Generator, or None): Any legal input to np.random.default_rng. Used to seed the internal random number generator. Default is None (unpredictable).
+            - verbosity (int): Level of verbosity for libocn output. Ranges from 0-2. Default is 0 (no output). Higher values produce more output.
 
         Refer to the documentation for each constructor for details on the initialization structures.
         """
@@ -56,11 +57,12 @@ class OCN():
         _bindings.libocn.rng_seed(seed)
 
         # instantiate the StreamGraph_C and assign an initial energy.
-        self.__p_c_graph = sgconv.from_digraph(dag)
+        self.verbosity = verbosity
+        self.__p_c_graph = sgconv.from_digraph(dag, verbose=(verbosity > 1))
         self.__p_c_graph.contents.energy = self.compute_energy()
 
     @classmethod
-    def from_net_type(cls, net_type:str, dims:tuple, gamma=0.5, random_state=None):
+    def from_net_type(cls, net_type:str, dims:tuple, gamma=0.5, random_state=None, verbosity:int=0):
         """
         Initialize from a predefined network type and dimensions.
         
@@ -78,11 +80,14 @@ class OCN():
             and all(isinstance(d, int) and d > 0 and d % 2 == 0 for d in dims)
         ):
             raise ValueError(f"dims must be a tuple of two positive even integers, got {dims}")
+        
+        if verbosity == 1: print(f"Creating {net_type} network DiGraph with dimensions {dims}...", end="")
         dag = net_type_to_dag(net_type, dims)
-        return cls(dag, gamma, random_state)
+        if verbosity == 1: print(" Done.")
+        return cls(dag, gamma, random_state, verbosity=verbosity)
 
     @classmethod
-    def from_digraph(cls, dag:nx.DiGraph, gamma=0.5, random_state=None):
+    def from_digraph(cls, dag:nx.DiGraph, gamma=0.5, random_state=None, verbosity:int=0):
         """
         Initialize from an existing NetworkX DiGraph.
         Parameters:
@@ -99,7 +104,7 @@ class OCN():
             * Edges cannot cross each other in the row-column plane.
             * The grid dimensions (m, n) must both be even integers.
         """
-        return cls(dag, gamma, random_state)
+        return cls(dag, gamma, random_state, verbosity=verbosity)
 
     def __repr__(self):
         #TODO: too verbose?
@@ -245,25 +250,28 @@ class OCN():
 
         if (cooling_rate < 0.5 or constant_phase > 0.1) and n_iterations <= 50*self.dims[0]*self.dims[1]:
             warnings.warn("Using cooling_rate < 0.5 and constant_phase > 0.1 with may cause convergence issues. Consider increasing n_iterations.")
-            
+
         completed_iterations = 0
-        with tqdm(total=n_iterations, desc="OCN Optimization", unit_scale=True, dynamic_ncols=True, disable=not pbar) as pbar:
-            pbar.set_postfix({"Energy": self.energy})
+        with tqdm(total=n_iterations, desc="OCN Optimization", unit_scale=True, dynamic_ncols=True, disable=not (pbar or self.verbosity >= 1)) as pbar:
+            pbar.set_postfix({"Energy": self.energy, "P(Accept)": 1.0})
             pbar.update(0)
             
+            anneal_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
+            anneal_ptr = anneal_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
             while completed_iterations < n_iterations:
                 iterations_this_loop = min(max_iterations_per_loop, n_iterations - completed_iterations)
-                temperatures = cooling_schedule(range(completed_iterations, completed_iterations + iterations_this_loop))
-                temp_array = (ctypes.c_double * iterations_this_loop)(*temperatures)  # ctypes syntax for creating a C-compatible array from an iterable.
+                anneal_buf[:iterations_this_loop] = cooling_schedule(
+                    np.arange(completed_iterations, completed_iterations + iterations_this_loop)
+                )
                 check_status(_bindings.libocn.ocn_outer_ocn_loop(
                     self.__p_c_graph, 
                     iterations_this_loop, 
                     self.gamma, 
-                    temp_array
+                    anneal_ptr
                 ))
                 completed_iterations += iterations_this_loop
-                
-                pbar.set_postfix({"Energy": self.energy})
+
+                pbar.set_postfix({"Energy": self.energy, "T": anneal_buf[iterations_this_loop - 1]})
                 pbar.update(iterations_this_loop)
         
 
