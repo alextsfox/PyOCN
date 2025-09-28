@@ -26,13 +26,13 @@ If you have any questions or comments, please open an issue or contact me direct
 An initial stream network is generated as a directed acyclic graph (DAG) that is a spanning tree over a 2d grid of cells. Each cell in the grid (except the root) has a single outgoing edge that connects to one of its 8 neighboring cells. The OCN algorithm then iteratively modifies the DAG by randomly selecting a cell and changing its outflow to point to a different neighbor, ensuring that the spanning tree structure is maintained (*i.e. no cycles are introduced and each cell has a single outflow, except for the root cell*). The total energy at cell $k$ after iteration $n$ is given by:
 
 $$
-E_k[n] = \sum_{i \in \mathrm{drained}(k)} A_i^\gamma[n]
+E_k[n] = \sum_{i} A_i^\gamma[n]
 $$
 
-Where $A_i$ is the cumulative drained area at cell $i$, $\mathrm{drained}(k)$ is all the grid cells that drain through $k$ including itself, and $\gamma$ controls how the energy scales with area. This change is accepted or rejected based on an annealing method, which is related to the Metropolis-Hastings algorithm. The probability of accepting a proposed change to the network is given by:
+Where $A_i$ is the cumulative drained area at cell $i$, and $i\in\mathrm{drained}(k)$ is a cell drained by $k$, including itself, and $\gamma$ controls how the energy scales with area. This change is accepted or rejected based on an annealing method, which is related to the Metropolis-Hastings algorithm. The probability of accepting a proposed change to the network is given by:
 
 $$
-P(\mathrm{accept}) = \min(1, \exp({-(E_\mathrm{root}[n] - E_\mathrm{root}[n-1]) / T[n]}))
+P(\mathrm{accept}) = \min\Big(1, \exp\big({-[E_\mathrm{root}[n] - E_\mathrm{root}[n-1]] / T[n]}\big)\Big)
 $$
 
 Where $T[n]$ is the "temperature" of the network at iteration $n$. Initially, the temperature is set to a high value ($\sim E[0]$) to encourage exploration of the solution space. The temperature is then set to exponentially decay over time, "annealing" the network as it settles into a low-energy configuration. Note that a proposed change is always accepted if it results in a lower energy state ($E[n] < E[n-1]$).
