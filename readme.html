@@ -138,7 +138,7 @@ P(\mathrm{accept}) = \min\Big(1, \exp\big({-[E_\mathrm{root}[n] - E_\mathrm{root
 \]</span></p>
 <p>Where <span class="math inline">\(T[n]\)</span> is the “temperature” of the network at iteration <span class="math inline">\(n\)</span>. Initially, the temperature is set to a high value (<span class="math inline">\(\sim E[0]\)</span>) to encourage exploration of the solution space. The temperature is then set to exponentially decay over time, “annealing” the network as it settles into a low-energy configuration. Note that a proposed change is always accepted if it results in a lower energy state (<span class="math inline">\(E[n] &lt; E[n-1]\)</span>).</p>
 <p>Higher values of <span class="math inline">\(\gamma\)</span> push the network towards “steeper” configurations with straight-line channels, and lower values encourage more dendritic, wandering, branching structures. The following plots show the final state of an OCN generated on a 256 x 256 grid after 2.5M iterations using different values of <span class="math inline">\(\gamma\)</span>, which took about 2 minutes to run on my laptop.</p>
-<p>[<img src="fig.png" class="img-fluid" alt="OCNs generated with different gamma values">]</p>
+<p><a href="fig.png">OCNs generated with different gamma values</a></p>
 </section>
 <section id="libocn" class="level1">
 <h1>libocn</h1>
