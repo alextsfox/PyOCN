@@ -63,7 +63,7 @@ const OffsetPair offsets[8] = {
 
 // for now, we just use normal row-major order
 linidx_t fg_cart_to_lin(CartPair coords, CartPair dims){
-    return (coords.row * dims.col + coords.col);
+    return ((linidx_t)coords.row * (linidx_t)dims.col + (linidx_t)coords.col);
 }
 CartPair fg_lin_to_cart(linidx_t a, CartPair dims){
     div_t adiv = div(a, dims.col);
@@ -133,7 +133,7 @@ void fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords){
 
 // linear
 Status fg_get_lin_safe(Vertex *out, FlowGrid *G, linidx_t a){
-    if (G == NULL || out == NULL || a < 0 || a >= (G->dims.row * G->dims.col)) return OOB_ERROR;
+    if (G == NULL || out == NULL || a < 0 || a >= ((linidx_t)G->dims.row * (linidx_t)G->dims.col)) return OOB_ERROR;
     *out = G->vertices[a];
     return SUCCESS;
 }
@@ -141,7 +141,7 @@ Vertex fg_get_lin(FlowGrid *G, linidx_t a){
     return G->vertices[a];
 }
 Status fg_set_lin_safe(FlowGrid *G, Vertex vert, linidx_t a){
-    if (G == NULL || a < 0 || a >= (G->dims.row * G->dims.col)) return OOB_ERROR;
+    if (G == NULL || a < 0 || a >= ((linidx_t)G->dims.row * (linidx_t)G->dims.col)) return OOB_ERROR;
     G->vertices[a] = vert;
     return SUCCESS;
 }
@@ -158,7 +158,8 @@ FlowGrid *fg_create_empty_safe(CartPair dims){
     FlowGrid *G = malloc(sizeof(FlowGrid));
     if (G == NULL) return NULL;
 
-    Vertex *vertices = malloc(dims.row * dims.col * sizeof(Vertex));
+    linidx_t nverts = (linidx_t)dims.row * (linidx_t)dims.col;
+    Vertex *vertices = malloc(nverts * sizeof(Vertex));
     if (vertices == NULL) {
         free(G);
         return NULL;

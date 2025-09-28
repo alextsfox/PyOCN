@@ -31,7 +31,7 @@ Status ocn_update_energy(FlowGrid *G, drainedarea_t da_inc, linidx_t a, double g
         vert = fg_get_lin(G, a);
 
         sanity_counter++;
-        if (sanity_counter > (G->dims.row * G->dims.col)){
+        if (sanity_counter > ((linidx_t)G->dims.row * (linidx_t)G->dims.col)){
             printf("Sanity check failed in energy update loop.\n");
         }
     }
@@ -47,21 +47,29 @@ Status ocn_update_energy(FlowGrid *G, drainedarea_t da_inc, linidx_t a, double g
 Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     Status code;
 
-    Vertex vert;//, vert_down_old, vert_down_new;  unused?
+    Vertex vert;
     clockhand_t down_old, down_new;
     linidx_t a, a_down_old, a_down_new;
+    int32_t a_step_dir;
     drainedarea_t da_inc;
     CartPair dims = G->dims;
+    linidx_t nverts = (linidx_t)dims.row * (linidx_t)dims.col;
 
     double energy_old, energy_new;
     energy_old = G->energy;
     
-    a = rand() % (dims.row * dims.col);  // pick a random vertex
+    a = rand() % nverts;  // pick a random vertex
+    a_step_dir = (rand() % 2)*2 - 1;  // pick a random direction to step in if we need a new vertex
     down_new = rand() % 8;  // pick a random new downstream direction
 
-    
-    for (linidx_t nverts_tried = 0; nverts_tried < (dims.row * dims.col); nverts_tried++){  // try a new vertex each time, up to the number of vertices in the graph
-        a = (a + 1) % (dims.row * dims.col);
+
+    for (linidx_t nverts_tried = 0; nverts_tried < nverts; nverts_tried++){  // try a new vertex each time, up to the number of vertices in the graph
+        // clunky way to wrap around, since apparently % on negative numbers is confusing as hell in C
+        if (a == 0 && a_step_dir == -1) a = nverts - 1;
+        else if (a == nverts - 1 && a_step_dir == 1) a = 0;
+        else a = (linidx_t)((int32_t)a + a_step_dir);
+        // a = (linidx_t)((int32_t)a + a_step_dir) % ((int32_t)dims.row * (int32_t)dims.col);
+        
         vert = fg_get_lin(G, a);  // unsafe is ok here because a is guaranteed to be in bounds
     
         down_old = vert.downstream;
@@ -79,13 +87,13 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
             a_down_new = vert.adown;
 
             // confirm that the new graph is well-formed (no cycles, still reaches root)
-            for (linidx_t i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
+            for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;
             code = fg_flow_downstream_safe(G, a_down_old, 1);
             if (code != SUCCESS){
                 fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
             }
-            // for (linidx_t i = 0; i < (dims.row * dims.col); i++) G->vertices[i].visited = 0;
+            // for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;
             code = fg_flow_downstream_safe(G, a, 2);
             if (code != SUCCESS){
                 fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
