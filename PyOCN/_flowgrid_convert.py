@@ -158,6 +158,7 @@ def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
         print("\tComputed node attributes (drained_area, adown, edges, downstream, visited).")
 
     # check that edges do not cross each other
+    #TODO: this is the current bottleneck of the conversion process. Consider profiling.
     for n in G.nodes:
         r, c = G.nodes[n]["pos"]
         succs = list(G.successors(n))

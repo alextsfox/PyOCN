@@ -9,7 +9,7 @@ void rng_seed(unsigned int seed) {
     srand(seed);
 }
 
-void rng_seed_random() {
+void rng_seed_random(void) {
     srand((unsigned int)time(NULL));
 }
 

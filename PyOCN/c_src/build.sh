@@ -10,11 +10,13 @@ cd "$SCRIPT_DIR"
 
 # Compile into position-independent object files
 # gcc -fPIC -c ocn.c flowgrid.c status.c rng.c
-gcc -fPIC -O3 -flto -c ocn.c flowgrid.c status.c rng.c
+gcc -fPIC -O3 -flto -Wall -pedantic \
+    -c ocn.c flowgrid.c status.c rng.c
 
 # Link into shared library
 # gcc -shared -o libocn.so ocn.o flowgrid.o status.o rng.o
-gcc -shared -O3 -flto -o libocn.so ocn.o flowgrid.o status.o rng.o
+gcc -shared -O3 -flto -Wall -pedantic \
+    -o libocn.so ocn.o flowgrid.o status.o rng.o
 
 # Move the shared library to the Python package root
 mv libocn.so ../libocn.so

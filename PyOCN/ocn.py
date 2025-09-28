@@ -22,6 +22,7 @@ PyOCN.utils
 PyOCN.plotting
         Helper functions for visualization and plotting
 """
+#TODO: add an __copy__ method that deepcopies the underlying FlowGrid_C
 
 import warnings
 import ctypes
@@ -84,7 +85,7 @@ class OCN:
         if not isinstance(gamma, Number):
             raise TypeError(f"gamma must be a scalar. Got {type(gamma)}.")
         if not (0 <= gamma <= 1):
-            raise ValueError(f"gamma must be in the range [0, 1]. got {gamma}")
+            warnings.warn(f"gamma values outside of [0, 1] may not be physically meaningful. Got {gamma}.")
         self.gamma = gamma
         
         rng = np.random.default_rng(random_state)

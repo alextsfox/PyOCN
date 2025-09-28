@@ -69,7 +69,7 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
         else if (a == nverts - 1 && a_step_dir == 1) a = 0;
         else a = (linidx_t)((int32_t)a + a_step_dir);
         // a = (linidx_t)((int32_t)a + a_step_dir) % ((int32_t)dims.row * (int32_t)dims.col);
-        
+
         vert = fg_get_lin(G, a);  // unsafe is ok here because a is guaranteed to be in bounds
     
         down_old = vert.downstream;

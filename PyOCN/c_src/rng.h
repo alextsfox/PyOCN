@@ -15,6 +15,6 @@ void rng_seed(unsigned int seed);
 /**
  * @brief Seed the random number generator. Uses the current time as the seed.
  */
-void rng_seed_random();
+void rng_seed_random(void);
 
 #endif // RNG_H
