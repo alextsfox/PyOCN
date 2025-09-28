@@ -39,7 +39,7 @@ Where $T[n]$ is the "temperature" of the network at iteration $n$. Initially, th
 
 Higher values of $\gamma$ push the network towards "steeper" configurations with straight-line channels, and lower values encourage more dendritic, wandering, branching structures. The following plots show the final state of an OCN generated on a 256 x 256 grid after 2.5M iterations using different values of $\gamma$, which took about 2 minutes to run on my laptop.
 
-[![OCNs generated with different gamma values](fig.png)]
+[![OCNs generated with different gamma values](fig.png)
 
 # libocn
 The backend of PyOCN is the libocn C library. libocn implements the core algorithms for generating and manipulating OCNs. Unlike the OCNet R package which uses an adjacency matrix implementation representation of the flow grid (based on the SPArse Matrix library), the libocn C library directly represents the network as a DAG. Each grid cell in the network has an associated outflow direction (given as an integer, 0-7, representing the 8 possible directions to neighboring cells) and a list of the directions of its neighbors (given as an 8-bit integer, where each bit indicates whether there is an edge connecting the cell to one of its 8 neighbors). libocn also implements functions to traverse and manipulate the network structure according to the simulated annealing algorithm described in the orginal paper.
