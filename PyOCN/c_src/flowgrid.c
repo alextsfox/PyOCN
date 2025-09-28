@@ -1,5 +1,5 @@
-#ifndef STREAMGRAPH_C
-#define STREAMGRAPH_C
+#ifndef FLOWGRID_C
+#define FLOWGRID_C
 
 
 #include <stdint.h>
@@ -38,7 +38,7 @@ const OffsetPair offsets[8] = {
     {-1, -1}  // NW
 };
 
-// // 2d raster is block-tiled in memory to improve cache locality. Turns out this doesn't make a big difference.
+// // 2d raster is block-tiled in memory to improve cache locality. Turns out this doesn't make much of a difference.
 // const cartidx_t TILE_SIZE = 2;
 // linidx_t fg_cart_to_lin(CartPair coords, CartPair dims){
 //     cartidx_t row = coords.row;
@@ -61,7 +61,7 @@ const OffsetPair offsets[8] = {
 //     return (CartPair){i, j};
 // }
 
-// for now, we just use normal row-major order until we finish debugging the main algorithm
+// for now, we just use normal row-major order
 linidx_t fg_cart_to_lin(CartPair coords, CartPair dims){
     return (coords.row * dims.col + coords.col);
 }
@@ -145,7 +145,6 @@ Status fg_set_lin_safe(FlowGrid *G, Vertex vert, linidx_t a){
     G->vertices[a] = vert;
     return SUCCESS;
 }
-// Gets the value at [a] in memory to vert, with safeguards.
 void fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a){
     G->vertices[a] = vert;
 }
@@ -180,9 +179,9 @@ Status fg_destroy_safe(FlowGrid *G){
 }
 
 
-// ##############################
-// # Network manipulation       #
-// ##############################
+// ##################################
+// # Network manipulation/traversal #
+// ##################################
 Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new){
     Status code;
     CartPair dims = G->dims;
@@ -244,8 +243,6 @@ Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new){
     return SUCCESS;
 }
 
-
-
 Status fg_flow_downstream_safe(FlowGrid *G, linidx_t a, uint8_t ncalls){
     Vertex vert;
     Status code;
@@ -292,97 +289,6 @@ const wchar_t NE_ARROW_UTF8 = L'\u2197';
 const wchar_t NO_ARROW_UTF8 = L'\u2002';  // space
 const wchar_t NODE_UTF8 = L'\u25EF';  // large empty circle
 const wchar_t ROOT_NODE_UTF8 = L'\u25CF';  // circle with x
-
-void fg_display_bad(FlowGrid *G, bool use_utf8){
-    if (use_utf8) setlocale(LC_ALL, "");
-
-    if (G->vertices == NULL || G->dims.row == 0 || G->dims.col == 0) return;
-
-    putchar('\n');
-
-    cartidx_t m = G->dims.row;
-    cartidx_t n = G->dims.col;
-
-    for (cartidx_t i = 0; i < m; i++){
-        // node row
-        for (cartidx_t j = 0; j < n; j++){
-            Vertex *v = &(G->vertices[i*n + j]);
-
-            // Draw node
-            if (use_utf8) wprintf(L"%lc", v->downstream == IS_ROOT ? ROOT_NODE : NODE);
-            else putchar(v->downstream == IS_ROOT ? ROOT_NODE : NODE);
-            if (use_utf8) putchar (' ');
-            
-            if (j < n - 1){
-                // Draw horizontal edge going right out of node
-                if (v->edges & (1u << 2)){        
-                    if (v->downstream == 2) {
-                        if (use_utf8) wprintf(L"%lc", E_ARROW_UTF8);        
-                        else putchar(E_ARROW);
-                    } else {
-                        if (use_utf8) wprintf(L"%lc", W_ARROW_UTF8);    
-                        else putchar(W_ARROW);    
-                    }
-                } else {  // no horizontal edge edge
-                    if (use_utf8) putchar(NO_ARROW);
-                    else wprintf(L"%lc", NO_ARROW_UTF8);
-                }
-                if (use_utf8) putchar(' ');
-            }
-        }
-        putchar('\n');
-
-        if (i == m - 1) break; // last row: no edges below
-
-        // edge-only row
-        for (cartidx_t j = 0; j < n; j++){
-            Vertex *v = &(G->vertices[i*n + j]);
-
-            if (v->edges & (1u << 4)){  // vertical, under node
-                if (v->downstream == 4){
-                    if (use_utf8) wprintf(L"%lc", S_ARROW_UTF8);    
-                    else putchar(S_ARROW);
-                } else {
-                    if (use_utf8) wprintf(L"%lc", N_ARROW_UTF8);
-                    else putchar(N_ARROW);
-                }
-            } else {  // no vertical under node
-                if (use_utf8) wprintf(L"%lc", NO_ARROW_UTF8);
-                else putchar(NO_ARROW);
-            }
-            if (use_utf8) putchar(' ');
-
-            if (j < n - 1){// Diagonal edges occupy the space between two vertical edges
-                wchar_t mid_utf8 = NO_ARROW_UTF8;
-                char mid = NO_ARROW;  // default to no diagonal edge
-                if (v->edges & (1u << 3)) {  // diagonal edge heading SE or NW
-                    if (v->downstream == 3){
-                        mid_utf8 = SE_ARROW_UTF8;
-                        mid = SE_ARROW;
-                    } else {
-                        mid_utf8 = NW_ARROW_UTF8;
-                        mid = NW_ARROW;
-                    }
-                }
-                Vertex *v_right = &(G->vertices[i*n + (j+1)]);
-                if (mid == NO_ARROW && (v_right->edges & (1u << 5))){  // diagonal edge heading NE or SW
-                    if (v_right->downstream == 5) {
-                        mid_utf8 = SW_ARROW_UTF8;
-                        mid = SW_ARROW;
-                    } else {
-                        mid_utf8 = NE_ARROW_UTF8;
-                        mid = NE_ARROW;
-                    }   
-                } 
-                if (use_utf8) wprintf(L"%lc", mid_utf8);
-                else putchar(mid);
-                if (use_utf8) putchar(' ');
-            }
-        }
-        putchar('\n');
-    }
-    putchar('\n');
-}
 
 void fg_display(FlowGrid *G, bool use_utf8){
     if (G->vertices == NULL || G->dims.row == 0 || G->dims.col == 0) return;
@@ -538,4 +444,4 @@ void fg_display(FlowGrid *G, bool use_utf8){
     putchar('\n');
 }
 
-#endif // STREAMGRAPH_C
+#endif // FLOWGRID_C

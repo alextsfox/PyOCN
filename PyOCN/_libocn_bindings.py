@@ -17,14 +17,6 @@ from ctypes import (
 )
 from pathlib import Path
 
-CTYPE_TO_NP_DTYPE = {
-    c_uint8: np.uint8,
-    c_uint16: np.uint16,
-    c_uint32: np.uint32,
-    c_double: np.float64,
-    c_bool: bool,
-}
-
 # TODO This will need to change probably depending on OS/architecture
 _libocn_so_file = Path(__file__).parent / "libocn.so"
 libocn = CDLL(_libocn_so_file)

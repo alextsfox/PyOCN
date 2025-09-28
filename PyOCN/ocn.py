@@ -24,7 +24,6 @@ PyOCN.plotting
 """
 
 import warnings
-
 import ctypes
 from numbers import Number
 import networkx as nx 
@@ -158,7 +157,7 @@ class OCN:
         random_state : int | numpy.random.Generator | None, optional
             Seed or generator for RNG seeding.
         verbosity : int, default 0
-            Verbosity level (0–2) for underlying library output.
+            Verbosity level (0-2) for underlying library output.
 
         Returns
         -------
@@ -171,7 +170,8 @@ class OCN:
 
         - It is a directed acyclic graph (DAG).
         - Each node has attribute ``pos=(row:int, col:int)`` specifying its
-          grid position with non-negative coordinates.
+          grid position with non-negative coordinates. Any other attributes
+          are ignored.
         - It forms a spanning tree over a dense grid of shape ``(m, n)``: each
           grid cell corresponds to exactly one node; each non-root node has
           ``out_degree == 1``; the root has ``out_degree == 0``.
@@ -198,7 +198,8 @@ class OCN:
         return (
             object.__sizeof__(self) +
             self.gamma.__sizeof__() +
-            ctypes.sizeof(_bindings.FlowGrid_C) + ctypes.sizeof(_bindings.Vertex_C)*(self.dims[0]*self.dims[1])
+            ctypes.sizeof(_bindings.FlowGrid_C) + 
+            ctypes.sizeof(_bindings.Vertex_C)*(self.dims[0]*self.dims[1])
         )
     
     def compute_energy(self) -> float:

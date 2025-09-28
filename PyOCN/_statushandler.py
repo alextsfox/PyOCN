@@ -1,6 +1,7 @@
 """
-libocn exeption handling
+libocn exception handling
 """
+#TODO: I feel like this is extremely clunky and and doens't really give very helpful errors.
 
 import warnings
 

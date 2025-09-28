@@ -1,9 +1,9 @@
-from itertools import product
+"""
+Demonstration of generating Optimal Channel Networks (OCNs) using PyOCN with different gamma values.
+"""
 
-from tqdm import trange, tqdm
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import networkx as nx
 import numpy as np
 from time import perf_counter as timer
 
@@ -12,13 +12,10 @@ import multiprocessing
 import PyOCN
 
 
-m, n = 200, 200
+m, n = 50, 50
 n_iterations = m*n*40
-constant_phase = 0.01
-cooling_rate = 0.5
 
 def create_and_run(gamma):
-    t0 = timer()
     ocn = PyOCN.OCN.from_net_type(
         "H", 
         dims=(m, n), 
@@ -26,14 +23,21 @@ def create_and_run(gamma):
         gamma=gamma,
         verbosity=0
     )
-    energy = ocn.fit(energy_reports=1000, constant_phase=constant_phase, cooling_rate=cooling_rate, n_iterations=n_iterations, pbar=False)
+    energy = ocn.fit(
+        constant_phase=0.01,
+        cooling_rate=0.5, 
+        energy_reports=1000, 
+        n_iterations=n_iterations, 
+        pbar=False
+    )
     dag = ocn.to_digraph()
-    t1 = timer()
-    print(f"Gamma={gamma:.2f} took {t1-t0:.1f} seconds")
-    return dag, energy
+    # Multiprocessing can't pickle ocn objects, which contain pointers to C structs.
+    # Instead, return the DAG and reconstruct the OCN later.
+    # This would not be necessary if we were running single-threaded.
+    return dag, energy  
 
 if __name__ == '__main__':
-    gamma_range = [0.1, 0.8, 0.99]
+    gamma_range = [0.1, 0.5, 0.9]
     with multiprocessing.Pool(len(gamma_range)) as pool:
         results = list(pool.map(create_and_run, gamma_range))
     print("Done generating OCNs, plotting...")
@@ -42,7 +46,7 @@ if __name__ == '__main__':
 
     # high gamma
     dag, energy = results[0]
-    ocn = PyOCN.OCN.from_digraph(dag)
+    ocn = PyOCN.OCN.from_digraph(dag)  # Reconstruct OCN from DAG.
     PyOCN.plot_ocn_energy_raster(ocn=ocn, norm=mpl.colors.LogNorm(), ax=axs[0,0], cmap="cubehelix_r")
     axs[1, 0].plot(np.linspace(0, n_iterations, len(energy)), energy/energy.max())
 

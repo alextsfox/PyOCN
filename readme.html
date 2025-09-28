@@ -70,6 +70,35 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="readme_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="readme_files/libs/bootstrap/bootstrap-be9206a58a27969b3ea3001da8f26fef.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN") {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 </head>
 
@@ -85,7 +114,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="pyocn" class="level1">
 <h1>PyOCN</h1>
 <ol start="3" type="a">
-<li>2024 Alexander S. Fox</li>
+<li>2025 Alexander S. Fox</li>
 </ol>
 <p>This is a package to generate optimal channel networks (OCNs), based on the algorithm described in Carraro et al.&nbsp;(2020). <em>Generation and application of river network analogues for use in ecology and evolution. Ecology and Evolution.</em> doi:10.1002/ece3.6479 and mirrors much of the functionality of the OCNet R package (https://lucarraro.github.io/OCNet/).</p>
 <p>This is a work in progress. I plan to release this as a package on PyPI in the near future. For now, you can clone the repository and build the package from source.</p>
@@ -103,38 +132,28 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="ocn-algorithm" class="level1">
 <h1>OCN Algorithm</h1>
 <p>An initial stream network is generated as a directed acyclic graph (DAG) that is a spanning tree over a 2d grid of cells. Each cell in the grid (except the root) has a single outgoing edge that connects to one of its 8 neighboring cells. The OCN algorithm then iteratively modifies the DAG by randomly selecting a cell and changing its outflow to point to a different neighbor, ensuring that the spanning tree structure is maintained (<em>i.e.&nbsp;no cycles are introduced and each cell has a single outflow, except for the root node</em>). The total energy before and after the change is calculated based on the cumulative drained area:</p>
-<p>( E[n] = _{i} A[n]_i^ )</p>
-<p>Where (A[n]_i) is the cumulative drained area at node (i) in configuration (n), and () is a parameter that influences the shape of the network (default is 0.5). The change is accepted or rejected based on the Metropolis criterion, which depends on the change in energy and a temperature parameter that decreases over time (simulated annealing). This process continues until a stopping criterion is met, such as a maximum number of iterations or convergence of the energy value.</p>
+<p><span class="math display">\[
+E_k[n] = \sum_{i \in \mathrm{pred}(k)} A_i^\gamma[n]
+\]</span></p>
+<p>Where <span class="math inline">\(A[n]_i\)</span> is the cumulative drained area at node <span class="math inline">\(i\)</span> at iteration <span class="math inline">\(n\)</span>, and <span class="math inline">\(\gamma\)</span> controls how the energy scales with area. This change is accepted or rejected based on simulated annealing, which is related to the Metropolis-Hastings algorithm. The probability of accepting a proposed change to the network is given by:</p>
+<p><span class="math display">\[
+P(\mathrm{accept}) = \min(1, \exp({-(E_\mathrm{root}[n] - E_\mathrm{root}[n-1]) / T[n]}))
+\]</span></p>
+<p>Where <span class="math inline">\(T[n]\)</span> is the “temperature” of the network at iteration <span class="math inline">\(n\)</span>. Initially, the temperature is set to a high value (<span class="math inline">\(\sim E[0]\)</span>) to encourage exploration of the solution space. The temperature then exponentially decays over time, “annealing” the network as it settles into a low-energy configuration. Note that a proposed change is always accepted if it results in a lower energy state (<span class="math inline">\(E[n] &lt; E[n-1]\)</span>).</p>
+<p>Lower values of <span class="math inline">\(\gamma\)</span> push the network towards “steeper” configurations with straight-line channels, and higher values encourage more dendritic, wandering branching structures. The following plots show the final state of an OCN generated on a 256 x 256 grid after 4M iterations using different values of <span class="math inline">\(\gamma\)</span>, which took about 2 minutes to run on my laptop.</p>
+<p>[<img src="fig.png" class="img-fluid" alt="OCNs generated with different gamma values">]</p>
 </section>
 <section id="libocn" class="level1">
 <h1>libocn</h1>
-<p>The backend of PyOCN is the libocn C library. libocn implements the core algorithms for generating and manipulating OCNs. Unlike the OCNet R package which uses an adjacency matrix implementation in R for manipulating the network (based on the SPArse Matrix library), the libocn C library directly uses a directed acyclic graph (DAG) to represent the network. This structure represents the network as a grid of cells with associated flow directions. Each cell has an associated outflow direction (given as an integer, 0-7, representing the 8 possible directions to neighboring cells) and a list of the directions of its neighbors (given as an 8-bit integer, where each bit indicates whether there is a connection to the corresponding neighbor). This representation allows for efficient traversal and manipulation of the network, without the overhead of storing and manipulating large adjacency matrices. libocn also implements functions to traverse and manipulate the network structure according to the simulated annealing algorithm described in the orginal paper.</p>
-<p>Optimizing a 512 x 512 grid to generate an OCN takes about 30 minutes on a laptop (MacBook Pro M1 Pro, 16GB RAM). Processing a 256 x 256 grid takes about 2 minutes.</p>
+<p>The backend of PyOCN is the libocn C library. libocn implements the core algorithms for generating and manipulating OCNs. Unlike the OCNet R package which uses an adjacency matrix implementation in R for manipulating the network (based on the SPArse Matrix library), the libocn C library directly represents the network as a DAG. Each grid cell in the network has an associated outflow direction (given as an integer, 0-7, representing the 8 possible directions to neighboring cells) and a list of the directions of its neighbors (given as an 8-bit integer, where each bit indicates whether there is an edge connecting the cell to one of its 8 neighbors). libocn also implements functions to traverse and manipulate the network structure according to the simulated annealing algorithm described in the orginal paper.</p>
 </section>
 <section id="pyocn-1" class="level1">
 <h1>PyOCN</h1>
-<p>The PyOCN frontend is a Python package that provides a high-level interface to the libocn C library. It allows users to easily generate, manipulate, and analyze OCNs. PyOCN uses the NetworkX library to expose the network graph and provides additional functions to export the graph to various formats, including as raster images. (TODO: implement export to gtif, rasterio)</p>
+<p>The PyOCN frontend is a Python package that provides a high-level interface to the libocn C library. It allows users to easily generate, manipulate, and analyze OCNs. PyOCN uses the NetworkX library to expose the network graph and provides additional functions to export the graph to various formats, including as raster images. (TODO: implement export to gtif, rasterio). The main class in PyOCN is the <code>OCN</code> class, which includes methods for constructing an initial configuration and running the optimization algorithm.</p>
 </section>
 <section id="citing-pyocn" class="level1">
 <h1>Citing PyOCN</h1>
-<p>If you use PyOCN in your research, please cite this software package as:</p>
-<pre><code>@software{fox_pyocn_2025,
-  author = {Fox, Alexander S.},
-  title = {{PyOCN and libocn}},
-  url = {https://github.com/alexfox/pyocn},
-  date = {2025-10-01},
-} </code></pre>
-<p>in addition to the original paper:</p>
-<pre><code>@article{carraro_generation_2020,
-    title = {Generation and application of river network analogues for use in ecology and evolution},
-    volume = {10},
-    doi = {10.1002/ece3.6479},
-    number = {14},
-    journal = {Ecology and Evolution},
-    author = {Carraro, Luca and Bertuzzo, Enrico and Fronhofer, Emanuel A. and Furrer, Reinhard and Gounand, Isabelle and Rinaldo, Andrea and Altermatt, Florian},
-    year = {2020},
-    pages = {7537--7550},
-}</code></pre>
+<p>If you use PyOCN in your research, please cite this package and the original paper by Carraro et al.</p>
 </section>
 
 </main>

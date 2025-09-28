@@ -1,4 +1,6 @@
 #TODO: allow users to provide multiple DAGs that partition a space.
+#TODO: allow edge-wrapping (toroidal grids).
+#TODO: implement "every edge vertex is a root" option
 """
 Functions for converting between NetworkX graphs and FlowGrid_C structures.
 """
@@ -8,8 +10,6 @@ from itertools import product
 
 from numpy import integer as np_integer
 import networkx as nx
-from tqdm import tqdm
-import numpy as np
 
 from ._statushandler import check_status
 from . import _libocn_bindings as _bindings

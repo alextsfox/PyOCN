@@ -4,8 +4,8 @@
  * @brief Header file for FlowGrid structure and related functions.
  */
 
-#ifndef STREAMGRAPH_H
-#define STREAMGRAPH_H
+#ifndef FLOWGRID_H
+#define FLOWGRID_H
 
 #include <stdint.h>
 
@@ -20,10 +20,15 @@ extern clockhand_t IS_ROOT;
 
 /**
  * @brief Vertex structure representing a node in the flow grid.
+ * 
  * - drained_area: The area drained by this vertex.
+ * 
  * - adown: The linear index of the downstream vertex.
+ * 
  * - edges: A bitmask representing the presence of edges in the 8 possible directions.
+ * 
  * - downstream: The clockhand direction of the downstream flow (0-7) or IS_ROOT (255) if it is a root node.
+ * 
  * - visited: A flag used for traversal algorithms
  */
 typedef struct {
@@ -36,9 +41,13 @@ typedef struct {
 
 /**
  * @brief FlowGrid structure representing the entire flow grid.
+ * 
  * - dims: The dimensions of the grid (rows, cols).
+ * 
  * - root: The Cartesian coordinates of the root node.
+ * 
  * - energy: The energy of the flow grid.
+ * 
  * - vertices: A pointer to an array of Vertex structures representing the nodes in the grid.
  */
 typedef struct {
@@ -171,4 +180,4 @@ Status fg_flow_downstream_safe(FlowGrid *G, linidx_t a, uint8_t ncalls);
  */
 void fg_display(FlowGrid *G, bool use_utf8);
 
-#endif // STREAMGRAPH_H
+#endif // FLOWGRID_H
