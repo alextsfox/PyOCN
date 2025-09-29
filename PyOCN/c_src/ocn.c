@@ -44,7 +44,7 @@ Status update_drained_area(FlowGrid *G, drainedarea_t da_inc, linidx_t a){
         a = vert.adown;
     } while (vert.downstream != IS_ROOT);
 
-    return SUCCESS;
+    return SUCCESS; 
 }
 
 double ocn_compute_energy(FlowGrid *G, double gamma){
