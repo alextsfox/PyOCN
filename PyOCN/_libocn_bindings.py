@@ -64,7 +64,6 @@ class Vertex_C(Structure):
 class FlowGrid_C(Structure):
     _fields_ = [
         ("dims", CartPair_C),
-        ("root", CartPair_C),
         ("energy", c_double),
         ("resolution", c_double),
         ("vertices", POINTER(Vertex_C)),  # Vertex*

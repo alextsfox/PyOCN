@@ -12,15 +12,15 @@ from tqdm import tqdm
 if TYPE_CHECKING:
     from .ocn import OCN
 
-_allowed_net_types = {"I", "H", "V", "T"}
+_allowed_net_types = {"I", "H", "V", "T", "E"}
 
 #TODO: add ability to move root?
-def net_type_to_dag(net_type:Literal["I", "H", "V", "T"], dims:tuple, pbar: bool = False) -> nx.DiGraph:
+def net_type_to_dag(net_type:Literal["I", "H", "V", "T", "E"], dims:tuple, pbar: bool = False) -> nx.DiGraph:
     """Create a predefined OCN initialization network as a NetworkX DiGraph.
 
     Parameters
     ----------
-    net_type : {"I", "H", "V", "T"}
+    net_type : {"I", "H", "V", "T", "E"}
         The type of network to create.
         Descriptions of allowed types:
 
@@ -59,6 +59,9 @@ def net_type_to_dag(net_type:Literal["I", "H", "V", "T"], dims:tuple, pbar: bool
               O  O--O--O
               | /
               X--O--O--O
+
+        - "E": A network where every node on the edge of the grid is a root.
+
 
         - "T": Not implemented yet.
 
@@ -125,8 +128,24 @@ def net_type_to_dag(net_type:Literal["I", "H", "V", "T"], dims:tuple, pbar: bool
                     G.add_edge(n, n - cols)
                 elif j > i:
                     G.add_edge(n, n - 1)
-        case "T":
-            raise NotImplementedError("T net type not yet implemented.")
+        case "E":  #TODO: implement a better radial pattern
+            half_rows = rows / 2
+            half_cols = cols / 2
+            for i, j in pbar:
+                n = i*cols + j
+                G.add_node(n, pos=(i, j))
+                # ul quadrant: flow up and left
+                if i < half_rows and j < half_cols and i > 0 and j > 0:
+                    G.add_edge(n, n - cols - 1)
+                # ur quadrant: flow up and right
+                elif i < half_rows and j >= half_cols and i > 0 and j < cols - 1:
+                    G.add_edge(n, n - cols + 1)
+                # ll quadrant: flow down and left
+                elif i >= half_rows and j < half_cols and j > 0 and i < rows - 1:
+                    G.add_edge(n, n + cols - 1)
+                # lr quadrant: flow down and right
+                elif i >= half_rows and j >= half_cols and i < rows - 1 and j < cols - 1:
+                    G.add_edge(n, n + cols + 1)
         case _:
             raise ValueError(f"Invalid net_type {net_type}. Must be one of {_allowed_net_types}.")
         

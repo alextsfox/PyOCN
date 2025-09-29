@@ -71,9 +71,6 @@ class OCN:
         Current energy of the network (read-only property).
     dims : tuple[int, int]
         Grid dimensions (rows, cols) of the FlowGrid (read-only property).
-    root : tuple[int, int]
-        Row/column coordinates of the root node in the grid (read-only
-        property).
     resolution: float
         The side length of each grid cell in meters.
     """
@@ -99,7 +96,6 @@ class OCN:
 
         if not isinstance(resolution, Number):
             raise TypeError(f"resolution must be numeric. Got {type(resolution)}")
-        self.resolution = resolution
         # instantiate the FlowGrid_C and assign an initial energy.
         self.verbosity = verbosity
         self.__p_c_graph = fgconv.from_digraph(dag, resolution, verbose=(verbosity > 1))
@@ -200,7 +196,7 @@ class OCN:
         #TODO: too verbose?
         return f"<PyOCN.OCN object at 0x{id(self):x} with FlowGrid_C at 0x{ctypes.addressof(self.__p_c_graph.contents):x} and Vertex_C array at 0x{ctypes.addressof(self.__p_c_graph.contents.vertices):x}>"
     def __str__(self):
-        return f"OCN(gamma={self.gamma}, energy={self.energy}, dims={self.dims}, root={self.root})"
+        return f"OCN(gamma={self.gamma}, energy={self.energy}, dims={self.dims}, resolution={self.resolution}m, verbosity={self.verbosity})"
     def __del__(self):
         print(f"del called on {self}")
         try:
@@ -297,20 +293,6 @@ class OCN:
         return (
             int(self.__p_c_graph.contents.dims.row),
             int(self.__p_c_graph.contents.dims.col)
-        )
-    @property
-    def root(self) -> tuple[int, int]:
-        """
-        Root position in the grid (read-only).
-
-        Returns
-        -------
-        tuple[int, int]
-            ``(row, col)`` coordinates of the root node.
-        """
-        return (
-            int(self.__p_c_graph.contents.root.row),
-            int(self.__p_c_graph.contents.root.col)
         )
 
     def reseed(self, random_state:int|np.random.Generator|Literal["from_current"]=None):
@@ -599,7 +581,7 @@ class OCN:
                 pbar.update(iterations_this_loop)
         return energy_out
         
-        
+
 __all__ = [
     "OCN",
 ]

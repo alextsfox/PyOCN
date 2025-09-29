@@ -176,7 +176,6 @@ FlowGrid *fg_copy_safe(FlowGrid *G){
     FlowGrid *out = fg_create_empty_safe(G->dims);
     if (out == NULL) return NULL;
     out->dims = G->dims;
-    out->root = G->root;
     out->energy = G->energy;
     linidx_t nvertices = (linidx_t)G->dims.row * (linidx_t)G->dims.col;
     memcpy(

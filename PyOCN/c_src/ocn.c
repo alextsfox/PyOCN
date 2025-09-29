@@ -35,7 +35,8 @@ Status ocn_update_energy(FlowGrid *G, drainedarea_t da_inc, linidx_t a, double g
             printf("Sanity check failed in energy update loop.\n");
         }
     }
-    // update root vertex
+    
+    // update energy of entire graph (including root vertex)
     da = vert.drained_area;
     G->energy += pow((da + da_inc), gamma) - pow(da, gamma);  // update energy
     vert.drained_area += da_inc;  // update drained area of vertex

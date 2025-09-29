@@ -102,11 +102,9 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False) -> POINT
     if any(G.out_degree(u) > 1 for u in G.nodes):
         raise ValueError("Graph must be a spanning tree (each node has out_degree <= 1).")
     roots = [u for u in G.nodes if G.out_degree(u) == 0]
-    if len(roots) != 1:
-        raise ValueError(f"Graph must be a spanning tree (graph must have exactly one root (out_degree=0)). Found {len(roots)}.")
     
     if verbose:
-        print("\tGraph is a spanning tree.")
+        print(f"\tFound {len(roots)} spanning trees.")
 
     # edges only connect to adjacent nodes (no skipping)
     for u, v in G.edges:
@@ -126,8 +124,8 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False) -> POINT
         succs = list(G.successors(n))
         preds = list(G.predecessors(n))
         neighbors = succs + preds
-        if len(neighbors) > 8 or len(neighbors) < 1:
-            raise ValueError(f"Node {n} at position {G.nodes[n]['pos']} has {len(neighbors)} neighbors, but must have between 1 and 8.")
+        if len(neighbors) > 8:
+            raise ValueError(f"Node {n} at position {G.nodes[n]['pos']} has {len(neighbors)} neighbors, but must have between 0 and 8.")
         if len(succs) > 1:
             raise ValueError(f"Node {n} at position {G.nodes[n]['pos']} has {len(succs)} successors, but must have at most 1.")
 
@@ -219,9 +217,7 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False) -> POINT
             _bindings.libocn.fg_destroy_safe(p_c_graph)
             p_c_graph = None
             raise e
-        
-    # set root
-    p_c_graph.contents.root = _bindings.CartPair_C(row=G.nodes[roots[0]]["pos"][0], col=G.nodes[roots[0]]["pos"][1])
+    
     p_c_graph.contents.resolution = float(resolution)
     
     # do not set energy

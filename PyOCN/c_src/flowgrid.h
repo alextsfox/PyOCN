@@ -44,7 +44,6 @@ typedef struct {
  * 
  * - dims: The dimensions of the grid (rows, cols).
  * 
- * - root: The Cartesian coordinates of the root node.
  * 
  * - energy: The energy of the flow grid.
  * 
@@ -54,7 +53,6 @@ typedef struct {
  */
 typedef struct {
     CartPair dims;
-    CartPair root;
     double energy;
     double resolution;
     Vertex *vertices;
