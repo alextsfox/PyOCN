@@ -30,6 +30,7 @@ from numbers import Number
 import networkx as nx 
 
 import numpy as np
+from typing import Literal
 from tqdm import tqdm
 
 
@@ -89,8 +90,7 @@ class OCN:
         self.gamma = gamma
         
         rng = np.random.default_rng(random_state)
-        seed = rng.integers(0, int(2**32 - 1))
-        _bindings.libocn.rng_seed(seed)
+        self.master_seed = rng.integers(0, int(2**32 - 1))
 
         # instantiate the FlowGrid_C and assign an initial energy.
         self.verbosity = verbosity
@@ -114,7 +114,7 @@ class OCN:
         random_state : int | numpy.random.Generator | None, optional
             Seed or generator for RNG seeding.
         verbosity : int, default 0
-            Verbosity level (0–2) for underlying library output.
+            Verbosity level (0-2) for underlying library output.
 
         Returns
         -------
@@ -190,19 +190,48 @@ class OCN:
     def __str__(self):
         return f"OCN(gamma={self.gamma}, energy={self.energy}, dims={self.dims}, root={self.root})"
     def __del__(self):
+        print(f"del called on {self}")
         try:
             _bindings.libocn.fg_destroy_safe(self.__p_c_graph)
             self.__p_c_graph = None
         except AttributeError:
             pass
-    def __sizeof__(self):
+    def __sizeof__(self) ->int:
         return (
             object.__sizeof__(self) +
             self.gamma.__sizeof__() +
             ctypes.sizeof(_bindings.FlowGrid_C) + 
             ctypes.sizeof(_bindings.Vertex_C)*(self.dims[0]*self.dims[1])
         )
-    
+
+    def __copy__(self) -> "OCN":
+        """
+        Create a deep copy of the OCN, including the underlying FlowGrid_C.
+        Also copies the current RNG state. The new copy and the original
+        will be independent from each other and behave identically statistically.
+
+        If you want the copy to have a different random state, call :meth:`reseed`
+        after copying.
+        """
+        cpy = object.__new__(type(self))
+        cpy.gamma = self.gamma
+        cpy.verbosity = self.verbosity
+        cpy.master_seed = self.master_seed
+
+        cpy_p_c_graph = _bindings.libocn.fg_copy_safe(self.__p_c_graph)
+        if not cpy_p_c_graph:
+            raise MemoryError("Failed to copy FlowGrid_C in OCN.__copy__")
+        cpy.__p_c_graph = cpy_p_c_graph
+        return cpy
+
+    def __deepcopy__(self, memo) -> "OCN":
+        """
+        Create a deep copy of the OCN, including the underlying FlowGrid_C.
+        Also copies the current RNG state. The new copy and the original
+        will be independent from each other and behave identically statistically.
+        """
+        return self.__copy__()
+
     def compute_energy(self) -> float:
         """
         Compute the current energy of the network.
@@ -261,6 +290,32 @@ class OCN:
             int(self.__p_c_graph.contents.root.col)
         )
 
+    def reseed(self, random_state:int|np.random.Generator|Literal["from_current"]=None):
+        """
+        Reseed the internal RNG.
+        
+        Parameters
+        ----------
+        random_state : int | numpy.random.Generator | str | None, optional
+            Seed or generator for RNG seeding. If None, system entropy is used.
+            If "from_current", the current RNG state is used to deterministically
+            generate a new seed. If an integer or Generator is provided, the
+            new seed is drawn from it directly.
+        """
+        if isinstance(random_state, str) and random_state != "from_current":
+            raise ValueError(f"Invalid string for random_state: {random_state}. Must be 'from_current' or an integer/Generator/None.")
+        if random_state == "from_current":
+            master_seed = int(self.master_seed)
+            if master_seed == 0:
+                master_seed = 0xDEADBEEF
+            master_seed ^= master_seed << 13
+            master_seed ^= master_seed >> 17
+            master_seed ^= master_seed << 5
+            master_seed &= 0xFFFFFFFF  # ensure 32-bit unsigned
+            self.master_seed = np.int64(master_seed)
+        else:
+            self.master_seed = np.random.default_rng(random_state).integers(0, int(2**32 - 1))
+
     def to_digraph(self) -> nx.DiGraph:
         """
         Create a NetworkX ``DiGraph`` view of the current grid.
@@ -301,6 +356,9 @@ class OCN:
             If the underlying C routine reports an error status.
         """
         # FlowGrid *G, uint32_t *total_tries, double gamma, double temperature
+        rng = np.random.default_rng(self.master_seed)
+        self.master_seed = rng.integers(0, int(2**32 - 1))
+        _bindings.libocn.rng_seed(self.master_seed)
         check_status(_bindings.libocn.ocn_single_erosion_event(
             self.__p_c_graph,
             self.gamma, 
@@ -379,6 +437,10 @@ class OCN:
         of iterations, and :math:`C` is ``constant_phase``. Decreasing-energy
         moves (:math:`\Delta E < 0`) are always accepted.
         """
+        rng = np.random.default_rng(self.master_seed)
+        self.master_seed = rng.integers(0, int(2**32 - 1))
+        _bindings.libocn.rng_seed(self.master_seed)
+
         if n_iterations is None:
             n_iterations = int(40*self.dims[0]*self.dims[1])
         if not (isinstance(n_iterations, int) and n_iterations > 0):

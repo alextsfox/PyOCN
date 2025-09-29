@@ -149,6 +149,13 @@ void fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a);
 FlowGrid *fg_create_empty_safe(CartPair dims);
 
 /**
+ * @brief Create a deep copy of a flowgrid safely.
+ * @param G Pointer to the FlowGrid to copy.
+ * @return A deep copy of the FlowGrid. Returns NULL if G is NULL or memory allocation fails.
+ */
+FlowGrid *fg_copy_safe(FlowGrid *G);
+
+/**
  * @brief Safely destroy a flowgrid, freeing its resources.
  * @param G Pointer to the FlowGrid to destroy.
  * @return Status code indicating success or failure

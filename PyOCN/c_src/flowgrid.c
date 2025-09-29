@@ -171,6 +171,21 @@ FlowGrid *fg_create_empty_safe(CartPair dims){
     return G;
 }
 
+FlowGrid *fg_copy_safe(FlowGrid *G){
+    if (G == NULL || G->vertices == NULL) return NULL;
+    FlowGrid *out = fg_create_empty_safe(G->dims);
+    if (out == NULL) return NULL;
+    out->dims = G->dims;
+    out->root = G->root;
+    out->energy = G->energy;
+    linidx_t nvertices = (linidx_t)G->dims.row * (linidx_t)G->dims.col;
+    memcpy(
+        out->vertices, 
+        G->vertices, 
+        sizeof(Vertex)*nvertices);
+    return out;
+}
+
 Status fg_destroy_safe(FlowGrid *G){
     if (G != NULL){
         if (G->vertices != NULL) free(G->vertices); G->vertices = NULL;
@@ -192,8 +207,8 @@ Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new){
     
     // 1. Get G[a], G[a_down_old], G[adownnew] safely
     code = fg_get_lin_safe(&vert, G, a);
-    down_old = vert.downstream;
     if (code == OOB_ERROR) return OOB_ERROR;
+    down_old = vert.downstream;
 
     a_down_old = vert.adown;
     code = fg_get_lin_safe(&vert_down_old, G, a_down_old);

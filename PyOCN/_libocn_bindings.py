@@ -117,6 +117,10 @@ libocn.fg_set_lin.restype = None
 libocn.fg_create_empty_safe.argtypes = [CartPair_C]
 libocn.fg_create_empty_safe.restype = POINTER(FlowGrid_C)
 
+# FlowGrid *fg_copy_safe(FlowGrid *G);
+libocn.fg_copy_safe.argtypes = [POINTER(FlowGrid_C)]
+libocn.fg_copy_safe.restype = POINTER(FlowGrid_C)
+
 # Status fg_destroy_safe(FlowGrid *G);
 libocn.fg_destroy_safe.argtypes = [POINTER(FlowGrid_C)]
 libocn.fg_destroy_safe.restype = Status
