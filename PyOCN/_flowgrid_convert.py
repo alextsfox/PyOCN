@@ -44,9 +44,16 @@ def to_digraph(c_graph:_bindings.FlowGrid_C) -> nx.DiGraph:
         
         return dag
 
-def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
+def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False) -> POINTER:
     """
     Convert a NetworkX directed graph into a FlowGrid_C. Called by the OCN constructor.
+
+    Parameters
+    ----------
+    G: nx.DiGraph
+        The digraph object to initialize from
+    resolution: float
+        The sidelength of each gridcell in meters. Default 1.
     Returns:
         p_c_graph: pointer to the created C FlowGrid structure.
     """
@@ -124,7 +131,7 @@ def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
         if len(succs) > 1:
             raise ValueError(f"Node {n} at position {G.nodes[n]['pos']} has {len(succs)} successors, but must have at most 1.")
 
-        G.nodes[n]["drained_area"] = 1 + sum(G.nodes[p]["drained_area"] for p in preds)
+        G.nodes[n]["drained_area"] = resolution**2 + sum(G.nodes[p]["drained_area"] for p in preds)
 
         def direction_bit(pos1, pos2):
             r1, c1 = pos1
@@ -215,6 +222,7 @@ def from_digraph(G: nx.DiGraph, verbose:bool=False) -> POINTER:
         
     # set root
     p_c_graph.contents.root = _bindings.CartPair_C(row=G.nodes[roots[0]]["pos"][0], col=G.nodes[roots[0]]["pos"][1])
+    p_c_graph.contents.resolution = float(resolution)
     
     # do not set energy
 

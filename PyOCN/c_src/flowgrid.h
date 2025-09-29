@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 // basic types
-typedef uint32_t drainedarea_t;
+typedef double drainedarea_t;
 typedef uint16_t cartidx_t;
 typedef struct {cartidx_t row, col;} CartPair;
 typedef uint32_t linidx_t;
@@ -32,7 +32,7 @@ extern clockhand_t IS_ROOT;
  * - visited: A flag used for traversal algorithms
  */
 typedef struct {
-    drainedarea_t drained_area;  // 4B
+    drainedarea_t drained_area;  // 8B
     linidx_t adown;  // 4B
     localedges_t edges;  // 1B
     clockhand_t downstream;  // 1B
@@ -48,12 +48,15 @@ typedef struct {
  * 
  * - energy: The energy of the flow grid.
  * 
+ * - resolution: the side length of each pixel in meters.
+ * 
  * - vertices: A pointer to an array of Vertex structures representing the nodes in the grid.
  */
 typedef struct {
     CartPair dims;
     CartPair root;
     double energy;
+    double resolution;
     Vertex *vertices;
 } FlowGrid;
 

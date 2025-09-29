@@ -37,7 +37,7 @@ MALFORMED_GRAPH_WARNING = int(Status.in_dll(libocn, "MALFORMED_GRAPH_WARNING").v
 #############################
 # STREAMGRAPH.H EQUIVALENTS #
 #############################
-drainedarea_t = c_uint32
+drainedarea_t = c_double
 cartidx_t = c_uint16
 
 class CartPair_C(Structure):
@@ -66,6 +66,7 @@ class FlowGrid_C(Structure):
         ("dims", CartPair_C),
         ("root", CartPair_C),
         ("energy", c_double),
+        ("resolution", c_double),
         ("vertices", POINTER(Vertex_C)),  # Vertex*
     ]
 

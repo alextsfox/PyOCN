@@ -9,12 +9,17 @@ TODO*
 testing.py
 testing.ipynb
 
+
 **/__pycache__/
 /__pycache__/
 */__pycache__/
 
 .DS_Store
 
+*.gtif
+*.gtiff
+*.tif
+*.tiff
 *.so
 *.dylib
 *.o

@@ -26,13 +26,14 @@ PyOCN.plotting
 
 import warnings
 import ctypes
+from typing import Literal, Any
+from os import PathLike
 from numbers import Number
+from pathlib import Path
+
 import networkx as nx 
-
 import numpy as np
-from typing import Literal
 from tqdm import tqdm
-
 
 from ._statushandler import check_status
 from .utils import create_cooling_schedule, net_type_to_dag
@@ -53,6 +54,8 @@ class OCN:
     dag : nx.DiGraph
         Directed acyclic graph (DAG) over a dense grid that defines the initial
         stream network. See :meth:`OCN.from_digraph` for the graph requirements.
+    resolution : int, optional
+        The side length of each grid cell in meters.
     gamma : float, default 0.5
         Exponent in the energy model, typically in the range [0, 1].
     random_state : int | numpy.random.Generator | None, optional
@@ -71,8 +74,10 @@ class OCN:
     root : tuple[int, int]
         Row/column coordinates of the root node in the grid (read-only
         property).
+    resolution: float
+        The side length of each grid cell in meters.
     """
-    def __init__(self, dag: nx.DiGraph, gamma: float = 0.5, random_state=None, verbosity: int = 0):
+    def __init__(self, dag: nx.DiGraph, resolution: float=1.0, gamma: float = 0.5, random_state=None, verbosity: int = 0):
         """
         Construct an :class:`OCN` from a valid NetworkX ``DiGraph``.
 
@@ -92,13 +97,16 @@ class OCN:
         rng = np.random.default_rng(random_state)
         self.master_seed = rng.integers(0, int(2**32 - 1))
 
+        if not isinstance(resolution, Number):
+            raise TypeError(f"resolution must be numeric. Got {type(resolution)}")
+        self.resolution = resolution
         # instantiate the FlowGrid_C and assign an initial energy.
         self.verbosity = verbosity
-        self.__p_c_graph = fgconv.from_digraph(dag, verbose=(verbosity > 1))
+        self.__p_c_graph = fgconv.from_digraph(dag, resolution, verbose=(verbosity > 1))
         self.__p_c_graph.contents.energy = self.compute_energy()
 
     @classmethod
-    def from_net_type(cls, net_type:str, dims:tuple, gamma=0.5, random_state=None, verbosity:int=0):
+    def from_net_type(cls, net_type:str, dims:tuple, resolution:float=1, gamma=0.5, random_state=None, verbosity:int=0):
         """
         Create an :class:`OCN` from a predefined network type and dimensions.
 
@@ -109,6 +117,8 @@ class OCN:
             :func:`~PyOCN.utils.net_type_to_dag` for supported types.
         dims : tuple[int, int]
             Grid dimensions (rows, cols). Both must be positive even integers.
+        resolution : int, optional
+            The side length of each grid cell in meters.
         gamma : float, default 0.5
             Exponent in the energy model.
         random_state : int | numpy.random.Generator | None, optional
@@ -142,10 +152,10 @@ class OCN:
         dag = net_type_to_dag(net_type, dims)
         if verbosity == 1:
             print(" Done.")
-        return cls(dag, gamma, random_state, verbosity=verbosity)
+        return cls(dag, resolution, gamma, random_state, verbosity=verbosity)
 
     @classmethod
-    def from_digraph(cls, dag: nx.DiGraph, gamma=0.5, random_state=None, verbosity: int = 0):
+    def from_digraph(cls, dag: nx.DiGraph, resolution:float=1, gamma=0.5, random_state=None, verbosity: int = 0):
         """
         Create an :class:`OCN` from an existing NetworkX ``DiGraph``.
 
@@ -153,6 +163,8 @@ class OCN:
         ----------
         dag : nx.DiGraph
             Directed acyclic graph (DAG) representing the stream network.
+        resolution : int, optional
+            The side length of each grid cell in meters.
         gamma : float, default 0.5
             Exponent in the energy model.
         random_state : int | numpy.random.Generator | None, optional
@@ -182,7 +194,7 @@ class OCN:
         - Both ``m`` and ``n`` are even integers, and there are at least four
           vertices.
         """
-        return cls(dag, gamma, random_state, verbosity=verbosity)
+        return cls(dag, resolution, gamma, random_state, verbosity=verbosity)
 
     def __repr__(self):
         #TODO: too verbose?
@@ -217,6 +229,7 @@ class OCN:
         cpy.gamma = self.gamma
         cpy.verbosity = self.verbosity
         cpy.master_seed = self.master_seed
+        cpy.resolution = self.resolution
 
         cpy_p_c_graph = _bindings.libocn.fg_copy_safe(self.__p_c_graph)
         if not cpy_p_c_graph:
@@ -339,6 +352,76 @@ class OCN:
         nx.set_node_attributes(dag, node_energies, 'energy')
 
         return dag
+    
+    def to_gtiff(self, west:float, north:float, crs: Any, path:str|PathLike):
+        """
+        Export a raster of the current FlowGrid to a .gtiff file
+        using rasterio. The resulting raster has 2 bands: `energy`
+        and `drained_area`
+
+        Parameters
+        ----------
+        west : float
+            The western border of the raster in crs units, corresponding
+            to column 0.
+        north : float
+            The western border of the raster in crs units, corresponding
+            to row 0.
+        crs : Any
+            The crs for the resulting gtiff, passed to `rasterio.open`
+        path : str or Pathlike
+            The output path for the resulting gtiff file.
+
+
+
+        Returns
+        -------
+        nx.DiGraph
+            A DAG with the following node attributes per node:
+
+            - ``pos``: ``(row, col)`` grid position
+            - ``drained_area``: drained area value
+            - ``energy``: cumulative energy at the node
+        """
+        try:
+            import rasterio
+            from rasterio.transform import from_origin
+        except ImportError as e:
+            raise ImportError(
+                "PyOCN.OCN.to_gtiff() requires rasterio to be installed. Install with `pip install rasterio`."
+            ) from e
+
+        dag = self.to_digraph()
+        energy = np.zeros(self.dims)   
+        drained_area = np.zeros(self.dims)   
+        for node in dag.nodes:
+            r, c = dag.nodes[node]['pos']
+            energy[r, c] = dag.nodes[node]['energy']
+            drained_area[r, c] = dag.nodes[node]['drained_area']
+        
+        transform = from_origin(west, north, self.resolution, self.resolution)
+
+        # Write two bands: 1=energy, 2=drained_area
+        with rasterio.open(
+            Path(path),
+            "w",
+            driver="GTiff",
+            height=self.dims[0],
+            width=self.dims[1],
+            count=2,
+            dtype=str(energy.dtype),
+            crs=crs,
+            transform=transform,
+            compress="deflate",
+        ) as dst:
+            dst.write(energy, 1)
+            dst.write(drained_area, 2)
+            # Band descriptions (nice to have)
+            try:
+                dst.set_band_description(1, "energy")
+                dst.set_band_description(2, "drained_area")
+            except Exception:
+                pass
     
     def single_erosion_event(self, temperature:float):
         """
