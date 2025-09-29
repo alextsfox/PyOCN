@@ -47,13 +47,7 @@ Status update_drained_area(FlowGrid *G, drainedarea_t da_inc, linidx_t a){
     return SUCCESS;
 }
 
-/**
- * @brief Compute the total energy of the flowgrid. Unsafe.
- * @param G Pointer to the FlowGrid. Will not be modified.
- * @param gamma The exponent used in the energy calculation.
- * @return The total energy of the flowgrid.
- */
-double compute_energy(FlowGrid *G, double gamma){
+double ocn_compute_energy(FlowGrid *G, double gamma){
     double energy = 0.0;
     for (linidx_t i = 0; i < (linidx_t)G->dims.row * (linidx_t)G->dims.col; i++){
         energy += pow(G->vertices[i].drained_area, gamma);
@@ -169,10 +163,10 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     upstream vertices) into this function, instead of just passing da_inc.
     */
     if (G->nroots > 1){
-        energy_old = compute_energy(G, gamma);  // recompute energy from scratch
+        energy_old = ocn_compute_energy(G, gamma);  // recompute energy from scratch
         update_drained_area(G, -da_inc, a_down_old);  // remove drainage from old path
         update_drained_area(G, da_inc, a_down_new);  // add drainage to new path
-        energy_new = compute_energy(G, gamma);  // recompute energy from scratch
+        energy_new = ocn_compute_energy(G, gamma);  // recompute energy from scratch
         // simulated annealing: accept with prob = exp(-delta_energy / temperature). note that p > 1 if energy decreases.
         // printf("Old energy: %f, New energy: %f, Delta E: %f\n", energy_old, energy_new, energy_new - energy_old);
         if (simulate_annealing(energy_new, energy_old, temperature)){

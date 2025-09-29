@@ -142,6 +142,10 @@ libocn.fg_display.restype = None
 #     OCN.H EQUIVALENTS      #
 ##############################
 
+# double ocn_compute_energy(FlowGrid *G, double gamma);
+libocn.ocn_compute_energy.argtypes = [POINTER(FlowGrid_C), c_double]
+libocn.ocn_compute_energy.restype = c_double
+
 # Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature);
 libocn.ocn_single_erosion_event.argtypes = [POINTER(FlowGrid_C), c_double, c_double]
 libocn.ocn_single_erosion_event.restype = Status

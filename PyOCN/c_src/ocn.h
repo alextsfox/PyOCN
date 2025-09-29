@@ -13,6 +13,14 @@
 #include "flowgrid.h"
 
 /**
+ * @brief Compute the total energy of the flowgrid. Unsafe.
+ * @param G Pointer to the FlowGrid. Will not be modified.
+ * @param gamma The exponent used in the energy calculation.
+ * @return The total energy of the flowgrid.
+ */
+double ocn_compute_energy(FlowGrid *G, double gamma);
+
+/**
  * @brief Perform a single erosion event on the flowgrid, attempting to change the outflow of a random vertex.
  * Selects a random vertex and a random new direction and attempts to modify the graph accordingly. 
  * If the modification results in a malformed graph, it is undone and the process is retried up to a set number of times.

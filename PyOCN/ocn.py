@@ -292,8 +292,7 @@ class OCN:
         This constructs a temporary ``DiGraph`` view to aggregate node
         energies from drained areas using the exponent ``gamma``.
         """
-        dag = fgconv.to_digraph(self.__p_c_graph.contents)
-        return sum(da**self.gamma for da in nx.get_node_attributes(dag, 'drained_area').values())
+        return _bindings.libocn.ocn_compute_energy(self.__p_c_graph, self.gamma)
     
     @property
     def energy(self) -> float:
@@ -385,7 +384,7 @@ class OCN:
         dag = fgconv.to_digraph(self.__p_c_graph.contents)
 
         node_energies = dict()
-        
+
         for node in nx.topological_sort(dag):
             node_energies[node] = (
                 dag.nodes[node]['drained_area']**self.gamma 

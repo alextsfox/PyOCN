@@ -12,7 +12,7 @@ import warnings
 from numpy import integer as np_integer
 import networkx as nx
 
-from ._statushandler import check_status, SUPPRESS_WARNINGS
+from ._statushandler import check_status
 from . import _libocn_bindings as _bindings
 
 def to_digraph(c_graph:_bindings.FlowGrid_C) -> nx.DiGraph:
