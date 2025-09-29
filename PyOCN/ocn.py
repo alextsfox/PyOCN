@@ -495,9 +495,10 @@ class OCN:
         constant_phase:float=0.0,
         pbar:bool=True,
         energy_reports:int=1000,
-        array_reports:int=0,
+        array_reports:int=1,
         array_report_downsample:int=1,
         tol:float=None,
+        max_iterations_per_loop=10_000
     ) -> FitResult:
         """
         Optimize the OCN using simulated annealing.
@@ -538,6 +539,10 @@ class OCN:
             in energy between reports is less than `tol`. Must be positive.
             If None (default), no early stopping is performed.
             Recommended values are in the range 1e-4 to 1e-6.
+        max_iterations_per_loop: int, optional
+            If provided, the number of iterations steps to perform in each "chunk"
+            of optimization. Energy and output arrays can be reported no more often
+            than this.
 
         Returns
         -------
@@ -592,10 +597,6 @@ class OCN:
                 raise ValueError(f"tol must be a positive number or None, got {tol}")
 
 
-        report_energy_interval = n_iterations // energy_reports
-
-        max_iterations_per_loop = report_energy_interval
-
         
         cooling_schedule = create_cooling_schedule(
             ocn=self,
@@ -610,7 +611,9 @@ class OCN:
         completed_iterations = 0
         self.__p_c_graph.contents.energy = self.compute_energy()
 
-        energy_out = np.empty(n_iterations//report_energy_interval + 1, dtype=np.float64)
+        report_energy_interval = n_iterations // energy_reports
+        report_energy_interval = max(report_energy_interval, max_iterations_per_loop)
+        energy_out = np.empty(n_iterations//report_energy_interval + 2, dtype=np.float64)
         energy_out[0] = self.energy
         
         energy_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
@@ -627,14 +630,16 @@ class OCN:
         
         # adjust array_reports to be a multiple of n_loops
         array_report_interval = n_iterations // array_reports
+        array_report_interval = max(array_report_interval, max_iterations_per_loop)
         array_out = np.empty([
-            n_iterations//array_report_interval + 1,
+            n_iterations//array_report_interval + 2,
             2,
             self.dims[0]//array_report_downsample,
             self.dims[1]//array_report_downsample,
         ])
         array_out[0] = self.to_array()[:, ::array_report_downsample, ::array_report_downsample]
 
+        print(len(energy_out), len(array_out))
         # ensure energy is up to date, useful if doing a multi-stage fit
 
         with tqdm(total=n_iterations, desc="OCN Optimization", unit_scale=True, dynamic_ncols=True, disable=not (pbar or self.verbosity >= 1)) as pbar:
@@ -642,6 +647,7 @@ class OCN:
             pbar.update(0)
             
             array_report_number = 0
+            energy_report_number = 0
             array_report_idx = [0]
             energy_report_idx = [0]
             while completed_iterations < n_iterations:
@@ -660,28 +666,17 @@ class OCN:
                 ))
                 e_new = self.energy
                 completed_iterations += iterations_this_loop
-
-                # copy energies to output array
-                s = slice(
-                    (completed_iterations - iterations_this_loop)//report_energy_interval + 1,
-                    completed_iterations//report_energy_interval + 1,
-                    1
-                )
                 
                 if (completed_iterations % array_report_interval) < max_iterations_per_loop:
                     array_report_number += 1
                     array_report_idx.append(completed_iterations)
                     array_out[array_report_number] = self.to_array()[:, ::array_report_downsample, ::array_report_downsample]
-
-                energy_out[s] = energy_buf[:iterations_this_loop:report_energy_interval]
-                energy_report_idx.extend(list(range(s.start, s.stop, s.step)))
+                if (completed_iterations % report_energy_interval) < max_iterations_per_loop:
+                    energy_report_number += 1
+                    energy_report_idx.append(completed_iterations)
+                    energy_out[energy_report_number] = energy_buf[-1]
 
                 if tol is not None and e_new < e_old and abs((e_old - e_new)/e_old) < tol:
-                    energy_out = energy_out[:s.stop]
-                    energy_report_idx.append(s.stop)
-
-                    array_out = array_out[:array_report_number + 1]
-
                     pbar.set_postfix({
                         "Energy": self.energy, 
                         "T": anneal_buf[iterations_this_loop - 1],
@@ -697,12 +692,13 @@ class OCN:
                 })
                 pbar.update(iterations_this_loop)
 
-
+        array_report_idx = np.array(array_report_idx, dtype=np.int32)
+        energy_report_idx = np.array(energy_report_idx, dtype=np.int32)
         return FitResult(
-            array_report_idx=array_report_idx,
-            array_reports=array_out,
-            energy_report_idx=energy_report_idx,
-            energy_reports=energy_out,
+            array_report_idx=np.asarray(array_report_idx, dtype=np.int32)[:array_report_number + 1],
+            array_reports=array_out[:array_report_number + 1],
+            energy_report_idx=np.asarray(energy_report_idx, dtype=np.int32)[:energy_report_number + 1],
+            energy_reports=energy_out[:energy_report_number + 1],
         )
 
 
