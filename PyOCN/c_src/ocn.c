@@ -162,7 +162,7 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     their summed contribution to the energy. Pass this value (sum of (da^gamma) for all
     upstream vertices) into this function, instead of just passing da_inc.
     */
-    if (G->nroots > 1){
+    if ((G->nroots > 1) && (gamma < 1.0)){
         // energy_old = ocn_compute_energy(G, gamma);  // recompute energy from scratch
         update_drained_area(G, -da_inc, a_down_old);  // remove drainage from old path
         update_drained_area(G, da_inc, a_down_new);  // add drainage to new path
