@@ -150,8 +150,8 @@ libocn.ocn_compute_energy.restype = c_double
 libocn.ocn_single_erosion_event.argtypes = [POINTER(FlowGrid_C), c_double, c_double]
 libocn.ocn_single_erosion_event.restype = Status
 
-# Status ocn_outer_ocn_loop(FlowGrid *G, double *energy_history, uint32_t niterations, double gamma, double *annealing_schedule);
-libocn.ocn_outer_ocn_loop.argtypes = [POINTER(FlowGrid_C), POINTER(c_double), c_uint32, c_double, POINTER(c_double)]
+# Status ocn_outer_ocn_loop(FlowGrid *G, uint32_t niterations, double gamma, double *annealing_schedule);
+libocn.ocn_outer_ocn_loop.argtypes = [POINTER(FlowGrid_C), c_uint32, c_double, POINTER(c_double)]
 libocn.ocn_outer_ocn_loop.restype = Status
 
 ########################

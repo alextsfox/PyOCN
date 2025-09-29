@@ -140,8 +140,8 @@ P(\mathrm{accept}) = \min\Big(1, \exp\big({-[E_\mathrm{root}[n] - E_\mathrm{root
 <p>Higher values of <span class="math inline">\(\gamma\)</span> push the network towards “steeper” configurations with straight-line channels, and lower values encourage more dendritic, wandering, branching structures. The following plots show the final state of an OCN generated on a 256 x 256 grid after 2.5M iterations using different values of <span class="math inline">\(\gamma\)</span>, which took about 2 minutes to run on my laptop.</p>
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="fig.png" class="img-fluid figure-img"></p>
-<figcaption>OCNs generated with different gamma values</figcaption>
+<p><img src="generation.gif" class="img-fluid figure-img"></p>
+<figcaption>Optimizing an OCN</figcaption>
 </figure>
 </div>
 </section>
@@ -151,7 +151,7 @@ P(\mathrm{accept}) = \min\Big(1, \exp\big({-[E_\mathrm{root}[n] - E_\mathrm{root
 </section>
 <section id="pyocn-1" class="level1">
 <h1>PyOCN</h1>
-<p>The PyOCN frontend is a Python package that provides a high-level interface to the libocn C library. PyOCN uses the NetworkX library to expose the network graph and provides additional functions to manipulate and analyze the graph, as well as export the graph to various formats, including as raster images. (TODO: implement export to gtif, rasterio). The main class in PyOCN is the <code>OCN</code> class, which includes methods for constructing an initial configuration and running the optimization algorithm.</p>
+<p>The PyOCN frontend is a Python package that provides a high-level interface to the libocn C library. PyOCN uses the NetworkX library to expose the network graph and provides additional functions to manipulate and analyze the graph, as well as export the graph to various formats, including GeoTIFF. The main class in PyOCN is the <code>OCN</code> class, which includes methods for constructing an initial configuration and running the optimization algorithm.</p>
 </section>
 <section id="citing-pyocn" class="level1">
 <h1>Citing PyOCN</h1>

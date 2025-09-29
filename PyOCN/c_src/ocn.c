@@ -163,7 +163,7 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     upstream vertices) into this function, instead of just passing da_inc.
     */
     if (G->nroots > 1){
-        energy_old = ocn_compute_energy(G, gamma);  // recompute energy from scratch
+        // energy_old = ocn_compute_energy(G, gamma);  // recompute energy from scratch
         update_drained_area(G, -da_inc, a_down_old);  // remove drainage from old path
         update_drained_area(G, da_inc, a_down_new);  // add drainage to new path
         energy_new = ocn_compute_energy(G, gamma);  // recompute energy from scratch
@@ -194,15 +194,11 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     return EROSION_FAILURE;  // if we reach here, we failed to find a valid swap in many, many tries
 }
 
-Status ocn_outer_ocn_loop(FlowGrid *G, double *energy_history, uint32_t niterations, double gamma, double *annealing_schedule){
+Status ocn_outer_ocn_loop(FlowGrid *G, uint32_t niterations, double gamma, double *annealing_schedule){
     Status code;
-
-    if (energy_history == NULL) return NULL_POINTER_ERROR;
-
     for (uint32_t i = 0; i < niterations; i++){
         code = ocn_single_erosion_event(G, gamma, annealing_schedule[i]);
         if ((code != SUCCESS) && (code != EROSION_FAILURE)) return code;
-        energy_history[i] = G->energy;
     }
     return SUCCESS;
 }

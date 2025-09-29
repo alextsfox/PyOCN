@@ -59,14 +59,17 @@ class FitResult:
     energy_reports : np.ndarray
         Energy snapshots recorded during fitting.
         Shape (n_reports,).
+    temperature : np.ndarray
+        Temperature values at each recorded energy snapshot.
     """
-    array_report_idx: np.ndarray
-    array_reports: np.ndarray
-    energy_report_idx: np.ndarray
-    energy_reports: np.ndarray
+    grid_idx: np.ndarray
+    grids: np.ndarray
+    energy_idx: np.ndarray
+    energies: np.ndarray
+    temperatures: np.ndarray
 
     def __str__(self):
-        return (f"FitResult(energy_reports={len(self.energy_reports)}, array_reports={len(self.array_reports)})")
+        return (f"FitResult(energies={len(self.energies)}, grids={len(self.grids)})")
 
 class OCN:
     """
@@ -518,10 +521,10 @@ class OCN:
         pbar:bool=False,
         energy_reports:int=1000,
         array_reports:int=1,
-        # array_report_downsample:int=1,
         tol:float=None,
-        max_iterations_per_loop=10_000
-    ) -> FitResult:
+        max_iterations_per_loop=10_000,
+        xarray_out:bool=False,
+    ) -> FitResult | tuple[FitResult, "xr.Dataset"]:
         """
         Optimize the OCN using simulated annealing.
 
@@ -551,11 +554,6 @@ class OCN:
             array. If None, do not report arrays. The returned array will have
             shape (array_reports, channels, rows, cols), where channel 0 (axis 1) is
             energy and channel 1 is drained area.
-        # array_report_downsample : int, default 1
-        #     Downsampling factor for array reports. If 1 (default), no downsampling
-        #     is performed. Returned array reports will have shape
-        #     ``(array_reports, channels, rows // downsample, cols // downsample)``.
-        #     Must be a positive integer.
         tol : float, optional
             If provided, optimization will stop early if the relative change
             in energy between reports is less than `tol`. Must be positive.
@@ -565,10 +563,13 @@ class OCN:
             If provided, the number of iterations steps to perform in each "chunk"
             of optimization. Energy and output arrays can be reported no more often
             than this.
+        xarray_out : bool, default False
+            If True, the returned result will also include an xarray.Dataset.
+            Requires xarray to be installed.
 
         Returns
         -------
-        FitResult
+        FitResult | tuple[FitResult, "xr.Dataset"]
 
         Raises
         ------
@@ -602,8 +603,6 @@ class OCN:
         moves (:math:`\Delta E < 0`) are always accepted.
         """
 
-        array_report_downsample = 1  # TODO: figure out of we can make this work, with interpolation or something.
-
         rng = np.random.default_rng(self.master_seed)
         self.master_seed = rng.integers(0, int(2**32 - 1))
         _bindings.libocn.rng_seed(self.master_seed)
@@ -618,8 +617,10 @@ class OCN:
             if tol is not None:
                 raise ValueError(f"tol must be a positive number or None, got {tol}")
 
+        memory_est = array_reports*self.dims[0]*self.dims[1]*2*8 
+        if memory_est > 20e6:
+            warnings.warn(f"Requesting {array_reports} array is estimated to use {memory_est/1e6:.2f}MB of memory.")
 
-        
         cooling_schedule = create_cooling_schedule(
             ocn=self,
             constant_phase=constant_phase,
@@ -634,39 +635,33 @@ class OCN:
             warnings.warn("Using cooling_rate < 0.5 and constant_phase > 0.1 with may cause convergence issues. Consider increasing n_iterations.")
 
         completed_iterations = 0
-        self.__p_c_graph.contents.energy = self.compute_energy()
-
-        report_energy_interval = n_iterations // energy_reports
-        report_energy_interval = max(report_energy_interval, max_iterations_per_loop)
-        energy_out = np.empty(n_iterations//report_energy_interval + 2, dtype=np.float64)
-        energy_out[0] = self.energy
         
-        energy_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
-        energy_ptr = energy_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        energy_report_interval = n_iterations // energy_reports
+        energy_report_interval = max(energy_report_interval, max_iterations_per_loop)
+        
+        array_report_interval = n_iterations // array_reports
+        array_report_interval = max(array_report_interval, max_iterations_per_loop)
+        
+        # always report energy when reporting arrays
+        energy_out = np.empty(
+            n_iterations//energy_report_interval + 2 + n_iterations//array_report_interval + 2
+            , dtype=np.float64)
+        energy_out[0] = self.energy
+
+        # adjust array_reports to be a multiple of n_loops
+        array_out = np.empty([
+            n_iterations//array_report_interval + 2,
+            2,
+            self.dims[0],
+            self.dims[1]
+        ])
+        array_out[0] = self.to_array()
 
         anneal_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
         anneal_ptr = anneal_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
 
-        if array_reports < 1:
-            raise ValueError(f"array_reports must be greater than 0. Got {array_reports}")
-        if array_report_downsample < 1:
-            raise ValueError(f"array_report_downsample must be a positive integer. Got {array_report_downsample}")
-        
-        
-        # adjust array_reports to be a multiple of n_loops
-        array_report_interval = n_iterations // array_reports
-        array_report_interval = max(array_report_interval, max_iterations_per_loop)
-        array_out = np.empty([
-            n_iterations//array_report_interval + 2,
-            2,
-            self.dims[0]//array_report_downsample,
-            self.dims[1]//array_report_downsample,
-        ])
-        array_out[0] = self.to_array()[:, ::array_report_downsample, ::array_report_downsample]
-
-        print(len(energy_out), len(array_out))
-        # ensure energy is up to date, useful if doing a multi-stage fit
-
+        # make sure energy is up to date, useful if the user modified the parameters manually
+        self.__p_c_graph.contents.energy = self.compute_energy()
         with tqdm(total=n_iterations, desc="OCN Optimization", unit_scale=True, dynamic_ncols=True, disable=not (pbar or self.verbosity >= 1)) as pbar:
             pbar.set_postfix({"Energy": self.energy, "P(Accept)": 1.0})
             pbar.update(0)
@@ -684,7 +679,6 @@ class OCN:
                 e_old = self.energy
                 check_status(_bindings.libocn.ocn_outer_ocn_loop(
                     self.__p_c_graph, 
-                    energy_ptr,
                     iterations_this_loop, 
                     self.gamma, 
                     anneal_ptr
@@ -695,11 +689,14 @@ class OCN:
                 if (completed_iterations % array_report_interval) < max_iterations_per_loop:
                     array_report_number += 1
                     array_report_idx.append(completed_iterations)
-                    array_out[array_report_number] = self.to_array()[:, ::array_report_downsample, ::array_report_downsample]
-                if (completed_iterations % report_energy_interval) < max_iterations_per_loop:
+                    array_out[array_report_number] = self.to_array()
                     energy_report_number += 1
                     energy_report_idx.append(completed_iterations)
-                    energy_out[energy_report_number] = energy_buf[-1]
+                    energy_out[energy_report_number] = e_new
+                elif (completed_iterations % energy_report_interval) < max_iterations_per_loop:
+                    energy_report_number += 1
+                    energy_report_idx.append(completed_iterations)
+                    energy_out[energy_report_number] = e_new
 
                 if tol is not None and e_new < e_old and abs((e_old - e_new)/e_old) < tol:
                     pbar.set_postfix({
@@ -719,12 +716,51 @@ class OCN:
 
         array_report_idx = np.array(array_report_idx, dtype=np.int32)
         energy_report_idx = np.array(energy_report_idx, dtype=np.int32)
-        return FitResult(
-            array_report_idx=np.asarray(array_report_idx, dtype=np.int32)[:array_report_number + 1],
-            array_reports=array_out[:array_report_number + 1],
-            energy_report_idx=np.asarray(energy_report_idx, dtype=np.int32)[:energy_report_number + 1],
-            energy_reports=energy_out[:energy_report_number + 1],
+        
+        result = FitResult(
+            grid_idx=np.asarray(array_report_idx, dtype=np.int32)[:array_report_number + 1],
+            grids=array_out[:array_report_number + 1],
+            energy_idx=np.asarray(energy_report_idx, dtype=np.int32)[:energy_report_number + 1],
+            energies=energy_out[:energy_report_number + 1],
+            temperatures=cooling_schedule(energy_report_idx[:energy_report_number + 1])
         )
+
+        if xarray_out:
+            try:
+                import xarray as xr
+            except ImportError as e:
+                raise ImportError(
+                    "PyOCN.OCN.fit() with xarray_out=True requires xarray to be installed. Install with `pip install xarray`."
+                ) from e
+
+            mask = np.isin(
+                energy_report_idx[:energy_report_number + 1], 
+                array_report_idx[:array_report_number + 1], 
+                assume_unique=True
+            )
+            energy_idx = np.where(mask)[0]
+            return result, xr.Dataset(
+                data_vars={
+                    "grid": (["iteration", "band", "y", "x"], 
+                             array_out[:array_report_number + 1]),
+                    "energy": (["iteration"], energy_out[energy_idx]),
+                    "temperatures": (["iteration"], cooling_schedule(array_report_idx[:array_report_number + 1]))
+                },
+                coords={
+                    "iteration": ("iteration", array_report_idx),
+                    "band": ["energy", "drained_area"],
+                    "y": ("y", np.arange(self.dims[0])*self.resolution),
+                    "x": ("x", np.arange(self.dims[1])*self.resolution),
+                },
+                attrs={
+                    "description": "OCN fit result arrays",
+                    "resolution_m": self.resolution,
+                    "gamma": self.gamma,
+                    "master_seed": int(self.master_seed),
+                }
+            )
+        
+        return result
 
 
 __all__ = [

@@ -16,6 +16,8 @@ testing.ipynb
 
 .DS_Store
 
+/figs/
+
 *.gtif
 *.gtiff
 *.tif

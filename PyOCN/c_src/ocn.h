@@ -44,6 +44,6 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature);
  * @param annealing_schedule An array of temperatures (ranging from 0-1) to use for each iteration. Length must be at least niterations.
  * @return Status code indicating success or failure
  */
-Status ocn_outer_ocn_loop(FlowGrid *G, double *energy_history, uint32_t niterations, double gamma, double *annealing_schedule);
+Status ocn_outer_ocn_loop(FlowGrid *G, uint32_t niterations, double gamma, double *annealing_schedule);
 
 #endif // OCN_H
