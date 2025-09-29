@@ -359,6 +359,11 @@ class OCN:
         using rasterio. The resulting raster has 2 bands: `energy`
         and `drained_area`
 
+        N.B. This uses the .resolution attribute to set pixel size in the raster
+        This is assumed to be in units as meters. Using a CRS with different units
+        may have unexpected results! It is recommended to choose a CRS with meter units
+        then transform to another CRS later if needed.
+
         Parameters
         ----------
         west : float
