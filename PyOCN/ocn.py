@@ -496,7 +496,7 @@ class OCN:
         pbar:bool=True,
         energy_reports:int=1000,
         array_reports:int=1,
-        array_report_downsample:int=1,
+        # array_report_downsample:int=1,
         tol:float=None,
         max_iterations_per_loop=10_000
     ) -> FitResult:
@@ -529,11 +529,11 @@ class OCN:
             array. If None, do not report arrays. The returned array will have
             shape (array_reports, channels, rows, cols), where channel 0 (axis 1) is
             energy and channel 1 is drained area.
-        array_report_downsample : int, default 1
-            Downsampling factor for array reports. If 1 (default), no downsampling
-            is performed. Returned array reports will have shape
-            ``(array_reports, channels, rows // downsample, cols // downsample)``.
-            Must be a positive integer.
+        # array_report_downsample : int, default 1
+        #     Downsampling factor for array reports. If 1 (default), no downsampling
+        #     is performed. Returned array reports will have shape
+        #     ``(array_reports, channels, rows // downsample, cols // downsample)``.
+        #     Must be a positive integer.
         tol : float, optional
             If provided, optimization will stop early if the relative change
             in energy between reports is less than `tol`. Must be positive.
@@ -580,7 +580,7 @@ class OCN:
         moves (:math:`\Delta E < 0`) are always accepted.
         """
 
-        #TODO energy_reports is defo broken
+        array_report_downsample = 1  # TODO: figure out of we can make this work, with interpolation or something.
 
         rng = np.random.default_rng(self.master_seed)
         self.master_seed = rng.integers(0, int(2**32 - 1))
