@@ -318,7 +318,7 @@ void fg_display(FlowGrid *G, bool use_utf8){
 
     for (cartidx_t i = 0; i < m; i++){
         // Node row
-        for (cartidx_t j = 0; j < n; j++){
+        for (cartidx_t j = 0; j < n; j++){ 
             linidx_t idx = i*n + j;
             Vertex *v = &(G->vertices[idx]);
             
