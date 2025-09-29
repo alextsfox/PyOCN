@@ -44,7 +44,7 @@ def to_digraph(c_graph:_bindings.FlowGrid_C) -> nx.DiGraph:
         
         return dag
 
-def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False) -> POINTER:
+def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate:bool=True) -> POINTER:
     """
     Convert a NetworkX directed graph into a FlowGrid_C. Called by the OCN constructor.
 
@@ -54,6 +54,8 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False) -> POINT
         The digraph object to initialize from
     resolution: float
         The sidelength of each gridcell in meters. Default 1.
+    validate: bool
+        Whether to check the input graph for validity before conversion. Default True. For internal use only.
     Returns:
         p_c_graph: pointer to the created C FlowGrid structure.
     """
@@ -63,59 +65,81 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False) -> POINT
         print("--------------------------------------")
 
     # is a DAG
-    if not isinstance(G, nx.DiGraph):
-        raise TypeError(f"G must be a networkx.DiGraph, got {type(G)}")
-    if not nx.is_directed_acyclic_graph(G):
-        raise ValueError("Graph must be a DAG.")
-    
-    if verbose:
-        print("\tGraph is a directed acyclic graph.")
-    
+    if validate:
+        if not isinstance(G, nx.DiGraph):
+            raise TypeError(f"G must be a networkx.DiGraph, got {type(G)}")
+        if not nx.is_directed_acyclic_graph(G):
+            raise ValueError("Graph must be a DAG.")
+
+        if verbose:
+            print("\tGraph is a directed acyclic graph.")
+
     # pos attribute is valid
-    pos = list(nx.get_node_attributes(G, "pos").values())
-    if len(pos) != len(G.nodes):
-        raise ValueError("All graph nodes must have a 'pos' attribute.")
-    if any(
-        not isinstance(p, (tuple, list))  # Check if position is a tuple or list
-        or len(p) != 2  # Check if it has exactly two elements
-        or not all(isinstance(x, (int, np_integer)) for x in p)  # Check if both elements are integers
-        or any(x < 0 for x in p)  # Check if both elements are non-negative
-        for p in pos
-    ):
-        raise ValueError("All graph node 'pos' attributes must be non-negative (row:int, col:int) tuples.")
-    
-    if verbose:
-        print("\tGraph 'pos' attributes are valid.")
+    pos_dict = nx.get_node_attributes(G, "pos")
+    pos = list(pos_dict.values())
+    pos_set = set(pos_dict.values())
+    pos_dict_reversed = {v:k for k,v in pos_dict.items()}
+
+    if validate:
+        if len(pos) != len(G.nodes):
+            raise ValueError("All graph nodes must have a 'pos' attribute.")
+        if any(
+            not isinstance(p, (tuple, list))  # Check if position is a tuple or list
+            or len(p) != 2  # Check if it has exactly two elements
+            or not all(isinstance(x, (int, np_integer)) for x in p)  # Check if both elements are integers
+            or any(x < 0 for x in p)  # Check if both elements are non-negative
+            for p in pos
+        ):
+            raise ValueError("All graph node 'pos' attributes must be non-negative (row:int, col:int) tuples.")
+        
+        if verbose:
+            print("\tGraph 'pos' attributes are valid.")
 
     # spans a dense grid
     rows, cols = max(p[0] for p in pos) + 1, max(p[1] for p in pos) + 1
 
-    if set(product(range(rows), range(cols))).difference(set(pos)):
-        raise ValueError(f"Graph does not cover a dense {rows}x{cols} grid.")
-    if len(G.nodes) != rows * cols:
-        raise ValueError(f"Graph does not cover a dense {rows}x{cols} grid (expected {rows*cols} nodes, got {len(G.nodes)}).")
+    if validate:
+        if set(product(range(rows), range(cols))).difference(pos_set):
+            raise ValueError(f"Graph does not cover a dense {rows}x{cols} grid.")
+        if len(G.nodes) != rows * cols:
+            raise ValueError(f"Graph does not cover a dense {rows}x{cols} grid (expected {rows*cols} nodes, got {len(G.nodes)}).")
 
-    if verbose:
-        print(f"\tGraph covers a dense {rows}x{cols} grid.")
+        if verbose:
+            print(f"\tGraph covers a dense {rows}x{cols} grid.")
 
-    # is a spanning tree
-    if any(G.out_degree(u) > 1 for u in G.nodes):
-        raise ValueError("Graph must be a spanning tree (each node has out_degree <= 1).")
-    roots = [u for u in G.nodes if G.out_degree(u) == 0]
-    
-    if verbose:
-        print(f"\tFound {len(roots)} spanning trees.")
+        # is a spanning tree
+        if any(G.out_degree(u) > 1 for u in G.nodes):
+            raise ValueError("Graph must be a spanning tree (each node has out_degree <= 1).")
+        roots = [u for u in G.nodes if G.out_degree(u) == 0]
+        
+        if verbose:
+            print(f"\tFound {len(roots)} spanning trees.")
 
-    # edges only connect to adjacent nodes (no skipping)
-    for u, v in G.edges:
-        r1, c1 = G.nodes[u]["pos"]
-        r2, c2 = G.nodes[v]["pos"]
-        if max(abs(r1 - r2), abs(c1 - c2)) != 1:
-            raise ValueError(f"Edge ({u}->{v}) connects non-adjacent nodes at positions {(r1,c1)} and {(r2,c2)}.")
-    
-    if verbose:
-        print("\tEdges connect only to adjacent nodes).")
+        # edges only connect to adjacent nodes (no skipping)
+        for u, v in G.edges:
+            r1, c1 = G.nodes[u]["pos"]
+            r2, c2 = G.nodes[v]["pos"]
+            if max(abs(r1 - r2), abs(c1 - c2)) != 1:
+                raise ValueError(f"Edge ({u}->{v}) connects non-adjacent nodes at positions {(r1,c1)} and {(r2,c2)}.")
+        
+        if verbose:
+            print("\tEdges connect only to adjacent nodes.")
 
+
+    def direction_bit(pos1, pos2):
+        r1, c1 = pos1
+        r2, c2 = pos2
+        dr, dc = r2 - r1, c2 - c1
+        match dr, dc:
+            case -1,  0: return 0  # N
+            case -1,  1: return 1  # NE
+            case  0,  1: return 2  # E
+            case  1,  1: return 3  # SE
+            case  1,  0: return 4  # S
+            case  1, -1: return 5  # SW
+            case  0, -1: return 6  # W
+            case -1, -1: return 7  # NW
+            case _: raise ValueError(f"Nodes at positions {pos1} and {pos2} are not adjacent.")
     # compute the drained area, adown, edges, downstream, and visited attributes for each node.
     # checking for crosses can come later: easier with edges defined.
     for n in nx.topological_sort(G):
@@ -130,21 +154,6 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False) -> POINT
             raise ValueError(f"Node {n} at position {G.nodes[n]['pos']} has {len(succs)} successors, but must have at most 1.")
 
         G.nodes[n]["drained_area"] = resolution**2 + sum(G.nodes[p]["drained_area"] for p in preds)
-
-        def direction_bit(pos1, pos2):
-            r1, c1 = pos1
-            r2, c2 = pos2
-            dr, dc = r2 - r1, c2 - c1
-            match dr, dc:
-                case -1,  0: return 0  # N
-                case -1,  1: return 1  # NE
-                case  0,  1: return 2  # E
-                case  1,  1: return 3  # SE
-                case  1,  0: return 4  # S
-                case  1, -1: return 5  # SW
-                case  0, -1: return 6  # W
-                case -1, -1: return 7  # NW
-                case _: raise ValueError(f"Nodes at positions {pos1} and {pos2} are not adjacent.")
         G.nodes[n]["edges"] = 0
         for nbr in neighbors:
             G.nodes[n]["edges"] |= (1 << direction_bit(G.nodes[n]["pos"], G.nodes[nbr]["pos"]))
@@ -164,35 +173,38 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False) -> POINT
 
     # check that edges do not cross each other
     #TODO: this is the current bottleneck of the conversion process. Consider profiling.
-    for n in G.nodes:
-        r, c = G.nodes[n]["pos"]
-        succs = list(G.successors(n))
-        if len(succs) == 0: continue  # skip root node
-        match G.nodes[n]["downstream"]:
-            case 1: r_check, c_check = r - 1, c      # NE flow: check N vertex
-            case 7: r_check, c_check = r - 1, c      # NW flow: check N vertex
-            case 3: r_check, c_check = r + 1, c      # SE flow: check S vertex
-            case 5: r_check, c_check = r + 1, c      # SW flow: check S vertex
-            case _: continue  # Not a diagonal flow, cannot cross
+    if validate:
+        for n in G.nodes:
+            r, c = G.nodes[n]["pos"]
+            
+            down = G.nodes[n]["downstream"]
+            if down % 2 == 0: continue  # Not a diagonal flow, cannot cross
+            
+            succs = list(G.successors(n))
+            if len(succs) == 0: continue  # skip root node
 
-        # find the node with pos (r_check, c_check)
-        cross_check_nodes = [u for u in G.nodes if G.nodes[u]["pos"] == (r_check, c_check)]
-        if len(cross_check_nodes) == 0:
-            raise ValueError(f"Node at position {(r_check, c_check)} does not exist!")
-        if len(cross_check_nodes) > 1:
-            raise ValueError(f"Multiple nodes found at position {(r_check, c_check)}!")
-        cross_check_node = cross_check_nodes[0]
-        cross_edges = G.nodes[cross_check_node]["edges"]
-        if (
-            G.nodes[n]["downstream"] == 1 and (cross_edges & (1 << 3))  # NE flow: N vertex has SE edge
-            or (G.nodes[n]["downstream"] == 7 and (cross_edges & (1 << 5)))  # NW flow: N vertex has SW edge
-            or (G.nodes[n]["downstream"] == 3 and (cross_edges & (1 << 1)))  # SE flow: S vertex has NE edge
-            or (G.nodes[n]["downstream"] == 5 and (cross_edges & (1 << 7)))  # SW flow: S vertex has NW edge
-        ):
-            raise ValueError(f"Edge ({n}->{succs[0]}) crosses edge from node at position {(r_check, c_check)}.")
+            match down:
+                case 1: r_check, c_check = r - 1, c      # NE flow: check N vertex
+                case 7: r_check, c_check = r - 1, c      # NW flow: check N vertex
+                case 3: r_check, c_check = r + 1, c      # SE flow: check S vertex
+                case 5: r_check, c_check = r + 1, c      # SW flow: check S vertex
+                case _: continue  # should have already been caught
 
-    if verbose:
-        print("\tChecked for crossing edges.")
+            # find the node with pos (r_check, c_check)
+            cross_check_node = pos_dict_reversed.get((r_check, c_check))
+            if cross_check_node is None:
+                raise ValueError(f"Node at position {(r_check, c_check)} does not exist!")
+            cross_edges = G.nodes[cross_check_node]["edges"]
+            if (
+                G.nodes[n]["downstream"] == 1 and (cross_edges & (1 << 3))  # NE flow: N vertex has SE edge
+                or (G.nodes[n]["downstream"] == 7 and (cross_edges & (1 << 5)))  # NW flow: N vertex has SW edge
+                or (G.nodes[n]["downstream"] == 3 and (cross_edges & (1 << 1)))  # SE flow: S vertex has NE edge
+                or (G.nodes[n]["downstream"] == 5 and (cross_edges & (1 << 7)))  # SW flow: S vertex has NW edge
+            ):
+                raise ValueError(f"Edge ({n}->{succs[0]}) crosses edge from node at position {(r_check, c_check)}.")
+
+        if verbose:
+            print("\tChecked for crossing edges.")
 
     # By now, the graph is validated and has all necessary attributes to create the C FlowGrid structure.
     p_c_graph = _bindings.libocn.fg_create_empty_safe(_bindings.CartPair_C(row=rows, col=cols))

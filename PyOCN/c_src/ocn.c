@@ -22,7 +22,7 @@ Status ocn_update_energy(FlowGrid *G, drainedarea_t da_inc, linidx_t a, double g
     while (vert.downstream != IS_ROOT){
         // update drained area of the vertex and energy of the graph.
         da = vert.drained_area;
-        G->energy += pow((double)(da + da_inc), gamma) - pow((double)da, gamma);  // update energy
+        G->energy += pow((da + da_inc), gamma) - pow(da, gamma);  // update energy
         vert.drained_area += da_inc;  // update drained area of vertex
         fg_set_lin(G, vert, a);
 

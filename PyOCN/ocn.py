@@ -74,7 +74,7 @@ class OCN:
     resolution: float
         The side length of each grid cell in meters.
     """
-    def __init__(self, dag: nx.DiGraph, resolution: float=1.0, gamma: float = 0.5, random_state=None, verbosity: int = 0):
+    def __init__(self, dag: nx.DiGraph, resolution: float=1.0, gamma: float = 0.5, random_state=None, verbosity: int = 0, validate:bool=True):
         """
         Construct an :class:`OCN` from a valid NetworkX ``DiGraph``.
 
@@ -98,7 +98,7 @@ class OCN:
             raise TypeError(f"resolution must be numeric. Got {type(resolution)}")
         # instantiate the FlowGrid_C and assign an initial energy.
         self.verbosity = verbosity
-        self.__p_c_graph = fgconv.from_digraph(dag, resolution, verbose=(verbosity > 1))
+        self.__p_c_graph = fgconv.from_digraph(dag, resolution, verbose=(verbosity > 1), validate=validate)
         self.__p_c_graph.contents.energy = self.compute_energy()
 
     @classmethod
@@ -148,7 +148,7 @@ class OCN:
         dag = net_type_to_dag(net_type, dims)
         if verbosity == 1:
             print(" Done.")
-        return cls(dag, resolution, gamma, random_state, verbosity=verbosity)
+        return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=True)
 
     @classmethod
     def from_digraph(cls, dag: nx.DiGraph, resolution:float=1, gamma=0.5, random_state=None, verbosity: int = 0):
@@ -190,7 +190,7 @@ class OCN:
         - Both ``m`` and ``n`` are even integers, and there are at least four
           vertices.
         """
-        return cls(dag, resolution, gamma, random_state, verbosity=verbosity)
+        return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=True)
 
     def __repr__(self):
         #TODO: too verbose?
@@ -198,7 +198,6 @@ class OCN:
     def __str__(self):
         return f"OCN(gamma={self.gamma}, energy={self.energy}, dims={self.dims}, resolution={self.resolution}m, verbosity={self.verbosity})"
     def __del__(self):
-        print(f"del called on {self}")
         try:
             _bindings.libocn.fg_destroy_safe(self.__p_c_graph)
             self.__p_c_graph = None
