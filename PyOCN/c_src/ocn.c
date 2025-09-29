@@ -14,34 +14,77 @@
 #include "flowgrid.h"
 #include "ocn.h"
 
-Status ocn_update_energy(FlowGrid *G, drainedarea_t da_inc, linidx_t a, double gamma){
-    Vertex vert;
-    drainedarea_t da;
-    vert = fg_get_lin(G, a);
-    int sanity_counter = 0;
-    while (vert.downstream != IS_ROOT){
-        // update drained area of the vertex and energy of the graph.
-        da = vert.drained_area;
-        G->energy += pow((da + da_inc), gamma) - pow(da, gamma);  // update energy
-        vert.drained_area += da_inc;  // update drained area of vertex
-        fg_set_lin(G, vert, a);
+/**
+ * @brief Simulated annealing acceptance criterion.
+ * @param energy_new The energy of the new state.
+ * @param energy_old The energy of the old state.
+ * @param temperature The current temperature.
+ * @return true if the new state is accepted, false otherwise.
+ */
+bool simulate_annealing(double energy_new, double energy_old, double temperature){
+    double u = (double)rand() / (double)RAND_MAX;
+    double delta_energy = energy_new - energy_old;
+    double p = exp(-delta_energy / temperature);
+    return u < p;
+}
 
-        // get next vertex
+/**
+ * @brief Update the drained area along the downstream path from a given vertex. Unsafe.
+ * @param G Pointer to the FlowGrid.
+ * @param da_inc The increment to add to the drained area.
+ * @param a The linear index of the starting vertex.
+ * @return Status code indicating success or failure
+ */
+Status update_drained_area(FlowGrid *G, drainedarea_t da_inc, linidx_t a){
+    Vertex vert;
+    do {
+        vert = fg_get_lin(G, a);
+        vert.drained_area += da_inc;
+        fg_set_lin(G, vert, a);
         a = vert.adown;
+    } while (vert.downstream != IS_ROOT);
+
+    return SUCCESS;
+}
+
+/**
+ * @brief Compute the total energy of the flowgrid. Unsafe.
+ * @param G Pointer to the FlowGrid. Will not be modified.
+ * @param gamma The exponent used in the energy calculation.
+ * @return The total energy of the flowgrid.
+ */
+double compute_energy(FlowGrid *G, double gamma){
+    double energy = 0.0;
+    for (linidx_t i = 0; i < (linidx_t)G->dims.row * (linidx_t)G->dims.col; i++){
+        energy += pow(G->vertices[i].drained_area, gamma);
+    }
+    return energy;
+}
+
+/**
+ * @brief Update the energy of the flowgrid along a single downstream path from a given vertex. Unsafe.
+ * This function only works correctly if there is a single root in the flowgrid.
+ * Having one root allows for this more efficient computation.
+ * @param G Pointer to the FlowGrid. Modified in-place.
+ * @param da_inc The increment to add to the drained area.
+ * @param a The linear index of the starting vertex.
+ * @param gamma The exponent used in the energy calculation.
+ * @return Status code indicating success or failure
+ */
+Status update_energy_single_root(FlowGrid *G, drainedarea_t da_inc, linidx_t a, double gamma){
+    Vertex vert;
+    double energy_old = 0.0;
+    double energy_new = 0.0;
+    do {
         vert = fg_get_lin(G, a);
 
-        sanity_counter++;
-        if (sanity_counter > ((linidx_t)G->dims.row * (linidx_t)G->dims.col)){
-            printf("Sanity check failed in energy update loop.\n");
-        }
-    }
-    
-    // update energy of entire graph (including root vertex)
-    da = vert.drained_area;
-    G->energy += pow((da + da_inc), gamma) - pow(da, gamma);  // update energy
-    vert.drained_area += da_inc;  // update drained area of vertex
-    fg_set_lin(G, vert, a);
-
+        energy_old += pow(vert.drained_area, gamma);
+        vert.drained_area += da_inc;
+        energy_new += pow(vert.drained_area, gamma);
+        fg_set_lin(G, vert, a);
+        a = vert.adown;
+    } while (vert.downstream != IS_ROOT);
+    G->energy += energy_new - energy_old;
     return SUCCESS;
 }
 
@@ -106,22 +149,51 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     }
     return MALFORMED_GRAPH_WARNING; // we tried every vertex and every direction and couldn't find a valid swap.
 
-    // update drained area and energy along both paths
+    
     mh_eval:
-    ocn_update_energy(G, -da_inc, a_down_old, gamma);  // remove drainage from old path
-    ocn_update_energy(G, da_inc, a_down_new, gamma);  // add removed drainage to new path
-    energy_new = G->energy;
+    /*
+    TODO:CRITICAL PERFORMANCE ISSUE:
+    This function is supposed to update the energy of the flowgrid G after a 
+    change in drained area along the path starting at vertex a. The previous method
+    did not work: it would update the drained area along a path, then try to recompute
+    the energy by adding pow((da + da_inc), gamma) - pow(da, gamma) for each vertex
+    along the path. This is incorrect because the energy of each vertex depends on the
+    drained area of all upstream vertices, not just its own drained area. This is fine 
+    when gamma = 1, gamma = 0, or the number of roots = 1, but otherwise it is wrong.
 
-    // simulated annealing: accept with prob = exp(-delta_energy / temperature). note that p > 1 if energy decreases.
-    double u = (double)rand() / (double)RAND_MAX;
-    double delta_energy = energy_new - energy_old;
-    double p = exp(-delta_energy / temperature);
-    if (u < p) return SUCCESS;
+    Simple but inefficient fix (current): recompute the *entire* energy of the flowgrid from scratch
+    each time this function is called.
 
-    // reject swap: undo everything and try again
-    ocn_update_energy(G, da_inc, a_down_old, gamma);  // add removed drainage back to old path
-    ocn_update_energy(G, -da_inc, a_down_new, gamma);  // remove added drainage from new path
-    fg_change_vertex_outflow(G, a, down_old);  // undo the outflow change
+    More complex fix: find the set of all upstream vertices that flow into a and compute
+    their summed contribution to the energy. Pass this value (sum of (da^gamma) for all
+    upstream vertices) into this function, instead of just passing da_inc.
+    */
+    if (G->nroots > 1){
+        update_drained_area(G, -da_inc, a_down_old);  // remove drainage from old path
+        update_drained_area(G, da_inc, a_down_new);  // add drainage to new path
+        energy_new = compute_energy(G, gamma);  // recompute energy from scratch
+        // simulated annealing: accept with prob = exp(-delta_energy / temperature). note that p > 1 if energy decreases.
+        if (simulate_annealing(energy_new, energy_old, temperature)){
+            G->energy = energy_new;
+            return SUCCESS;
+        }
+        // reject swap: undo everything and try again
+        update_drained_area(G, da_inc, a_down_old);  // add removed drainage back to old path
+        update_drained_area(G, -da_inc, a_down_new);  // remove added drainage from new path
+        fg_change_vertex_outflow(G, a, down_old);  // undo the outflow change
+    } else {  // if there's only one root, we can use a more efficient method
+        update_energy_single_root(G, -da_inc, a_down_old, gamma);  // remove drainage from old path and update energy
+        update_energy_single_root(G, da_inc, a_down_new, gamma);  // add drainage to new path and update energy
+        energy_new = G->energy;
+        if (simulate_annealing(energy_new, energy_old, temperature)){
+            return SUCCESS;
+        }
+        // reject swap: undo everything and try again
+        update_energy_single_root(G, da_inc, a_down_old, gamma);  // add removed drainage back to old path and update energy
+        update_energy_single_root(G, -da_inc, a_down_new, gamma);  // remove added drainage from new path and update energy
+        fg_change_vertex_outflow(G, a, down_old);  // undo the outflow change
+    }
+    
     
     return EROSION_FAILURE;  // if we reach here, we failed to find a valid swap in many, many tries
 }

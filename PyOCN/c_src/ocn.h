@@ -13,16 +13,6 @@
 #include "flowgrid.h"
 
 /**
- * @brief Update the energy of the flowgrid after a change in drained area at a specific vertex. Unsafe! Assumed a well-formed graph and valid index/pointer.
- * @param G Pointer to the FlowGrid.
- * @param da_inc The change in drained area (can be positive or negative).
- * @param a The linear index of the vertex where the drained area change occurs.
- * @param gamma The exponent used in the energy calculation.
- * @return Status code indicating success or failure
- */
-Status ocn_update_energy(FlowGrid *G, drainedarea_t da_inc, linidx_t a, double gamma);
-
-/**
  * @brief Perform a single erosion event on the flowgrid, attempting to change the outflow of a random vertex.
  * Selects a random vertex and a random new direction and attempts to modify the graph accordingly. 
  * If the modification results in a malformed graph, it is undone and the process is retried up to a set number of times.

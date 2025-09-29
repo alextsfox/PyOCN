@@ -308,6 +308,17 @@ class OCN:
         """
         return self.__p_c_graph.contents.resolution
     @property
+    def nroots(self) -> int:
+        """
+        Number of root nodes in the current OCN grid (read-only).
+
+        Returns
+        -------
+        int
+            Current number of root nodes.
+        """
+        return int(self.__p_c_graph.contents.nroots)
+    @property
     def dims(self) -> tuple[int, int]:
         """
         Grid dimensions of the FlowGrid (read-only).

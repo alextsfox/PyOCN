@@ -49,12 +49,15 @@ typedef struct {
  * 
  * - resolution: the side length of each pixel in meters.
  * 
+ * - nroots: The number of root nodes in the grid. Used for more efficient energy calculations when there is only one root.
+ * 
  * - vertices: A pointer to an array of Vertex structures representing the nodes in the grid.
  */
 typedef struct {
     CartPair dims;
     double energy;
     double resolution;
+    uint16_t nroots;
     Vertex *vertices;
 } FlowGrid;
 

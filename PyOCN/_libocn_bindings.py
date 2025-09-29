@@ -66,6 +66,7 @@ class FlowGrid_C(Structure):
         ("dims", CartPair_C),
         ("energy", c_double),
         ("resolution", c_double),
+        ("nroots", c_uint16),
         ("vertices", POINTER(Vertex_C)),  # Vertex*
     ]
 
@@ -140,10 +141,6 @@ libocn.fg_display.restype = None
 ##############################
 #     OCN.H EQUIVALENTS      #
 ##############################
-
-# Status ocn_update_energy(FlowGrid *G, drainedarea_t da_inc, linidx_t a, double gamma);
-libocn.ocn_update_energy.argtypes = [POINTER(FlowGrid_C), drainedarea_t, linidx_t, c_double]
-libocn.ocn_update_energy.restype = Status
 
 # Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature);
 libocn.ocn_single_erosion_event.argtypes = [POINTER(FlowGrid_C), c_double, c_double]
