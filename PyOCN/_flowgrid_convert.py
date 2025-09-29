@@ -235,7 +235,7 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
 
     p_c_graph.contents.nroots = len([n for n in G.nodes if G.out_degree(n) == 0])
 
-    if p_c_graph.contents.nroots > 0:
+    if p_c_graph.contents.nroots > 1:
         warnings.warn(f"FlowGrid has {p_c_graph.contents.nroots} root nodes (nodes with no downstream). This will slow down certain operations.")
     
     # do not set energy

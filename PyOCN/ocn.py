@@ -222,9 +222,10 @@ class OCN:
         - Each node has attribute ``pos=(row:int, col:int)`` specifying its
           grid position with non-negative coordinates. Any other attributes
           are ignored.
-        - It forms a spanning tree over a dense grid of shape ``(m, n)``: each
-          grid cell corresponds to exactly one node; each non-root node has
-          ``out_degree == 1``; the root has ``out_degree == 0``.
+        - The graph can be partitioned into one or more spanning trees over 
+          a dense grid of shape ``(m, n)``: each grid cell corresponds to 
+          exactly one node; each non-root node has ``out_degree == 1``; 
+          the roots have ``out_degree == 0``.
         - Edges connect only to one of the 8 neighbors (cardinal or diagonal),
           i.e., no jumps over rows or columns.
         - Edges do not cross in the row-column plane.
@@ -621,6 +622,8 @@ class OCN:
         if memory_est > 20e6:
             warnings.warn(f"Requesting {array_reports} array is estimated to use {memory_est/1e6:.2f}MB of memory.")
 
+        # make sure energy is up to date, useful if the user modified the parameters manually
+        self.__p_c_graph.contents.energy = self.compute_energy()
         cooling_schedule = create_cooling_schedule(
             ocn=self,
             constant_phase=constant_phase,
@@ -660,8 +663,6 @@ class OCN:
         anneal_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
         anneal_ptr = anneal_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
 
-        # make sure energy is up to date, useful if the user modified the parameters manually
-        self.__p_c_graph.contents.energy = self.compute_energy()
         with tqdm(total=n_iterations, desc="OCN Optimization", unit_scale=True, dynamic_ncols=True, disable=not (pbar or self.verbosity >= 1)) as pbar:
             pbar.set_postfix({"Energy": self.energy, "P(Accept)": 1.0})
             pbar.update(0)
