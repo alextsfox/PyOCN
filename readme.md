@@ -32,7 +32,7 @@ $$
 Where $A_i$ is the cumulative drained area at cell $i$, and $i\in\mathrm{drained}(k)$ is a cell drained by $k$, including itself, and $\gamma$ controls how the energy scales with area. This change is accepted or rejected based on an annealing method, which is related to the Metropolis-Hastings algorithm. The probability of accepting a proposed change to the network is given by:
 
 $$
-P(\mathrm{accept}) = \min\Big(1, \exp\big({-[E_\mathrm{root}[n] - E_\mathrm{root}[n-1]] / T[n]}\big)\Big)
+P(\mathrm{accept}) = \min\left(1, \exp\left(-\frac{E_\mathrm{root}[n] - E_\mathrm{root}[n-1]}{T[n]}\right)\right)
 $$
 
 Where $T[n]$ is the "temperature" of the network at iteration $n$. Initially, the temperature is set to a high value ($\sim E[0]$) to encourage exploration of the solution space. The temperature is then set to exponentially decay over time, "annealing" the network as it settles into a low-energy configuration. Note that a proposed change is always accepted if it results in a lower energy state ($E[n] < E[n-1]$).
@@ -40,7 +40,7 @@ Where $T[n]$ is the "temperature" of the network at iteration $n$. Initially, th
 Lower values of gamma allow very dendritic networks with lots fo branching. The following animation shows the process of optimizing an OCN with $\gamma=0.7$ on a 256x256 grid for 4M iterations, which took about 2 minutes to run on a Macbook pro. 
 
 <div align="center">
-![Optimizing an OCN](generation.gif)
+  <img src="generation.gif" alt="Optimizing an OCN">
 </div>
 
 # libocn

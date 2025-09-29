@@ -134,17 +134,12 @@ E_k[n] = \sum_{i} A_i^\gamma[n]
 \]</span></p>
 <p>Where <span class="math inline">\(A_i\)</span> is the cumulative drained area at cell <span class="math inline">\(i\)</span>, and <span class="math inline">\(i\in\mathrm{drained}(k)\)</span> is a cell drained by <span class="math inline">\(k\)</span>, including itself, and <span class="math inline">\(\gamma\)</span> controls how the energy scales with area. This change is accepted or rejected based on an annealing method, which is related to the Metropolis-Hastings algorithm. The probability of accepting a proposed change to the network is given by:</p>
 <p><span class="math display">\[
-P(\mathrm{accept}) = \min\Big(1, \exp\big({-[E_\mathrm{root}[n] - E_\mathrm{root}[n-1]] / T[n]}\big)\Big)
+P(\mathrm{accept}) = \min\left(1, \exp\left(-\frac{E_\mathrm{root}[n] - E_\mathrm{root}[n-1]}{T[n]}\right)\right)
 \]</span></p>
 <p>Where <span class="math inline">\(T[n]\)</span> is the “temperature” of the network at iteration <span class="math inline">\(n\)</span>. Initially, the temperature is set to a high value (<span class="math inline">\(\sim E[0]\)</span>) to encourage exploration of the solution space. The temperature is then set to exponentially decay over time, “annealing” the network as it settles into a low-energy configuration. Note that a proposed change is always accepted if it results in a lower energy state (<span class="math inline">\(E[n] &lt; E[n-1]\)</span>).</p>
 <p>Lower values of gamma allow very dendritic networks with lots fo branching. The following animation shows the process of optimizing an OCN with <span class="math inline">\(\gamma=0.7\)</span> on a 256x256 grid for 4M iterations, which took about 2 minutes to run on a Macbook pro.</p>
 <div data-align="center">
-<div class="quarto-figure quarto-figure-center">
-<figure class="figure">
-<p><img src="generation.gif" class="img-fluid figure-img"></p>
-<figcaption>Optimizing an OCN</figcaption>
-</figure>
-</div>
+<p><img src="generation.gif" alt="Optimizing an OCN"></p>
 </div>
 </section>
 <section id="libocn" class="level1">
