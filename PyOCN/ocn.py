@@ -30,6 +30,7 @@ from typing import Literal, Any
 from os import PathLike
 from numbers import Number
 from pathlib import Path
+from dataclasses import dataclass
 
 import networkx as nx 
 import numpy as np
@@ -40,6 +41,33 @@ from .utils import create_cooling_schedule, net_type_to_dag
 from . import _libocn_bindings as _bindings
 from . import _flowgrid_convert as fgconv
         
+@dataclass(slots=True, frozen=True)
+class FitResult:
+    """Result of the OCN fitting procedure.
+    
+    Attributes
+    -----------
+    array_report_idx : np.ndarray
+        List of iteration indices at which array snapshots were recorded.
+        Shape (n_reports,).
+    array_reports : np.ndarray
+        Array snapshots recorded during fitting, shaped
+        (n_reports, band, rows, cols).
+    energy_report_idx : np.ndarray
+        List of iteration indices at which energy snapshots were recorded.
+        Shape (n_reports,).
+    energy_reports : np.ndarray
+        Energy snapshots recorded during fitting.
+        Shape (n_reports,).
+    """
+    array_report_idx: np.ndarray
+    array_reports: np.ndarray
+    energy_report_idx: np.ndarray
+    energy_reports: np.ndarray
+
+    def __str__(self):
+        return (f"FitResult(energy_reports={len(self.energy_reports)}, array_reports={len(self.array_reports)})")
+
 class OCN:
     """
     Optimized Channel Network wrapper around ``libocn``.
@@ -148,7 +176,7 @@ class OCN:
         dag = net_type_to_dag(net_type, dims)
         if verbosity == 1:
             print(" Done.")
-        return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=True)
+        return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=False)
 
     @classmethod
     def from_digraph(cls, dag: nx.DiGraph, resolution:float=1, gamma=0.5, random_state=None, verbosity: int = 0):
@@ -419,6 +447,22 @@ class OCN:
             except Exception:
                 pass
     
+    def to_array(self):
+        """
+        Export the current FlowGrid to a numpy array with shape (2, rows, cols).
+        Has two channels: 0=energy, 1=drained_area.
+        """
+        dag = self.to_digraph()
+        energy = np.zeros(self.dims)
+        for node in dag.nodes:
+            r, c = dag.nodes[node]['pos']
+            energy[r, c] = dag.nodes[node]['energy']
+        drained_area = np.zeros(self.dims)
+        for node in dag.nodes:
+            r, c = dag.nodes[node]['pos']
+            drained_area[r, c] = dag.nodes[node]['drained_area']
+        return np.stack([energy, drained_area], axis=0)
+
     def single_erosion_event(self, temperature:float):
         """
         Perform a single erosion event at a given temperature.
@@ -451,8 +495,10 @@ class OCN:
         constant_phase:float=0.0,
         pbar:bool=True,
         energy_reports:int=1000,
+        array_reports:int=0,
+        array_report_downsample:int=1,
         tol:float=None,
-    ) -> np.ndarray:
+    ) -> FitResult:
         """
         Optimize the OCN using simulated annealing.
 
@@ -475,9 +521,18 @@ class OCN:
             exponential decay begins (in [0, 1]).
         pbar : bool, default True
             Whether to display a progress bar.
-        report_energy_interval : int, default 1000
-            Interval (in iterations) at which energy is sampled into the
-            returned array.
+        energy_reports : int, default 1000
+            Number of timepoints (approximately) at which energy is sampled. Must be > 0.
+        array_reports : int, default 0
+            Number of timepoints (approximately) at which the full grid is sampled to a numpy
+            array. If None, do not report arrays. The returned array will have
+            shape (array_reports, channels, rows, cols), where channel 0 (axis 1) is
+            energy and channel 1 is drained area.
+        array_report_downsample : int, default 1
+            Downsampling factor for array reports. If 1 (default), no downsampling
+            is performed. Returned array reports will have shape
+            ``(array_reports, channels, rows // downsample, cols // downsample)``.
+            Must be a positive integer.
         tol : float, optional
             If provided, optimization will stop early if the relative change
             in energy between reports is less than `tol`. Must be positive.
@@ -486,10 +541,7 @@ class OCN:
 
         Returns
         -------
-        numpy.ndarray
-            Array of sampled energy values with shape
-            ``(n_iterations // report_energy_interval + 1,)``. The first entry
-            is the initial energy before optimization begins.
+        FitResult
 
         Raises
         ------
@@ -522,6 +574,9 @@ class OCN:
         of iterations, and :math:`C` is ``constant_phase``. Decreasing-energy
         moves (:math:`\Delta E < 0`) are always accepted.
         """
+
+        #TODO energy_reports is defo broken
+
         rng = np.random.default_rng(self.master_seed)
         self.master_seed = rng.integers(0, int(2**32 - 1))
         _bindings.libocn.rng_seed(self.master_seed)
@@ -553,6 +608,8 @@ class OCN:
             warnings.warn("Using cooling_rate < 0.5 and constant_phase > 0.1 with may cause convergence issues. Consider increasing n_iterations.")
 
         completed_iterations = 0
+        self.__p_c_graph.contents.energy = self.compute_energy()
+
         energy_out = np.empty(n_iterations//report_energy_interval + 1, dtype=np.float64)
         energy_out[0] = self.energy
         
@@ -562,12 +619,31 @@ class OCN:
         anneal_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
         anneal_ptr = anneal_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
 
+        if array_reports < 1:
+            raise ValueError(f"array_reports must be greater than 0. Got {array_reports}")
+        if array_report_downsample < 1:
+            raise ValueError(f"array_report_downsample must be a positive integer. Got {array_report_downsample}")
+        
+        
+        # adjust array_reports to be a multiple of n_loops
+        array_report_interval = n_iterations // array_reports
+        array_out = np.empty([
+            n_iterations//array_report_interval + 1,
+            2,
+            self.dims[0]//array_report_downsample,
+            self.dims[1]//array_report_downsample,
+        ])
+        array_out[0] = self.to_array()[:, ::array_report_downsample, ::array_report_downsample]
+
         # ensure energy is up to date, useful if doing a multi-stage fit
-        self.__p_c_graph.contents.energy = self.compute_energy()
+
         with tqdm(total=n_iterations, desc="OCN Optimization", unit_scale=True, dynamic_ncols=True, disable=not (pbar or self.verbosity >= 1)) as pbar:
             pbar.set_postfix({"Energy": self.energy, "P(Accept)": 1.0})
             pbar.update(0)
             
+            array_report_number = 0
+            array_report_idx = [0]
+            energy_report_idx = [0]
             while completed_iterations < n_iterations:
                 iterations_this_loop = min(max_iterations_per_loop, n_iterations - completed_iterations)
                 anneal_buf[:iterations_this_loop] = cooling_schedule(
@@ -591,9 +667,21 @@ class OCN:
                     completed_iterations//report_energy_interval + 1,
                     1
                 )
+                
+                if (completed_iterations % array_report_interval) < max_iterations_per_loop:
+                    array_report_number += 1
+                    array_report_idx.append(completed_iterations)
+                    array_out[array_report_number] = self.to_array()[:, ::array_report_downsample, ::array_report_downsample]
+
                 energy_out[s] = energy_buf[:iterations_this_loop:report_energy_interval]
+                energy_report_idx.extend(list(range(s.start, s.stop, s.step)))
+
                 if tol is not None and e_new < e_old and abs((e_old - e_new)/e_old) < tol:
                     energy_out = energy_out[:s.stop]
+                    energy_report_idx.append(s.stop)
+
+                    array_out = array_out[:array_report_number + 1]
+
                     pbar.set_postfix({
                         "Energy": self.energy, 
                         "T": anneal_buf[iterations_this_loop - 1],
@@ -608,8 +696,15 @@ class OCN:
                     "Relative ΔE": (e_new - e_old)/e_old,
                 })
                 pbar.update(iterations_this_loop)
-        return energy_out
-        
+
+
+        return FitResult(
+            array_report_idx=array_report_idx,
+            array_reports=array_out,
+            energy_report_idx=energy_report_idx,
+            energy_reports=energy_out,
+        )
+
 
 __all__ = [
     "OCN",
