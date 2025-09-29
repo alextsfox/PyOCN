@@ -103,6 +103,16 @@ class OCN:
         Grid dimensions (rows, cols) of the FlowGrid (read-only property).
     resolution: float
         The side length of each grid cell in meters.
+    nroots : int
+        Number of root nodes in the current OCN grid (read-only property).
+    gamma : float
+        Exponent in the energy model.
+    master_seed : int
+        The seed used to initialize the internal RNG. Can be changed by
+        :meth:`reseed`.
+    verbosity : int
+        Verbosity level for underlying library output (0-2).
+    
     """
     def __init__(self, dag: nx.DiGraph, resolution: float=1.0, gamma: float = 0.5, random_state=None, verbosity: int = 0, validate:bool=True):
         """
