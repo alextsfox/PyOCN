@@ -40,8 +40,6 @@ from ._statushandler import check_status
 from .utils import create_cooling_schedule, net_type_to_dag
 from . import _libocn_bindings as _bindings
 from . import _flowgrid_convert as fgconv
-        
-SUPPRESS_WARNINGS = False
 
 @dataclass(slots=True, frozen=True)
 class FitResult:
@@ -127,11 +125,8 @@ class OCN:
         # validate gamma, annealing schedule, and random_state
         if not isinstance(gamma, Number):
             raise TypeError(f"gamma must be a scalar. Got {type(gamma)}.")
-        if (
-            not (0 <= gamma <= 1)
-            and not SUPPRESS_WARNINGS
-        ):
-            warnings.warn(f"gamma values outside of [0, 1] may not be physically meaningful. Got {gamma}. Set PyOCN.SUPPRESS_WARNINGS=True to suppress this warning.")
+        if not (0 <= gamma <= 1):
+            warnings.warn(f"gamma values outside of [0, 1] may not be physically meaningful. Got {gamma}.")
         self.gamma = gamma
         
         rng = np.random.default_rng(random_state)
@@ -634,9 +629,8 @@ class OCN:
         if (
             (cooling_rate < 0.5 or constant_phase > 0.1) 
             and n_iterations <= 50*self.dims[0]*self.dims[1]
-            and not SUPPRESS_WARNINGS
         ):
-            warnings.warn("Using cooling_rate < 0.5 and constant_phase > 0.1 with may cause convergence issues. Consider increasing n_iterations. Set PyOCN.SUPPRESS_WARNINGS=True to suppress this warning.")
+            warnings.warn("Using cooling_rate < 0.5 and constant_phase > 0.1 with may cause convergence issues. Consider increasing n_iterations.")
 
         completed_iterations = 0
         self.__p_c_graph.contents.energy = self.compute_energy()

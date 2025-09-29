@@ -7,11 +7,12 @@ Functions for converting between NetworkX graphs and FlowGrid_C structures.
 
 from ctypes import byref, POINTER
 from itertools import product
+import warnings
 
 from numpy import integer as np_integer
 import networkx as nx
 
-from ._statushandler import check_status
+from ._statushandler import check_status, SUPPRESS_WARNINGS
 from . import _libocn_bindings as _bindings
 
 def to_digraph(c_graph:_bindings.FlowGrid_C) -> nx.DiGraph:
@@ -231,7 +232,11 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
             raise e
     
     p_c_graph.contents.resolution = float(resolution)
+
     p_c_graph.contents.nroots = len([n for n in G.nodes if G.out_degree(n) == 0])
+
+    if p_c_graph.contents.nroots > 0:
+        warnings.warn(f"FlowGrid has {p_c_graph.contents.nroots} root nodes (nodes with no downstream). This will slow down certain operations.")
     
     # do not set energy
 
