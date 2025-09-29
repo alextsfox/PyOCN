@@ -260,7 +260,7 @@ class OCN:
     @property
     def energy(self) -> float:
         """
-        Energy of the current OCN (read-only).
+        Energy of the current OCN.
 
         Returns
         -------
@@ -451,6 +451,7 @@ class OCN:
         constant_phase:float=0.0,
         pbar:bool=True,
         energy_reports:int=1000,
+        tol:float=None,
     ) -> np.ndarray:
         """
         Optimize the OCN using simulated annealing.
@@ -477,6 +478,11 @@ class OCN:
         report_energy_interval : int, default 1000
             Interval (in iterations) at which energy is sampled into the
             returned array.
+        tol : float, optional
+            If provided, optimization will stop early if the relative change
+            in energy between reports is less than `tol`. Must be positive.
+            If None (default), no early stopping is performed.
+            Recommended values are in the range 1e-4 to 1e-6.
 
         Returns
         -------
@@ -526,6 +532,11 @@ class OCN:
             raise ValueError(f"n_iterations must be a positive integer, got {n_iterations}")
         n_iterations = max(energy_reports*10, n_iterations)
 
+        if (not isinstance(tol, Number)) or tol < 0:
+            if tol is not None:
+                raise ValueError(f"tol must be a positive number or None, got {tol}")
+
+
         report_energy_interval = n_iterations // energy_reports
 
         max_iterations_per_loop = report_energy_interval
@@ -550,6 +561,9 @@ class OCN:
 
         anneal_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
         anneal_ptr = anneal_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+
+        # ensure energy is up to date, useful if doing a multi-stage fit
+        self.__p_c_graph.contents.energy = self.compute_energy()
         with tqdm(total=n_iterations, desc="OCN Optimization", unit_scale=True, dynamic_ncols=True, disable=not (pbar or self.verbosity >= 1)) as pbar:
             pbar.set_postfix({"Energy": self.energy, "P(Accept)": 1.0})
             pbar.update(0)
@@ -559,6 +573,8 @@ class OCN:
                 anneal_buf[:iterations_this_loop] = cooling_schedule(
                     np.arange(completed_iterations, completed_iterations + iterations_this_loop)
                 )
+
+                e_old = self.energy
                 check_status(_bindings.libocn.ocn_outer_ocn_loop(
                     self.__p_c_graph, 
                     energy_ptr,
@@ -566,6 +582,7 @@ class OCN:
                     self.gamma, 
                     anneal_ptr
                 ))
+                e_new = self.energy
                 completed_iterations += iterations_this_loop
 
                 # copy energies to output array
@@ -575,8 +592,21 @@ class OCN:
                     1
                 )
                 energy_out[s] = energy_buf[:iterations_this_loop:report_energy_interval]
+                if tol is not None and e_new < e_old and abs((e_old - e_new)/e_old) < tol:
+                    energy_out = energy_out[:s.stop]
+                    pbar.set_postfix({
+                        "Energy": self.energy, 
+                        "T": anneal_buf[iterations_this_loop - 1],
+                        "Relative ΔE": (e_new - e_old)/e_old,
+                    })
+                    pbar.update(iterations_this_loop)
+                    break 
 
-                pbar.set_postfix({"Energy": self.energy, "T": anneal_buf[iterations_this_loop - 1]})
+                pbar.set_postfix({
+                    "Energy": self.energy, 
+                    "T": anneal_buf[iterations_this_loop - 1],
+                    "Relative ΔE": (e_new - e_old)/e_old,
+                })
                 pbar.update(iterations_this_loop)
         return energy_out
         
