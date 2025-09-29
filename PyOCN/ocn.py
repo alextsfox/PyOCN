@@ -273,7 +273,17 @@ class OCN:
             Current energy.
         """
         return self.__p_c_graph.contents.energy
-    
+    @property
+    def resolution(self) -> float:
+        """
+        Resolution of the current OCN grid in m (read-only).
+
+        Returns
+        -------
+        float
+            Current resolution.
+        """
+        return self.__p_c_graph.contents.resolution
     @property
     def dims(self) -> tuple[int, int]:
         """
@@ -589,7 +599,7 @@ class OCN:
                 pbar.update(iterations_this_loop)
         return energy_out
         
-
+        
 __all__ = [
     "OCN",
 ]
