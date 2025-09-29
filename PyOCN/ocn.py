@@ -41,6 +41,8 @@ from .utils import create_cooling_schedule, net_type_to_dag
 from . import _libocn_bindings as _bindings
 from . import _flowgrid_convert as fgconv
         
+SUPPRESS_WARNINGS = False
+
 @dataclass(slots=True, frozen=True)
 class FitResult:
     """Result of the OCN fitting procedure.
@@ -115,8 +117,11 @@ class OCN:
         # validate gamma, annealing schedule, and random_state
         if not isinstance(gamma, Number):
             raise TypeError(f"gamma must be a scalar. Got {type(gamma)}.")
-        if not (0 <= gamma <= 1):
-            warnings.warn(f"gamma values outside of [0, 1] may not be physically meaningful. Got {gamma}.")
+        if (
+            not (0 <= gamma <= 1)
+            and not SUPPRESS_WARNINGS
+        ):
+            warnings.warn(f"gamma values outside of [0, 1] may not be physically meaningful. Got {gamma}. Set PyOCN.SUPPRESS_WARNINGS=True to suppress this warning.")
         self.gamma = gamma
         
         rng = np.random.default_rng(random_state)
@@ -504,7 +509,7 @@ class OCN:
         n_iterations:int=None,
         cooling_rate:float=1.0,
         constant_phase:float=0.0,
-        pbar:bool=True,
+        pbar:bool=False,
         energy_reports:int=1000,
         array_reports:int=1,
         # array_report_downsample:int=1,
@@ -616,8 +621,12 @@ class OCN:
             cooling_rate=cooling_rate,
         )
 
-        if (cooling_rate < 0.5 or constant_phase > 0.1) and n_iterations <= 50*self.dims[0]*self.dims[1]:
-            warnings.warn("Using cooling_rate < 0.5 and constant_phase > 0.1 with may cause convergence issues. Consider increasing n_iterations.")
+        if (
+            (cooling_rate < 0.5 or constant_phase > 0.1) 
+            and n_iterations <= 50*self.dims[0]*self.dims[1]
+            and not SUPPRESS_WARNINGS
+        ):
+            warnings.warn("Using cooling_rate < 0.5 and constant_phase > 0.1 with may cause convergence issues. Consider increasing n_iterations. Set PyOCN.SUPPRESS_WARNINGS=True to suppress this warning.")
 
         completed_iterations = 0
         self.__p_c_graph.contents.energy = self.compute_energy()
