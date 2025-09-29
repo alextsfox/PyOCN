@@ -137,12 +137,14 @@ E_k[n] = \sum_{i} A_i^\gamma[n]
 P(\mathrm{accept}) = \min\Big(1, \exp\big({-[E_\mathrm{root}[n] - E_\mathrm{root}[n-1]] / T[n]}\big)\Big)
 \]</span></p>
 <p>Where <span class="math inline">\(T[n]\)</span> is the “temperature” of the network at iteration <span class="math inline">\(n\)</span>. Initially, the temperature is set to a high value (<span class="math inline">\(\sim E[0]\)</span>) to encourage exploration of the solution space. The temperature is then set to exponentially decay over time, “annealing” the network as it settles into a low-energy configuration. Note that a proposed change is always accepted if it results in a lower energy state (<span class="math inline">\(E[n] &lt; E[n-1]\)</span>).</p>
-<p>Higher values of <span class="math inline">\(\gamma\)</span> push the network towards “steeper” configurations with straight-line channels, and lower values encourage more dendritic, wandering, branching structures. The following plots show the final state of an OCN generated on a 256 x 256 grid after 2.5M iterations using different values of <span class="math inline">\(\gamma\)</span>, which took about 2 minutes to run on my laptop.</p>
+<p>Lower values of gamma allow very dendritic networks with lots fo branching. The following animation shows the process of optimizing an OCN with <span class="math inline">\(\gamma=0.7\)</span> on a 256x256 grid for 4M iterations, which took about 2 minutes to run on a Macbook pro.</p>
+<div data-align="center">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
 <p><img src="generation.gif" class="img-fluid figure-img"></p>
 <figcaption>Optimizing an OCN</figcaption>
 </figure>
+</div>
 </div>
 </section>
 <section id="libocn" class="level1">
