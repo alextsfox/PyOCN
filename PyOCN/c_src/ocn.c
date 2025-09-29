@@ -108,8 +108,8 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
 
     // update drained area and energy along both paths
     mh_eval:
-    ocn_update_energy(G, -da_inc, a_down_old, gamma);  // decrement drained area along old path
-    ocn_update_energy(G, da_inc, a_down_new, gamma);  // increment drained area along new path
+    ocn_update_energy(G, -da_inc, a_down_old, gamma);  // remove drainage from old path
+    ocn_update_energy(G, da_inc, a_down_new, gamma);  // add removed drainage to new path
     energy_new = G->energy;
 
     // simulated annealing: accept with prob = exp(-delta_energy / temperature). note that p > 1 if energy decreases.
@@ -119,8 +119,8 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     if (u < p) return SUCCESS;
 
     // reject swap: undo everything and try again
-    ocn_update_energy(G, da_inc, a_down_old, gamma);  // undo the decrement
-    ocn_update_energy(G, -da_inc, a_down_new, gamma);  // undo the increment
+    ocn_update_energy(G, da_inc, a_down_old, gamma);  // add removed drainage back to old path
+    ocn_update_energy(G, -da_inc, a_down_new, gamma);  // remove added drainage from new path
     fg_change_vertex_outflow(G, a, down_old);  // undo the outflow change
     
     return EROSION_FAILURE;  // if we reach here, we failed to find a valid swap in many, many tries
