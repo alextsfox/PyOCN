@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "PyOCN"
+version = "0.0.20250930"
+description = "Optimal Channel Networks (OCN) in Python with a C core"
+readme = "readme.md"
+requires-python = ">=3.9"
+license = { text = "GPL3" }
+authors = [{ name = "Alexander S. Fox" }]
+dependencies = [
+  "numpy>=1.22",  # should check the actual min
+  "networkx>=3.1",  # should check the actual min
+  "tqdm>=4.64",  # should check the actual min
+  "matplotlib>=3.5",  # should check the actual min
+]
+
+[project.urls]
+Homepage = "https://github.com/alextsfox/PyOCN"
+
+[project.optional-dependencies]
+raster = ["rasterio>=1.4.3", "xarray>=2024.7.0"]
+
+[tool.setuptools.packages.find]
+include = ["PyOCN*"]

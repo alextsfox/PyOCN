@@ -16,12 +16,12 @@ gcc -fPIC -O3 -flto -Wall -pedantic -std=c99 \
 # Link into shared library
 # gcc -shared -o libocn.so ocn.o flowgrid.o status.o rng.o
 gcc -shared -O3 -flto -Wall -pedantic \
-    -o libocn.so ocn.o flowgrid.o status.o rng.o
+    -o libocn_dev.so ocn.o flowgrid.o status.o rng.o
 
 # Move the shared library to the Python package root
-mv libocn.so ../libocn.so
+mv libocn_dev.so ../libocn_dev.so
 
 # Clean up object files
 rm -f ocn.o flowgrid.o status.o rng.o
 
-echo "Built libocn.so in $(cd .. && pwd)"
+echo "Built libocn_dev.so in $(cd .. && pwd)"

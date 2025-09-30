@@ -15,10 +15,27 @@ from ctypes import (
 )
 import importlib
 from pathlib import Path
-import sys
 
-_libocn_so_file = Path(__file__).parent / "libocn.so"
-libocn = CDLL(_libocn_so_file)
+def _load_libocn():
+    # attempt the dev build first
+    _dev_lib = Path(__file__).parent / "libocn_dev.so"
+    if _dev_lib.exists():
+        return CDLL(str(_dev_lib))
+    
+    # prefer the built extension inside the wheel: PyOCN/_libocn*.so|.pyd
+    try:
+        mod = importlib.import_module("._libocn", package=__package__)
+        return CDLL(str(Path(mod.__file__)))
+    except Exception:
+        pass
+
+    raise OSError(
+        "Could not locate libocn: neither the built extension (PyOCN._libocn) " \
+        "nor a local shared library was found. Reinstall the wheel or build " \
+        "the C library manually with PyOCN/c_src/build.sh."
+    )
+
+libocn = _load_libocn()
 
 #############################
 #   STATUS.H EQUIVALENTS    #

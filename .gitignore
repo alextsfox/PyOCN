@@ -1,32 +1,37 @@
+# vscode stuff
 /.vscode/
+
+# python virtual environments
 /.venv/
 .venv/
 venv/
 /venv/
 
+# build artifacts
 /build/
 /dist/
 *.egg-info/
 *.egg
 PyOCN.egg-info/
 
-
+# compiled markdown
 /readme_files/
 readme.html
-
 /TODO_files/
 TODO*
 
+# random jupyter stuff
 testing.py
 testing.ipynb
 
-
+# python cache files
 **/__pycache__/
 /__pycache__/
 */__pycache__/
 *.py[cod]
 *.pyo
 
+# C build files/libraries
 PyOCN/c_src/*.o
 PyOCN/c_src/*.obj
 PyOCN/c_src/*.dll
@@ -38,17 +43,34 @@ PyOCN/libocn.dylib
 PyOCN/libocn.dll
 
 PyOCN/_libocn*.so
+PyOCN/_libocn*.dylib
+PyOCN/_libocn*.dll
 PyOCN/_libocn*.pyd
 
+PyOCN/libocn_dev.so
+PyOCN/libocn_dev.dylib
+PyOCN/libocn_dev.dll
+PyOCN/_libocn_dev*.so
+PyOCN/_libocn_dev*.dylib
+PyOCN/_libocn_dev*.dll
+PyOCN/_libocn_dev*.pyd
+*libocn_dev*
+
+# OS generated files
 .DS_Store
 
+# how-tos
 howtobuild.md
 test_wheel_and_deploy.md
 path_to_ship.txt
+readme_dev.md
+readme_dev*
+/readme_dev_files/
 
-
+# logs and temp files and files that are too large
 /figs/
-
+/logs/
+/log_files/
 *.gtif
 *.gtiff
 *.tif
@@ -57,3 +79,6 @@ path_to_ship.txt
 *.dylib
 *.o
 *.dll
+*.log
+*.tmp
+*.temp

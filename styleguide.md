@@ -10,3 +10,7 @@
 * Functions that modify values in-place take the pointer of the value to modify as the first argument.
 * `FlowGrid` instances are passed by reference.
 * Only pass `FlowGrid` if you need to access multiple fields or modify the graph. If you only need dimensions or a vertex, pass those directly.
+* Version numbering: `MAJOR.MINOR.YYYYMMDD`
+  * Major version changes for API-breaking changes
+  * Minor version changes for new features, optimizations, or non-breaking API changes
+  * Date-based patch version for bug fixes and small changes

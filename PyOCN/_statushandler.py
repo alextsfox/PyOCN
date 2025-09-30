@@ -32,7 +32,7 @@ class NullPointerError(LibOCNError):
     default_message = (
         "\nTrying to access a null pointer. "
         "Something has gone terribly wrong inside PyOCN or libocn. "
-        "Please open an issue at https://github.com/alexfox/pyocn/issues."
+        "Please open an issue at https://github.com/alextsfox/PyOCN/issues."
     )
 
     def __init__(self, custom_message=None):
