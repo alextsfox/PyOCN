@@ -1,2 +1,0 @@
-recursive-include PyOCN/c_src *.c *.h
-include readme.md
