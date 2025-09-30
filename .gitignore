@@ -42,7 +42,7 @@ PyOCN/_libocn*.pyd
 
 .DS_Store
 
-howtobuild.txt
+howtobuild.md
 test_wheel_and_deploy.md
 path_to_ship.txt
 

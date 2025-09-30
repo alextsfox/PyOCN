@@ -1,5 +1,4 @@
-from setuptools import setup, Extension
-from setuptools import find_packages
+from setuptools import setup, Extension, find_packages
 import sys
 from pathlib import Path
 
