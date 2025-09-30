@@ -10,7 +10,7 @@ cd "$SCRIPT_DIR"
 
 # Compile into position-independent object files
 # gcc -fPIC -c ocn.c flowgrid.c status.c rng.c
-gcc -fPIC -O3 -flto -Wall -pedantic \
+gcc -fPIC -O3 -flto -Wall -pedantic -std=c99 \
     -c ocn.c flowgrid.c status.c rng.c
 
 # Link into shared library

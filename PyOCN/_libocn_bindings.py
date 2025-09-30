@@ -3,8 +3,6 @@ Bindings for the libocn C library,
 providing ctypes-based access to C data structures and functions.
 """
 
-import numpy as np
-
 from ctypes import (
     CDLL,
     Structure,
@@ -15,11 +13,40 @@ from ctypes import (
     c_bool,
     POINTER,
 )
+import importlib
 from pathlib import Path
+import sys
 
-# TODO This will need to change probably depending on OS/architecture
-_libocn_so_file = Path(__file__).parent / "libocn.so"
-libocn = CDLL(_libocn_so_file)
+# _libocn_so_file = Path(__file__).parent / "libocn.so"
+# libocn = CDLL(_libocn_so_file)
+
+def _load_libocn():
+    # 1) Prefer the built extension inside the wheel: PyOCN/_libocn*.so|.pyd
+    try:
+        mod = importlib.import_module("._libocn", package=__package__)
+        return CDLL(str(Path(mod.__file__)))
+    except Exception:
+        pass
+
+    # 2) Fallback for dev: sidecar shared lib in package or c_src
+    pkg_dir = Path(__file__).parent
+    if sys.platform.startswith("win"):
+        fname = "libocn.dll"
+    elif sys.platform == "darwin":
+        fname = "libocn.dylib"
+    else:
+        fname = "libocn.so"
+
+    for candidate in (pkg_dir / fname, pkg_dir / "c_src" / fname):
+        if candidate.exists():
+            return CDLL(str(candidate))
+
+    raise OSError(
+        "Could not locate libocn: neither the built extension (PyOCN._libocn) nor a sidecar "
+        f"{fname} was found. Reinstall the wheel or build the C library in PyOCN/c_src."
+    )
+
+libocn = _load_libocn()
 
 
 #############################

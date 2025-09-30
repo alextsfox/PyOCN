@@ -1,2 +1,0 @@
-[project.optional-dependencies]
-raster = ["rasterio>=1.3"]

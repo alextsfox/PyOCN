@@ -1,4 +1,15 @@
 /.vscode/
+/.venv/
+.venv/
+venv/
+/venv/
+
+/build/
+/dist/
+*.egg-info/
+*.egg
+PyOCN.egg-info/
+
 
 /readme_files/
 readme.html
@@ -13,8 +24,28 @@ testing.ipynb
 **/__pycache__/
 /__pycache__/
 */__pycache__/
+*.py[cod]
+*.pyo
+
+PyOCN/c_src/*.o
+PyOCN/c_src/*.obj
+PyOCN/c_src/*.dll
+PyOCN/c_src/*.dylib
+PyOCN/c_src/*.so
+
+PyOCN/libocn.so
+PyOCN/libocn.dylib
+PyOCN/libocn.dll
+
+PyOCN/_libocn*.so
+PyOCN/_libocn*.pyd
 
 .DS_Store
+
+howtobuild.txt
+test_wheel_and_deploy.md
+path_to_ship.txt
+
 
 /figs/
 
