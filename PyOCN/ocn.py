@@ -26,7 +26,7 @@ PyOCN.plotting
 
 import warnings
 import ctypes
-from typing import Literal, Any
+from typing import Any
 from os import PathLike
 from numbers import Number
 from pathlib import Path
@@ -47,55 +47,42 @@ class FitResult:
     
     Attributes
     -----------
-    array_report_idx : np.ndarray
+    i_raster : np.ndarray
         List of iteration indices at which array snapshots were recorded.
         Shape (n_reports,).
-    array_reports : np.ndarray
-        Array snapshots recorded during fitting, shaped
+    energy_rasters : np.ndarray
+        Array snapshots of energy recorded during fitting, shaped
         (n_reports, band, rows, cols).
-    energy_report_idx : np.ndarray
-        List of iteration indices at which energy snapshots were recorded.
+    area_rasters: np.ndarray
+        Array snapshots of drained area recorded during fitting, shaped
+        (n_reports, rows, cols).
+    i_energy : np.ndarray
+        List of iteration indices at which total energy snapshots were recorded.
         Shape (n_reports,).
-    energy_reports : np.ndarray
-        Energy snapshots recorded during fitting.
+    energies : np.ndarray
+        Total energy snapshots recorded during fitting.
         Shape (n_reports,).
-    temperature : np.ndarray
+    temperatures : np.ndarray
         Temperature values at each recorded energy snapshot.
+        Shape (n_reports,).
     """
-    grid_idx: np.ndarray
-    grids: np.ndarray
-    energy_idx: np.ndarray
+    i_raster: np.ndarray
+    energy_rasters: np.ndarray
+    area_rasters: np.ndarray
+    i_energy: np.ndarray
     energies: np.ndarray
     temperatures: np.ndarray
 
     def __str__(self):
-        return (f"FitResult(energies={len(self.energies)}, grids={len(self.grids)})")
+        return (f"FitResult(energies={len(self.energies)}, grids={len(self.energy_rasters)})")
 
 class OCN:
     """
-    Optimized Channel Network wrapper around ``libocn``.
+    The main class for interacting with Optimized Channel Networks. 
 
     Use :meth:`OCN.from_net_type` or :meth:`OCN.from_digraph` to construct an
-    instance. The class manages the C-side FlowGrid pointer and offers methods
-    to compute energy, perform erosion events, and optimize via simulated
-    annealing.
-
-    Parameters
-    ----------
-    dag : nx.DiGraph
-        Directed acyclic graph (DAG) over a dense grid that defines the initial
-        stream network. See :meth:`OCN.from_digraph` for the graph requirements.
-    resolution : int, optional
-        The side length of each grid cell in meters.
-    gamma : float, default 0.5
-        Exponent in the energy model, typically in the range [0, 1].
-    random_state : int | numpy.random.Generator | None, optional
-        Seed or generator for the internal RNG used by ``libocn``. ``None``
-        yields nondeterministic seeding.
-    verbosity : int, default 0
-        Verbosity level for underlying library output (0–2). Higher values may
-        produce diagnostic prints.
-
+    instance. 
+    
     Attributes
     ----------
     energy : float
@@ -103,14 +90,13 @@ class OCN:
     dims : tuple[int, int]
         Grid dimensions (rows, cols) of the FlowGrid (read-only property).
     resolution: float
-        The side length of each grid cell in meters.
+        The side length of each grid cell in meters (read-only property).
     nroots : int
         Number of root nodes in the current OCN grid (read-only property).
     gamma : float
         Exponent in the energy model.
     master_seed : int
-        The seed used to initialize the internal RNG. Can be changed by
-        :meth:`reseed`.
+        The seed used to initialize the internal RNG.
     verbosity : int
         Verbosity level for underlying library output (0-2).
     
@@ -131,9 +117,9 @@ class OCN:
         if not (0 <= gamma <= 1):
             warnings.warn(f"gamma values outside of [0, 1] may not be physically meaningful. Got {gamma}.")
         self.gamma = gamma
+
+        self.master_seed = random_state
         
-        rng = np.random.default_rng(random_state)
-        self.master_seed = rng.integers(0, int(2**32 - 1))
 
         if not isinstance(resolution, Number):
             raise TypeError(f"resolution must be numeric. Got {type(resolution)}")
@@ -346,31 +332,38 @@ class OCN:
             int(self.__p_c_graph.contents.dims.col)
         )
 
-    def reseed(self, random_state:int|np.random.Generator|Literal["from_current"]=None):
+    @property
+    def master_seed(self) -> int:
         """
-        Reseed the internal RNG.
-        
+        The seed used to initialize the internal RNG.
+
+        Returns
+        -------
+        int
+            Current master seed.
+        """
+        return self.__master_seed
+    @master_seed.setter
+    def master_seed(self, random_state:int|None|np.random.Generator=None):
+        """
+        Seed the internal RNG.
+
         Parameters
         ----------
-        random_state : int | numpy.random.Generator | str | None, optional
-            Seed or generator for RNG seeding. If None, system entropy is used.
-            If "from_current", the current RNG state is used to deterministically
-            generate a new seed. If an integer or Generator is provided, the
+        random_state : int | numpy.random.Generator | None, optional
+            Seed or generator for RNG. If None, system entropy is used.
+            If an integer or Generator is provided, the
             new seed is drawn from it directly.
         """
-        if isinstance(random_state, str) and random_state != "from_current":
-            raise ValueError(f"Invalid string for random_state: {random_state}. Must be 'from_current' or an integer/Generator/None.")
-        if random_state == "from_current":
-            master_seed = int(self.master_seed)
-            if master_seed == 0:
-                master_seed = 0xDEADBEEF
-            master_seed ^= master_seed << 13
-            master_seed ^= master_seed >> 17
-            master_seed ^= master_seed << 5
-            master_seed &= 0xFFFFFFFF  # ensure 32-bit unsigned
-            self.master_seed = np.int64(master_seed)
-        else:
-            self.master_seed = np.random.default_rng(random_state).integers(0, int(2**32 - 1))
+        if not isinstance(random_state, (int, type(None), np.random.Generator)):
+            raise ValueError("RNG must be initialized with an integer/Generator/None.")
+        self.__master_seed = np.random.default_rng(random_state).integers(0, int(2**32 - 1))
+        _bindings.libocn.rng_seed(self.master_seed)
+    def _advance_seed(self):
+        random_state = self.master_seed
+        new_random_state = np.random.default_rng(random_state).integers(0, int(2**32 - 1))
+        self.__master_seed = new_random_state
+        _bindings.libocn.rng_seed(self.__master_seed)
 
     def to_digraph(self) -> nx.DiGraph:
         """
@@ -473,7 +466,7 @@ class OCN:
             except Exception:
                 pass
     
-    def to_array(self):
+    def to_numpy(self):
         """
         Export the current FlowGrid to a numpy array with shape (2, rows, cols).
         Has two channels: 0=energy, 1=drained_area.
@@ -488,8 +481,33 @@ class OCN:
             r, c = dag.nodes[node]['pos']
             drained_area[r, c] = dag.nodes[node]['drained_area']
         return np.stack([energy, drained_area], axis=0)
+    
+    def to_xarray(self):
+        try:
+            import xarray as xr
+        except ImportError as e:
+            raise ImportError(
+                "PyOCN.OCN.to_xarray() requires xarray to be installed. Install with `pip install xarray`."
+            ) from e
+        array_out = self.to_numpy()
+        return xr.Dataset(
+            data_vars={
+                "energy_rasters": (["y", "x"], array_out[0]),
+                "area_rasters": (["y", "x"], array_out[1]),
+            },
+            coords={
+                "y": ("y", np.arange(self.dims[0])*self.resolution),
+                "x": ("x", np.arange(self.dims[1])*self.resolution),
+            },
+            attrs={
+                "description": "OCN fit result arrays",
+                "resolution_m": self.resolution,
+                "gamma": self.gamma,
+                "master_seed": int(self.master_seed),
+            }
+        )
 
-    def single_erosion_event(self, temperature:float):
+    def single_erosion_event(self, temperature:float, xarray_out:bool=False) -> "FitResult | xr.Dataset":
         """
         Perform a single erosion event at a given temperature.
 
@@ -498,6 +516,9 @@ class OCN:
         temperature : float
             Temperature parameter governing acceptance probability. Typical
             range is a fraction of ocn.energy.
+        xarray_out : bool, default False
+            If True, the returned result will be an xarray.Dataset instead of a FitResult.
+            Requires xarray to be installed.
 
         Raises
         ------
@@ -505,14 +526,50 @@ class OCN:
             If the underlying C routine reports an error status.
         """
         # FlowGrid *G, uint32_t *total_tries, double gamma, double temperature
-        rng = np.random.default_rng(self.master_seed)
-        self.master_seed = rng.integers(0, int(2**32 - 1))
-        _bindings.libocn.rng_seed(self.master_seed)
+        self._advance_seed()
         check_status(_bindings.libocn.ocn_single_erosion_event(
             self.__p_c_graph,
             self.gamma, 
             temperature
         ))
+
+        array_out = self.to_numpy()
+        if not xarray_out:
+            return FitResult(
+                i_raster = np.array([0], dtype=np.int32),
+                energy_rasters = array_out[np.newaxis, 0],
+                area_rasters = array_out[np.newaxis, 1],
+                i_energy = np.array([0], dtype=np.int32),
+                energies = np.array([self.energy], dtype=np.float64),
+                temperatures = np.array([temperature], dtype=np.float64),
+            )
+        try:
+            import xarray as xr
+        except ImportError as e:
+            raise ImportError(
+                "PyOCN.OCN.fit() with xarray_out=True requires xarray to be installed. Install with `pip install xarray`."
+            ) from e
+        return xr.Dataset(
+            data_vars={
+                "energy_rasters": (["iteration", "y", "x"], array_out[np.newaxis, 0]),
+                "area_rasters": (["iteration", "y", "x"], array_out[np.newaxis, 1]),
+                "energies": (["iteration"], np.array([self.energy], dtype=np.float64)),
+                "temperatures": (["iteration"], np.array([temperature], dtype=np.float64)),
+            },
+            coords={
+                "y": ("y", np.arange(self.dims[0])*self.resolution),
+                "x": ("x", np.arange(self.dims[1])*self.resolution),
+                "iteration": ("iteration", np.array([0], dtype=np.int32)),
+            },
+            attrs={
+                "description": "OCN fit result arrays",
+                "resolution_m": self.resolution,
+                "gamma": self.gamma,
+                "master_seed": int(self.master_seed),
+            }
+        )
+
+
 
     def fit(
         self,
@@ -525,7 +582,7 @@ class OCN:
         tol:float=None,
         max_iterations_per_loop=10_000,
         xarray_out:bool=False,
-    ) -> FitResult | tuple[FitResult, "xr.Dataset"]:
+    ) -> "FitResult | xr.Dataset":
         """
         Optimize the OCN using simulated annealing.
 
@@ -563,10 +620,13 @@ class OCN:
         max_iterations_per_loop: int, optional
             If provided, the number of iterations steps to perform in each "chunk"
             of optimization. Energy and output arrays can be reported no more often
-            than this.
+            than this. Recommended values are 1_000-1_000_000. Default is 10_000.
         xarray_out : bool, default False
-            If True, the returned result will also include an xarray.Dataset.
+            If True, the returned result will be an xarray.Dataset instead of a FitResult.
             Requires xarray to be installed.
+        random_state : int | numpy.random.Generator | None, optional
+            Seed or generator for RNG seeding. If None, system entropy is used.
+            If an integer or Generator is provided, the new seed is drawn from it directly.
 
         Returns
         -------
@@ -604,10 +664,7 @@ class OCN:
         moves (:math:`\Delta E < 0`) are always accepted.
         """
 
-        rng = np.random.default_rng(self.master_seed)
-        self.master_seed = rng.integers(0, int(2**32 - 1))
-        _bindings.libocn.rng_seed(self.master_seed)
-
+        # validate inputs
         if n_iterations is None:
             n_iterations = int(40*self.dims[0]*self.dims[1])
         if not (isinstance(n_iterations, int) and n_iterations > 0):
@@ -620,9 +677,15 @@ class OCN:
 
         memory_est = array_reports*self.dims[0]*self.dims[1]*2*8 
         if memory_est > 20e6:
-            warnings.warn(f"Requesting {array_reports} array is estimated to use {memory_est/1e6:.2f}MB of memory.")
+            warnings.warn(f"Requesting {array_reports} array is estimated to use {memory_est/1e6:.2f}MB of memory. Consider reducing array_reports or increasing max_iterations_per_loop if memory is a concern.")
 
-        # make sure energy is up to date, useful if the user modified the parameters manually
+        if (
+            (cooling_rate < 0.5 or constant_phase > 0.1) 
+            and n_iterations <= 50*self.dims[0]*self.dims[1]
+        ):
+            warnings.warn("Using cooling_rate < 0.5 and constant_phase > 0.1 with may cause convergence issues. Consider increasing n_iterations.")
+        
+        # make sure energy is up to date, useful if the user modified any parameters manually
         self.__p_c_graph.contents.energy = self.compute_energy()
         cooling_schedule = create_cooling_schedule(
             ocn=self,
@@ -631,34 +694,30 @@ class OCN:
             cooling_rate=cooling_rate,
         )
 
-        if (
-            (cooling_rate < 0.5 or constant_phase > 0.1) 
-            and n_iterations <= 50*self.dims[0]*self.dims[1]
-        ):
-            warnings.warn("Using cooling_rate < 0.5 and constant_phase > 0.1 with may cause convergence issues. Consider increasing n_iterations.")
-
-        completed_iterations = 0
-        
+        # preallocate output arrays
+        max_iterations_per_loop = int(max_iterations_per_loop)
+        max_iterations_per_loop = max(1, max_iterations_per_loop)
+        n_iterations = int(n_iterations)
+        n_iterations = max(1, n_iterations)
+        max_iterations_per_loop = min(n_iterations, max_iterations_per_loop)
         energy_report_interval = n_iterations // energy_reports
         energy_report_interval = max(energy_report_interval, max_iterations_per_loop)
         
         array_report_interval = n_iterations // array_reports
         array_report_interval = max(array_report_interval, max_iterations_per_loop)
         
-        # always report energy when reporting arrays
         energy_out = np.empty(
-            n_iterations//energy_report_interval + 2 + n_iterations//array_report_interval + 2
-            , dtype=np.float64)
+            n_iterations//energy_report_interval + 2 + n_iterations//array_report_interval + 2, # always report energy when reporting arrays
+            dtype=np.float64)
         energy_out[0] = self.energy
 
-        # adjust array_reports to be a multiple of n_loops
         array_out = np.empty([
-            n_iterations//array_report_interval + 2,
+            n_iterations//array_report_interval + 2, # adjust array_reports to be a multiple of n_loops
             2,
             self.dims[0],
             self.dims[1]
         ])
-        array_out[0] = self.to_array()
+        array_out[0] = self.to_numpy()
 
         anneal_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
         anneal_ptr = anneal_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
@@ -671,6 +730,10 @@ class OCN:
             energy_report_number = 0
             array_report_idx = [0]
             energy_report_idx = [0]
+            
+            self._advance_seed()
+            
+            completed_iterations = 0
             while completed_iterations < n_iterations:
                 iterations_this_loop = min(max_iterations_per_loop, n_iterations - completed_iterations)
                 anneal_buf[:iterations_this_loop] = cooling_schedule(
@@ -690,7 +753,7 @@ class OCN:
                 if (completed_iterations % array_report_interval) < max_iterations_per_loop:
                     array_report_number += 1
                     array_report_idx.append(completed_iterations)
-                    array_out[array_report_number] = self.to_array()
+                    array_out[array_report_number] = self.to_numpy()
                     energy_report_number += 1
                     energy_report_idx.append(completed_iterations)
                     energy_out[energy_report_number] = e_new
@@ -718,50 +781,54 @@ class OCN:
         array_report_idx = np.array(array_report_idx, dtype=np.int32)
         energy_report_idx = np.array(energy_report_idx, dtype=np.int32)
         
-        result = FitResult(
-            grid_idx=np.asarray(array_report_idx, dtype=np.int32)[:array_report_number + 1],
-            grids=array_out[:array_report_number + 1],
-            energy_idx=np.asarray(energy_report_idx, dtype=np.int32)[:energy_report_number + 1],
-            energies=energy_out[:energy_report_number + 1],
-            temperatures=cooling_schedule(energy_report_idx[:energy_report_number + 1])
-        )
-
-        if xarray_out:
-            try:
-                import xarray as xr
-            except ImportError as e:
-                raise ImportError(
-                    "PyOCN.OCN.fit() with xarray_out=True requires xarray to be installed. Install with `pip install xarray`."
-                ) from e
-
-            mask = np.isin(
-                energy_report_idx[:energy_report_number + 1], 
-                array_report_idx[:array_report_number + 1], 
-                assume_unique=True
-            )
-            energy_idx = np.where(mask)[0]
-            return result, xr.Dataset(
-                data_vars={
-                    "grid": (["iteration", "band", "y", "x"], 
-                             array_out[:array_report_number + 1]),
-                    "energy": (["iteration"], energy_out[energy_idx]),
-                    "temperatures": (["iteration"], cooling_schedule(array_report_idx[:array_report_number + 1]))
-                },
-                coords={
-                    "iteration": ("iteration", array_report_idx),
-                    "band": ["energy", "drained_area"],
-                    "y": ("y", np.arange(self.dims[0])*self.resolution),
-                    "x": ("x", np.arange(self.dims[1])*self.resolution),
-                },
-                attrs={
-                    "description": "OCN fit result arrays",
-                    "resolution_m": self.resolution,
-                    "gamma": self.gamma,
-                    "master_seed": int(self.master_seed),
-                }
+        if not xarray_out:
+            return FitResult(
+                i_raster=array_report_idx[:array_report_number + 1],
+                energy_rasters=array_out[:array_report_number + 1, 0],
+                area_rasters=array_out[:array_report_number + 1, 1],
+                i_energy=energy_report_idx[:energy_report_number + 1],
+                energies=energy_out[:energy_report_number + 1],
+                temperatures=cooling_schedule(energy_report_idx[:energy_report_number + 1])
             )
         
-        return result
+        try:
+            import xarray as xr
+        except ImportError as e:
+            raise ImportError(
+                "PyOCN.OCN.fit() with xarray_out=True requires xarray to be installed. Install with `pip install xarray`."
+            ) from e
+
+        mask = np.isin(
+            energy_report_idx[:energy_report_number + 1], 
+            array_report_idx[:array_report_number + 1], 
+            assume_unique=True
+        )
+        energy_idx = np.where(mask)[0]
+        return xr.Dataset(
+            data_vars={
+                "energy_rasters": (
+                    ["iteration", "y", "x"], 
+                    array_out[:array_report_number + 1, 0]
+                ),
+                "area_rasters": (
+                    ["iteration", "y", "x"], 
+                    array_out[:array_report_number + 1, 1]
+                ),
+                "energies": (["iteration"], energy_out[energy_idx]),
+                "temperatures": (["iteration"], cooling_schedule(array_report_idx[:array_report_number + 1]))
+            },
+            coords={
+                "iteration": ("iteration", array_report_idx),
+                "y": ("y", np.arange(self.dims[0])*self.resolution),
+                "x": ("x", np.arange(self.dims[1])*self.resolution),
+            },
+            attrs={
+                "description": "OCN fit result arrays",
+                "resolution_m": self.resolution,
+                "gamma": self.gamma,
+                "master_seed": int(self.master_seed),
+            }
+        )
 
 
 __all__ = [

@@ -17,12 +17,14 @@ dependencies = [
   "matplotlib>=3.5",  # should check the actual min
 ]
 
-[project.urls]
-Homepage = "https://github.com/alextsfox/PyOCN"
+[project.optional-dependencies]
 raster = [
   "rasterio>=1.3",
-  "xarray>=2024",  
+  "xarray>=2024.2",  
 ]
+
+[project.urls]
+Homepage = "https://github.com/alextsfox/PyOCN"
 
 [tool.setuptools.packages.find]
 include = ["PyOCN*"]
