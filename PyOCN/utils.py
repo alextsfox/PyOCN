@@ -62,17 +62,18 @@ def net_type_to_dag(net_type:Literal["I", "H", "V", "T", "E"], dims:tuple, pbar:
 
         - "E": A network where every node on the edge of the grid is a root.
 
-            X  X  X  X  X  X
-              \  \    /  /
-            X  O  O  O  O  X
-              \  \    /  /
-            X  O  O  O  O  X
-
-            X  O  O  O  O  X
-              /  /     \  \
-            X  O  O  O  O  X
-              /  /     \  \  
-            X  X  X  X  X  X
+          ::
+              X  X  X  X  X  X
+                \  \    /  /
+              X  O  O  O  O  X
+                \  \    /  /
+              X  O  O  O  O  X
+  
+              X  O  O  O  O  X
+                /  /     \  \
+              X  O  O  O  O  X
+                /  /     \  \  
+              X  X  X  X  X  X
 
 
         - "T": Not implemented yet.
