@@ -43,7 +43,8 @@ from . import _flowgrid_convert as fgconv
 
 @dataclass(slots=True, frozen=True)
 class FitResult:
-    """Result of the OCN fitting procedure.
+    """
+    Result of OCN optimization.
     
     Attributes
     -----------
@@ -100,6 +101,59 @@ class OCN:
     verbosity : int
         Verbosity level for underlying library output (0-2).
     
+    Constructor Methods
+    -------------------
+    :meth`from_net_type(net_type, dims, resolution, gamma, random_state, verbosity)`
+        Create an OCN from a predefined network type and dimensions.
+    :meth`from_digraph(dag, resolution, gamma, random_state, verbosity)`
+        Create an OCN from an existing NetworkX DiGraph.
+    
+    Outputs Methods
+    ---------------
+    :meth`to_digraph()`
+        Export the current grid to a NetworkX DiGraph.
+    :meth`to_numpy()`
+        Export a raster representation of the drained area and energy of the grid to a numpy array.
+    :meth`to_xarray()`
+        Export a raster representation of the drained area and energy of the grid to an xarray Dataset (requires xarray).
+    :meth`to_gtiff(west, north, crs, path)`
+        Export a raster representation of the drained area and energy of the grid to a GeoTIFF file (requires rasterio).
+
+    Operational Methods
+    -------------------
+    :meth`compute_energy()`
+        Compute the current energy of the network.
+    :meth`single_erosion_event(temperature, xarray_out)`
+        Perform a single erosion event at a given temperature.
+    :meth`fit(n_iterations, cooling_schedule, energy_reports, max_iterations_per_loop, xarray_out, random_state)`
+        Optimize the network using simulated annealing.
+    
+    Examples
+    --------
+    The following is a simple example of creating, optimizing, and plotting
+    an OCN using PyOCN and Matplotlib. More examples are available in the
+    `demo.ipynb` notebook in the repository (https://github.com/alextsfox/PyOCN).
+
+    >>> import PyOCN as po
+    >>> import matplotlib as mpl
+    >>> import matplotlib.pyplot as plt
+    >>> # initialize a V-shaped network on a 64x64 grid
+    >>> ocn = po.OCN.from_net_type(
+    >>>     net_type="V",
+    >>>     dims=(64, 64),
+    >>>     random_state=8472,
+    >>> )
+    >>> # optimize the network with simulated annealing
+    >>> result = ocn.fit(pbar=True)
+    >>> # plot the energy and drained area evolution, along with the final raster
+    >>> fig, axs = plt.subplots(2, 1, height_ratios=[1, 4], figsize=(6, 8))
+    >>> axs[0].plot(result.i_energy, result.energies / np.max(result.energies))
+    >>> axs[0].plot(result.i_energy, result.temperatures / np.max(result.temperatures))
+    >>> axs[0].set_ylabel("Normalized Energy")
+    >>> axs[0].set_xlabel("Iteration")
+    >>> norm = mpl.colors.PowerNorm(gamma=0.5)
+    >>> po.plot_ocn_raster(ocn, attribute='drained_area', norm=norm, cmap="Blues", ax=axs[1])
+    >>> axs[1].set_axis_off()
     """
     def __init__(self, dag: nx.DiGraph, resolution: float=1.0, gamma: float = 0.5, random_state=None, verbosity: int = 0, validate:bool=True):
         """
