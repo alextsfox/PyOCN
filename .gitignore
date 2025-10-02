@@ -1,5 +1,7 @@
 # vscode stuff
 /.vscode/
+.vscode/
+.vscode
 
 # python virtual environments
 /.venv/
