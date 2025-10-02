@@ -86,27 +86,29 @@ class OCN:
     
     Constructor Methods
     -------------------
-    :meth`from_net_type(net_type, dims, resolution, gamma, random_state, verbosity)`
+    :meth:`from_net_type`
         Create an OCN from a predefined network type and dimensions.
-    :meth`from_digraph(dag, resolution, gamma, random_state, verbosity)`
+    :meth:`from_digraph`
         Create an OCN from an existing NetworkX DiGraph.
-    
-    Outputs Methods
-    - :meth`to_digraph()`
-        Export the current grid to a NetworkX DiGraph.
-    - :meth`to_numpy()`
-        Export a raster representation of the drained area and energy of the grid to a numpy array.
-    - :meth`to_xarray()`
-        Export a raster representation of the drained area and energy of the grid to an xarray Dataset (requires xarray).
-    - :meth`to_gtiff(west, north, crs, path)`
-        Export a raster representation of the drained area and energy of the grid to a GeoTIFF file (requires rasterio).
 
-    Operational Methods
-    - :meth`compute_energy()`
+    Export Methods
+    --------------
+    :meth:`to_digraph`
+        Export the current grid to a NetworkX DiGraph.
+    :meth:`to_numpy`
+        Export raster arrays (energy, drained area) as numpy arrays.
+    :meth:`to_xarray`
+        Export raster arrays as an xarray Dataset (requires xarray).
+    :meth:`to_gtiff`
+        Export raster arrays to a GeoTIFF file (requires rasterio).
+
+    Optimization Methods
+    --------------------
+    :meth:`compute_energy`
         Compute the current energy of the network.
-    - :meth`single_erosion_event(temperature, xarray_out)`
+    :meth:`single_erosion_event`
         Perform a single erosion event at a given temperature.
-    - :meth`fit(n_iterations, cooling_schedule, energy_reports, max_iterations_per_loop, xarray_out, random_state)`
+    :meth:`fit`
         Optimize the network using simulated annealing.
 
     Attributes
