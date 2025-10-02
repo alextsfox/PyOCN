@@ -1,0 +1,81 @@
+.. PyOCN documentation master file, created by
+   sphinx-quickstart on Wed Oct  1 18:19:51 2025.
+   You can adapt this file completely to your liking, but it should at least
+   contain the root `toctree` directive.
+
+PyOCN Documentation
+===================
+
+This is a package to generate optimal channel networks (OCNs), based on the algorithm described in Carraro et al. (2020). *Generation and application of river network analogues for use in ecology and evolution. Ecology and Evolution.* doi:10.1002/ece3.6479 
+and mirrors some of the functionality of the OCNet R package (https://lucarraro.github.io/OCNet/).
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Contents:
+
+   installation
+   quickstart
+   api
+   examples
+
+Installation
+============
+
+Install from PyPI:
+
+.. code-block:: bash
+
+   pip install pyocn
+
+Or with optional raster and xarray support:
+
+.. code-block:: bash
+
+   pip install pyocn[raster]
+
+Quick Start
+===========
+
+.. code-block:: python
+
+   import PyOCN as po
+
+   # Create an OCN from a predefined initial network type
+   ocn = po.OCN.from_net_type("I", dims=(32, 32), gamma=0.5, random_state=42)
+   
+   # Optimize with simulated annealing
+   ocn.fit(n_iterations=10000)
+   
+   # Visualize
+   po.plot_ocn_raster(ocn)
+   plt.show()
+
+API Reference
+=============
+
+.. automodule:: PyOCN
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+OCN Class
+---------
+
+.. autoclass:: PyOCN.OCN
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Plotting Functions
+------------------
+
+.. autofunction:: PyOCN.plot_ocn_raster
+.. autofunction:: PyOCN.plot_ocn_as_dag
+.. autofunction:: PyOCN.plot_positional_digraph
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
