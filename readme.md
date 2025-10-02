@@ -1,13 +1,12 @@
 # PyOCN
 This is a package to generate optimal channel networks (OCNs), based on the algorithm described in Carraro et al. (2020). *Generation and application of river network analogues for use in ecology and evolution. Ecology and Evolution.* doi:10.1002/ece3.6479 and mirrors some of the functionality of the OCNet R package (https://lucarraro.github.io/OCNet/).
 
-This is a work in progress. I plan to release this as a package on PyPI in the near future. For now, you can clone the repository and build the package from source.
+This is a work in progress. I released the package to PyPI on 2025-10-01, but you can also compile it from source directly:
 
-To compile libocn with `gcc` on MacOS or Linux, move the root directory into your project's working directory andrun the following commands from the root directory:
+To compile libocn with `gcc` on MacOS or Linux, clone the github repo, move the root directory into your project's working directory and run the following commands from the root directory:
 
 ```bash
-cd PyOCN/c_src
-bash build.sh
+bash PyOCN/c_src/build.sh
 ```
 
 or alternatively:
