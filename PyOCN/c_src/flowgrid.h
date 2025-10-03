@@ -73,9 +73,10 @@ CartPair fg_lin_to_cart(linidx_t a, CartPair dims);
  * @param a The starting linear index.
  * @param down The clockhand direction to move in.
  * @param dims The dimensions of the graph.
+ * @param wrap If true, allows wrapping around the edges of the grid (toroidal). If false, returns OOB_ERROR for out-of-bounds moves.
  * @return Status code indicating success or failure
  */
-Status fg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims);
+Status fg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims, bool wrap);
 
 /**
  * @brief Get the vertex at the given Cartesian coordinates safely.
@@ -171,9 +172,10 @@ Status fg_destroy_safe(FlowGrid *G);
  * @param G Pointer to the FlowGrid.
  * @param a The linear index of the vertex to modify.
  * @param down_new The new clockhand direction for the vertex's outflow.
+ * @param wrap If true, allows wrapping around the edges of the grid (toroidal). If false, returns OOB_ERROR for out-of-bounds moves.
  * @return Status code indicating success or failure. Returns MALFORMED_GRAPH_WARNING if the change would malform the graph in an immediately obvious way. Does not check for large cycles or root access.
  */
-Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new);
+Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new, bool wrap);
 
 /** 
  * @brief Follow the downstream path from a given vertex, marking each vertex as visited.

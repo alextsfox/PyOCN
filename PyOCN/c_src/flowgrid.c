@@ -69,13 +69,34 @@ CartPair fg_lin_to_cart(linidx_t a, CartPair dims){
     div_t adiv = div(a, dims.col);
     return (CartPair){adiv.quot, adiv.rem};
 }
-Status fg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims){
+Status fg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims, bool wrap){
     CartPair row_col = fg_lin_to_cart(a, dims);
     OffsetPair offset = offsets[down];
     OffsetPair cart_down_off = {
         .row = (int16_t)row_col.row + offset.row,
         .col = (int16_t)row_col.col + offset.col
     };
+
+    // bool edge_does_wrap = false;
+    if (wrap){
+        if (cart_down_off.row == -1){
+            // edge_does_wrap = true;
+            cart_down_off.row += dims.row;
+        } 
+        else if (cart_down_off.row == (int16_t)dims.row){
+            // edge_does_wrap = true;
+            cart_down_off.row -= dims.row;
+        } 
+        if (cart_down_off.col == -1){
+            // edge_does_wrap = true;
+            cart_down_off.col += dims.col;
+        } 
+        else if (cart_down_off.col == (int16_t)dims.col){
+            // edge_does_wrap = true;
+            cart_down_off.col -= dims.col;
+        } 
+    }
+
     if (
         cart_down_off.row < 0 
         || cart_down_off.row >= (int16_t)dims.row 
@@ -88,7 +109,6 @@ Status fg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, 
     };
 
     *a_down = fg_cart_to_lin(cart_down, dims);
-
     return SUCCESS;
 }
 
@@ -197,7 +217,7 @@ Status fg_destroy_safe(FlowGrid *G){
 // ##################################
 // # Network manipulation/traversal #
 // ##################################
-Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new){
+Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new, bool wrap){
     Status code;
     CartPair dims = G->dims;
     Vertex vert, vert_down_old, vert_down_new;
@@ -214,7 +234,7 @@ Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new){
     if (code == OOB_ERROR) return OOB_ERROR;
 
     // a_down_new is trickier to get.
-    code = fg_clockhand_to_lin_safe(&a_down_new, a, down_new, dims);
+    code = fg_clockhand_to_lin_safe(&a_down_new, a, down_new, dims, wrap);
     if (code == OOB_ERROR) return OOB_ERROR;
     vert_down_new = fg_get_lin(G, a_down_new);  // we can use unsafe here because we already checked bounds
 

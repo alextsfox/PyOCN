@@ -4,7 +4,7 @@ Utility functions for working with OCNs.
 
 from __future__ import annotations
 from itertools import product
-from typing import Literal, Callable, TYPE_CHECKING
+from typing import Any, Literal, Callable, TYPE_CHECKING
 import networkx as nx
 import numpy as np
 from tqdm import tqdm
@@ -63,6 +63,7 @@ def net_type_to_dag(net_type:Literal["I", "H", "V", "T", "E"], dims:tuple, pbar:
         - "E": A network where every node on the edge of the grid is a root.
 
           ::
+
               X  X  X  X  X  X
                 \  \    /  /
               X  O  O  O  O  X
@@ -218,3 +219,144 @@ def create_cooling_schedule(
         return np.where(i < n_constant, e0, e0 * np.exp(term1*i + term2))
 
     return schedule
+
+def unwrap_dag(dag: nx.DiGraph, dims: tuple[int, int]) -> nx.DiGraph:
+    """Come up with a mapping to "unwrap" gridcell coordinates from a with periodic boundary conditions
+    to a nonperiodic grid.
+
+    Parameters
+    ----------
+    dag : nx.DiGraph
+        The input directed acyclic graph with periodic boundary conditions.
+        Each node must have a 'pos' attribute indicating its (row, col) position.
+    dims : tuple[int, int]
+        The dimensions of the grid as (rows, cols). Both must be positive integers.
+
+    Returns
+    -------
+    nx.DiGraph
+        A new directed acyclic graph with unwrapped grid coordinates.
+
+    Raises
+    ------
+    ValueError
+        If any node in the input graph lacks a 'pos' attribute or if the
+        dimensions are not positive integers.
+
+    Notes
+    -----
+    The function assumes that the input graph is a valid DAG and that the
+    'pos' attributes are correctly assigned. The output graph will no longer
+    span a toroidal topology and will no longer cover a dense grid of nodes.
+    """
+    new_dag = dag.copy()
+    for _ in range(2):
+        for n in nx.topological_sort(new_dag):
+            pos = new_dag.nodes[n]['pos']
+            r, c = pos
+            succs = list(new_dag.successors(n))
+            
+            # check for row wrapping
+            for s in succs:
+                sr, _ = new_dag.nodes[s]['pos']
+                dr = sr - r
+                # if we detect wrapping, move all ancestors and self
+                if dr > 1:  # wrapped downward
+                    for anc in nx.ancestors(new_dag, n):
+                        anc_r, anc_c = new_dag.nodes[anc]['pos']
+                        new_dag.nodes[anc]['pos'] = (anc_r + dims[0], anc_c)
+                    new_dag.nodes[n]['pos'] = (r + dims[0], c)
+                    break
+                elif dr < -1:  # wrapped upward
+                    for anc in nx.ancestors(new_dag, n):
+                        anc_r, anc_c = new_dag.nodes[anc]['pos']
+                        new_dag.nodes[anc]['pos'] = (anc_r - dims[0], anc_c)
+                    new_dag.nodes[n]['pos'] = (r - dims[0], c)
+                    break
+            # check for column wrapping
+            for s in succs:
+                _, sc = new_dag.nodes[s]['pos']
+                dc = sc - c
+                if dc > 1:  # wrapped rightward
+                    for anc in nx.ancestors(new_dag, n):
+                        anc_r, anc_c = new_dag.nodes[anc]['pos']
+                        new_dag.nodes[anc]['pos'] = (anc_r, anc_c + dims[1])
+                    new_dag.nodes[n]['pos'] = (r, c + dims[1])
+                    break
+                elif dc < -1:  # wrapped leftward
+                    for anc in nx.ancestors(new_dag, n):
+                        anc_r, anc_c = new_dag.nodes[anc]['pos']
+                        new_dag.nodes[anc]['pos'] = (anc_r, anc_c - dims[1])
+                    new_dag.nodes[n]['pos'] = (r, c - dims[1])
+                    break
+    # Adjust positions to be non-negative
+    positions = np.array(list(nx.get_node_attributes(new_dag, 'pos').values()))
+    row_off, col_off = positions.min(axis=0)
+    for n in new_dag.nodes:
+        r, c = new_dag.nodes[n]['pos']
+        new_dag.nodes[n]['pos'] = (r - row_off, c - col_off)
+    return new_dag
+
+def assign_subwatershed(dag: nx.DiGraph) -> None:
+    """Assign a 'watershed_id' attribute to each node in the DAG, identifying subwatersheds.
+
+    Parameters
+    ----------
+    dag : nx.DiGraph
+        The input directed acyclic graph. Each node must have a 'pos' attribute
+        indicating its (row, col) position.
+
+    Returns
+    -------
+    None
+        The function modifies the input graph in place by adding a 'watershed_id'
+        attribute to each node.
+
+    Raises
+    ------
+    ValueError
+        If any node in the input graph lacks a 'pos' attribute.
+
+    Notes
+    -----
+    A subwatershed is defined as the set of nodes that drain to a common outlet,
+    where an outlet is a node with out-degree zero. Each subwatershed is assigned
+    a unique integer ID, starting from 0. Nodes that are outlets themselves are
+    assigned a watershed ID of -1.
+    """
+    roots = [n for n, d in dag.out_degree() if d==0]
+    subwatershed_outlets = [n for root in roots for n in dag.predecessors(root)]
+    subwatersheds = list(set(nx.ancestors(dag, outlet)) | {outlet} for outlet in subwatershed_outlets)
+    subwatersheds = [dag.subgraph(wshd) for wshd in subwatersheds]
+    for i, wshd in enumerate(subwatersheds):
+        nx.set_node_attributes(wshd, i, 'watershed_id')
+    for r in roots:
+        nx.set_node_attributes(dag, {r: -1}, 'watershed_id')
+
+def get_subwatersheds(dag : nx.DiGraph, node : Any) -> set[nx.DiGraph]:
+    """Extract subwatershed subgraphs from the main DAG. Each subwatershed drains to a common outlet node `node`.
+    Node `node` is not included in the returned subwatershed graphs.
+
+    Parameters
+    ----------
+    dag : nx.DiGraph
+        The input directed acyclic graph. Each node must have a 'pos' attribute
+        indicating its (row, col) position.
+    node : Any
+        A node in the graph representing the outlet of a subwatershed.
+
+    Returns
+    -------
+    set of nx.DiGraph
+        A set of directed acyclic graphs, each representing a subwatershed.
+
+    Note
+    ----
+    The returned subtwatersheds are subgraph views of the input graph and share node
+    and edge data with the original graph.
+    """
+    subwatershed_outlets = [n for n in dag.predecessors(node)]
+    subwatersheds = set(set(nx.ancestors(dag, outlet)) | {outlet} for outlet in subwatershed_outlets)
+    subwatersheds = set(dag.subgraph(wshd) for wshd in subwatersheds)
+    return subwatersheds
+    

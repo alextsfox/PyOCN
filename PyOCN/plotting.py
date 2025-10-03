@@ -22,6 +22,7 @@ import warnings
 
 if TYPE_CHECKING:
     from .ocn import OCN
+from .utils import unwrap_dag
 
 def _pos_to_xy(dag: nx.DiGraph) -> dict[Any, tuple[float, float]]:
     """
@@ -79,6 +80,8 @@ def plot_ocn_as_dag(ocn: OCN, attribute: str | None = None, ax=None, norm=None, 
     """
     
     dag = ocn.to_digraph()
+    if ocn.wrap:
+        dag = unwrap_dag(dag, ocn.dims)
     pos = _pos_to_xy(dag)
 
     if ax is None:
@@ -120,11 +123,17 @@ def plot_ocn_raster(ocn: OCN, attribute:str='energy', ax=None, **kwargs):
         The axes containing the rendered image.
     """
 
-    dag = ocn.to_digraph()
-    energy = np.zeros(ocn.dims)
-    for node in dag.nodes:
-        r, c = dag.nodes[node]['pos']
-        energy[r, c] = dag.nodes[node][attribute]
+    array = ocn.to_numpy(unwrap=ocn.wrap)
+    if attribute == 'energy':
+        array = array[0]
+    elif attribute == 'drained_area':
+        array = array[1]
+    elif attribute == 'watershed_id':
+        array = array[2]
+        array = np.where(np.isnan(array), np.nan, array)
+        # array = array.astype(np.int32)
+    else:
+        raise ValueError(f"Unknown attribute '{attribute}'. Must be one of 'energy', 'drained_area', or 'watershed_id'.")
 
     if "cmap" not in kwargs:
         kwargs["cmap"] = "terrain_r"
@@ -132,7 +141,7 @@ def plot_ocn_raster(ocn: OCN, attribute:str='energy', ax=None, **kwargs):
     if ax is None:
         _, ax = plt.subplots()
 
-    ax.imshow(energy, **kwargs)
+    ax.imshow(array, **kwargs)
     return ax
     
 

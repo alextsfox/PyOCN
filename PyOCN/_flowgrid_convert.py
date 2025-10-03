@@ -45,7 +45,7 @@ def to_digraph(c_graph:_bindings.FlowGrid_C) -> nx.DiGraph:
         
         return dag
 
-def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate:bool=True) -> POINTER:
+def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate:bool=True, wrap:bool=False) -> POINTER:
     """
     Convert a NetworkX directed graph into a FlowGrid_C. Called by the OCN constructor.
 
@@ -120,7 +120,11 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
         for u, v in G.edges:
             r1, c1 = G.nodes[u]["pos"]
             r2, c2 = G.nodes[v]["pos"]
-            if max(abs(r1 - r2), abs(c1 - c2)) != 1:
+            dr, dc = abs(r2 - r1), abs(c2 - c1)
+            if wrap:
+                dr = min(dr, rows - dr)
+                dc = min(dc, cols - dc)
+            if max(dr, dc) != 1:
                 raise ValueError(f"Edge ({u}->{v}) connects non-adjacent nodes at positions {(r1,c1)} and {(r2,c2)}.")
         
         if verbose:

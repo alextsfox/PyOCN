@@ -22,7 +22,6 @@ PyOCN.utils
 PyOCN.plotting
         Helper functions for visualization and plotting
 """
-#TODO: add an __copy__ method that deepcopies the underlying FlowGrid_C
 
 import warnings
 import ctypes
@@ -37,7 +36,7 @@ import numpy as np
 from tqdm import tqdm
 
 from ._statushandler import check_status
-from .utils import create_cooling_schedule, net_type_to_dag
+from .utils import create_cooling_schedule, net_type_to_dag, unwrap_dag, assign_subwatershed
 from . import _libocn_bindings as _bindings
 from . import _flowgrid_convert as fgconv
 
@@ -57,6 +56,9 @@ class FitResult:
     area_rasters: np.ndarray
         Array snapshots of drained area recorded during fitting, shaped
         (n_reports, rows, cols).
+    watershed_id : np.ndarray
+        Array snapshots of watershed IDs assigned during fitting, shaped
+        (n_reports, rows, cols). Roots are assigned -1. Non-draining cells are -9999.
     i_energy : np.ndarray
         List of iteration indices at which total energy snapshots were recorded.
         Shape (n_reports,).
@@ -70,6 +72,7 @@ class FitResult:
     i_raster: np.ndarray
     energy_rasters: np.ndarray
     area_rasters: np.ndarray
+    watershed_id: np.ndarray
     i_energy: np.ndarray
     energies: np.ndarray
     temperatures: np.ndarray
@@ -96,11 +99,13 @@ class OCN:
     :meth:`to_digraph`
         Export the current grid to a NetworkX DiGraph.
     :meth:`to_numpy`
-        Export raster arrays (energy, drained area) as numpy arrays.
+        Export raster arrays (energy, drained area, watershed_id) as numpy arrays.
     :meth:`to_xarray`
         Export raster arrays as an xarray Dataset (requires xarray).
     :meth:`to_gtiff`
         Export raster arrays to a GeoTIFF file (requires rasterio).
+    :meth:`copy`
+        Create a deep copy of the OCN.
 
     Optimization Methods
     --------------------
@@ -127,6 +132,8 @@ class OCN:
         The seed used to initialize the internal RNG.
     verbosity : int
         Verbosity level for underlying library output (0-2).
+    wrap : bool
+        If true, allows wrapping around the edges of the grid (toroidal). If false, no wrapping is applied (read-only property).
     
     
     Examples
@@ -156,7 +163,7 @@ class OCN:
     >>> po.plot_ocn_raster(ocn, attribute='drained_area', norm=norm, cmap="Blues", ax=axs[1])
     >>> axs[1].set_axis_off()
     """
-    def __init__(self, dag: nx.DiGraph, resolution: float=1.0, gamma: float = 0.5, random_state=None, verbosity: int = 0, validate:bool=True):
+    def __init__(self, dag: nx.DiGraph, resolution: float=1.0, gamma: float = 0.5, random_state=None, verbosity: int = 0, validate:bool=True, wrap : bool = False):
         """
         Construct an :class:`OCN` from a valid NetworkX ``DiGraph``.
 
@@ -172,6 +179,10 @@ class OCN:
         if not (0 <= gamma <= 1):
             warnings.warn(f"gamma values outside of [0, 1] may not be physically meaningful. Got {gamma}.")
         self.gamma = gamma
+        
+        if not isinstance(wrap, bool):
+            raise TypeError(f"wrap must be a boolean. Got {type(wrap)}.")
+        self.__wrap = wrap
 
         self.master_seed = random_state
         
@@ -184,7 +195,7 @@ class OCN:
         self.__p_c_graph.contents.energy = self.compute_energy()
 
     @classmethod
-    def from_net_type(cls, net_type:str, dims:tuple, resolution:float=1, gamma=0.5, random_state=None, verbosity:int=0):
+    def from_net_type(cls, net_type:str, dims:tuple, resolution:float=1, gamma : float = 0.5, random_state=None, verbosity:int=0, wrap : bool = False):
         """
         Create an :class:`OCN` from a predefined network type and dimensions.
 
@@ -203,6 +214,8 @@ class OCN:
             Seed or generator for RNG seeding.
         verbosity : int, default 0
             Verbosity level (0-2) for underlying library output.
+        wrap : bool, default False
+            If true, allows wrapping around the edges of the grid (toroidal). If false, no wrapping is applied.
 
         Returns
         -------
@@ -230,10 +243,10 @@ class OCN:
         dag = net_type_to_dag(net_type, dims)
         if verbosity == 1:
             print(" Done.")
-        return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=False)
+        return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=False, wrap=wrap)
 
     @classmethod
-    def from_digraph(cls, dag: nx.DiGraph, resolution:float=1, gamma=0.5, random_state=None, verbosity: int = 0):
+    def from_digraph(cls, dag: nx.DiGraph, resolution:float=1, gamma=0.5, random_state=None, verbosity: int = 0, wrap: bool = False):
         """
         Create an :class:`OCN` from an existing NetworkX ``DiGraph``.
 
@@ -249,6 +262,8 @@ class OCN:
             Seed or generator for RNG seeding.
         verbosity : int, default 0
             Verbosity level (0-2) for underlying library output.
+        wrap : bool, default False
+            If true, allows wrapping around the edges of the grid (toroidal). If false, no wrapping is applied.
 
         Returns
         -------
@@ -268,12 +283,13 @@ class OCN:
           exactly one node; each non-root node has ``out_degree == 1``; 
           the roots have ``out_degree == 0``.
         - Edges connect only to one of the 8 neighbors (cardinal or diagonal),
-          i.e., no jumps over rows or columns.
+          i.e., no jumps over rows or columns. If ``wrap=True``, edges may
+          connect across the grid boundaries (i.e. row 0 can connect to row m-1 and col 0 can connect to col n-1).
         - Edges do not cross in the row-column plane.
         - Both ``m`` and ``n`` are even integers, and there are at least four
           vertices.
         """
-        return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=True)
+        return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=True, wrap=wrap)
 
     def __repr__(self):
         #TODO: too verbose?
@@ -307,7 +323,8 @@ class OCN:
         cpy.gamma = self.gamma
         cpy.verbosity = self.verbosity
         cpy.master_seed = self.master_seed
-        cpy.resolution = self.resolution
+        self.__p_c_graph.contents.resolution = self.resolution
+        cpy.__wrap = self.wrap
 
         cpy_p_c_graph = _bindings.libocn.fg_copy_safe(self.__p_c_graph)
         if not cpy_p_c_graph:
@@ -316,6 +333,14 @@ class OCN:
         return cpy
 
     def __deepcopy__(self, memo) -> "OCN":
+        """
+        Create a deep copy of the OCN, including the underlying FlowGrid_C.
+        Also copies the current RNG state. The new copy and the original
+        will be independent from each other and behave identically statistically.
+        """
+        return self.__copy__()
+    
+    def copy(self) -> "OCN":
         """
         Create a deep copy of the OCN, including the underlying FlowGrid_C.
         Also copies the current RNG state. The new copy and the original
@@ -386,7 +411,17 @@ class OCN:
             int(self.__p_c_graph.contents.dims.row),
             int(self.__p_c_graph.contents.dims.col)
         )
+    @property
+    def wrap(self) -> bool:
+        """
+        Whether the grid allows wrapping around the edges (toroidal).
 
+        Returns
+        -------
+        bool
+            Current wrap setting.
+        """
+        return self.__wrap
     @property
     def master_seed(self) -> int:
         """
@@ -410,7 +445,7 @@ class OCN:
             If an integer or Generator is provided, the
             new seed is drawn from it directly.
         """
-        if not isinstance(random_state, (int, type(None), np.random.Generator)):
+        if not isinstance(random_state, (int, np.integer, type(None), np.random.Generator)):
             raise ValueError("RNG must be initialized with an integer/Generator/None.")
         self.__master_seed = np.random.default_rng(random_state).integers(0, int(2**32 - 1))
         _bindings.libocn.rng_seed(self.master_seed)
@@ -432,8 +467,10 @@ class OCN:
             - ``pos``: ``(row, col)`` grid position
             - ``drained_area``: drained area value
             - ``energy``: cumulative energy at the node
+            - ``watershed_id``: integer watershed ID (roots have watershed id = -1)
         """
         dag = fgconv.to_digraph(self.__p_c_graph.contents)
+        assign_subwatershed(dag)
 
         node_energies = dict()
 
@@ -446,11 +483,13 @@ class OCN:
 
         return dag
     
-    def to_gtiff(self, west:float, north:float, crs: Any, path:str|PathLike):
+    def to_gtiff(self, west:float, north:float, crs: Any, path:str|PathLike, unwrap:bool=True):
         """
         Export a raster of the current FlowGrid to a .gtiff file
-        using rasterio. The resulting raster has 2 bands: `energy`
-        and `drained_area`
+        using rasterio. The resulting raster has 3 bands: `energy`, `drained_area`, and `watershed_id`.
+        The `watershed_id` band contains integer watershed IDs assigned to each node,
+        with root nodes assigned a value of -1. NA values are either np.nan (for energy and drained_area)
+        or -9999 (for watershed_id).
 
         N.B. This uses the .resolution attribute to set pixel size in the raster
         This is assumed to be in units as meters. Using a CRS with different units
@@ -463,23 +502,16 @@ class OCN:
             The western border of the raster in crs units, corresponding
             to column 0.
         north : float
-            The western border of the raster in crs units, corresponding
+            The northern border of the raster in crs units, corresponding
             to row 0.
         crs : Any
             The crs for the resulting gtiff, passed to `rasterio.open`
         path : str or Pathlike
             The output path for the resulting gtiff file.
-
-
-
-        Returns
-        -------
-        nx.DiGraph
-            A DAG with the following node attributes per node:
-
-            - ``pos``: ``(row, col)`` grid position
-            - ``drained_area``: drained area value
-            - ``energy``: cumulative energy at the node
+        unwrap : bool, default True
+            If True, unwraps the DAG to a non-wrapping representation
+            before exporting. This will result in a larger raster if
+            the current OCN is wrapping.
         """
         try:
             import rasterio
@@ -489,76 +521,106 @@ class OCN:
                 "PyOCN.OCN.to_gtiff() requires rasterio to be installed. Install with `pip install rasterio`."
             ) from e
 
-        dag = self.to_digraph()
-        energy = np.zeros(self.dims)   
-        drained_area = np.zeros(self.dims)   
-        for node in dag.nodes:
-            r, c = dag.nodes[node]['pos']
-            energy[r, c] = dag.nodes[node]['energy']
-            drained_area[r, c] = dag.nodes[node]['drained_area']
-        
+        array = self.to_numpy(unwrap=unwrap)
+        dims = array.shape[1:]
+        energy = array[0]
+        drained_area = array[1]
+        watershed_id = np.where(np.isnan(array[2]), -9999, array[2])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            watershed_id = watershed_id.astype(np.int32)
+
         transform = from_origin(west, north, self.resolution, self.resolution)
 
-        # Write two bands: 1=energy, 2=drained_area
+        # Write three bands: 1=energy, 2=drained_area, 3=watershed_id
         with rasterio.open(
             Path(path),
             "w",
             driver="GTiff",
-            height=self.dims[0],
-            width=self.dims[1],
-            count=2,
-            dtype=str(energy.dtype),
+            height=dims[0],
+            width=dims[1],
+            count=3,
+            dtype=np.float64,
             crs=crs,
             transform=transform,
             compress="deflate",
         ) as dst:
             dst.write(energy, 1)
             dst.write(drained_area, 2)
+            dst.write(watershed_id, 3)
             # Band descriptions (nice to have)
             try:
                 dst.set_band_description(1, "energy")
                 dst.set_band_description(2, "drained_area")
+                dst.set_band_description(3, "watershed_id")
             except Exception:
                 pass
     
-    def to_numpy(self):
+    def to_numpy(self, unwrap:bool=True) -> np.ndarray:
         """
         Export the current FlowGrid to a numpy array with shape (2, rows, cols).
         Has two channels: 0=energy, 1=drained_area.
         """
         dag = self.to_digraph()
-        energy = np.zeros(self.dims)
+        dims = self.dims
+        if self.wrap and unwrap:
+            dag = unwrap_dag(dag, dims)
+            positions = np.array(list(nx.get_node_attributes(dag, 'pos').values()))
+            max_r, max_c = positions.max(axis=0)
+            dims = (max_r + 1, max_c + 1)
+
+        energy = np.full(dims, np.nan)
+        drained_area = np.full(dims, np.nan)
+        watershed_id = np.full(dims, np.nan)
         for node in dag.nodes:
             r, c = dag.nodes[node]['pos']
             energy[r, c] = dag.nodes[node]['energy']
-        drained_area = np.zeros(self.dims)
-        for node in dag.nodes:
-            r, c = dag.nodes[node]['pos']
             drained_area[r, c] = dag.nodes[node]['drained_area']
-        return np.stack([energy, drained_area], axis=0)
-    
-    def to_xarray(self):
+            watershed_id[r, c] = dag.nodes[node]['watershed_id']
+        return np.stack([energy, drained_area, watershed_id], axis=0)
+
+    def to_xarray(self, unwrap:bool=True) -> "xr.Dataset":
+        """
+        Export the current FlowGrid to an xarray Dataset with data variables:
+        `energy_rasters`, `area_rasters`, and `watershed_id`.
+        The `watershed_id` band contains integer watershed IDs assigned to each node,
+        with root nodes assigned a value of -1. NA values are either np.nan (for energy and drained_area)
+        or -9999 (for watershed_id).
+        Parameters
+        ----------
+        unwrap : bool, default True
+            If True, unwraps the DAG to a non-wrapping representation
+            before exporting. This will result in a larger raster if
+            the current OCN is wrapping."""
         try:
             import xarray as xr
         except ImportError as e:
             raise ImportError(
                 "PyOCN.OCN.to_xarray() requires xarray to be installed. Install with `pip install xarray`."
             ) from e
-        array_out = self.to_numpy()
+        array_out = self.to_numpy(unwrap=unwrap)
+        dims = array_out.shape[1:]
+
+        watershed_id = np.where(np.isnan(array_out[2]), -9999, array_out[2])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            watershed_id = watershed_id.astype(np.int32)
         return xr.Dataset(
             data_vars={
-                "energy_rasters": (["y", "x"], array_out[0]),
-                "area_rasters": (["y", "x"], array_out[1]),
+                "energy_rasters": (["y", "x"], array_out[0].astype(np.float64)),
+                "area_rasters": (["y", "x"], array_out[1].astype(np.float64)),
+                "watershed_id": (["y", "x"], watershed_id),
             },
             coords={
-                "y": ("y", np.arange(self.dims[0])*self.resolution),
-                "x": ("x", np.arange(self.dims[1])*self.resolution),
+                "y": ("y", np.arange(dims[0])*self.resolution),
+                "x": ("x", np.arange(dims[1])*self.resolution),
             },
             attrs={
                 "description": "OCN fit result arrays",
                 "resolution_m": self.resolution,
                 "gamma": self.gamma,
                 "master_seed": int(self.master_seed),
+                "wrap": self.wrap,
             }
         )
 
@@ -585,15 +647,21 @@ class OCN:
         check_status(_bindings.libocn.ocn_single_erosion_event(
             self.__p_c_graph,
             self.gamma, 
-            temperature
+            temperature,
+            self.wrap,
         ))
 
-        array_out = self.to_numpy()
+        array_out = self.to_numpy(unwrap=False)
         if not xarray_out:
+            watershed_id = np.where(np.isnan(array_out[2]), -9999, array_out[2])
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                watershed_id = watershed_id.astype(np.int32)
             return FitResult(
                 i_raster = np.array([0], dtype=np.int32),
                 energy_rasters = array_out[np.newaxis, 0],
                 area_rasters = array_out[np.newaxis, 1],
+                watershed_id = watershed_id[np.newaxis],
                 i_energy = np.array([0], dtype=np.int32),
                 energies = np.array([self.energy], dtype=np.float64),
                 temperatures = np.array([temperature], dtype=np.float64),
@@ -604,10 +672,16 @@ class OCN:
             raise ImportError(
                 "PyOCN.OCN.fit() with xarray_out=True requires xarray to be installed. Install with `pip install xarray`."
             ) from e
+        
+        watershed_id = np.where(np.isnan(array_out[2]), -9999, array_out[2])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            watershed_id = watershed_id.astype(np.int32)
         return xr.Dataset(
             data_vars={
                 "energy_rasters": (["iteration", "y", "x"], array_out[np.newaxis, 0]),
                 "area_rasters": (["iteration", "y", "x"], array_out[np.newaxis, 1]),
+                "watershed_id": (["iteration", "y", "x"], watershed_id[np.newaxis]),
                 "energies": (["iteration"], np.array([self.energy], dtype=np.float64)),
                 "temperatures": (["iteration"], np.array([temperature], dtype=np.float64)),
             },
@@ -768,11 +842,11 @@ class OCN:
 
         array_out = np.empty([
             n_iterations//array_report_interval + 2, # adjust array_reports to be a multiple of n_loops
-            2,
+            3,
             self.dims[0],
             self.dims[1]
         ])
-        array_out[0] = self.to_numpy()
+        array_out[0] = self.to_numpy(unwrap=False)
 
         anneal_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
         anneal_ptr = anneal_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
@@ -800,7 +874,8 @@ class OCN:
                     self.__p_c_graph, 
                     iterations_this_loop, 
                     self.gamma, 
-                    anneal_ptr
+                    anneal_ptr,
+                    self.wrap,
                 ))
                 e_new = self.energy
                 completed_iterations += iterations_this_loop
@@ -808,7 +883,7 @@ class OCN:
                 if (completed_iterations % array_report_interval) < max_iterations_per_loop:
                     array_report_number += 1
                     array_report_idx.append(completed_iterations)
-                    array_out[array_report_number] = self.to_numpy()
+                    array_out[array_report_number] = self.to_numpy(unwrap=False)
                     energy_report_number += 1
                     energy_report_idx.append(completed_iterations)
                     energy_out[energy_report_number] = e_new
@@ -836,11 +911,17 @@ class OCN:
         array_report_idx = np.array(array_report_idx, dtype=np.int32)
         energy_report_idx = np.array(energy_report_idx, dtype=np.int32)
         
+        # return either FitResult or xarray.Dataset
         if not xarray_out:
+            watershed_id = np.where(np.isnan(array_out[:, 2]), -9999, array_out[:, 2])
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                watershed_id = watershed_id.astype(np.int32)
             return FitResult(
                 i_raster=array_report_idx[:array_report_number + 1],
                 energy_rasters=array_out[:array_report_number + 1, 0],
                 area_rasters=array_out[:array_report_number + 1, 1],
+                watershed_id=watershed_id[:array_report_number + 1],
                 i_energy=energy_report_idx[:energy_report_number + 1],
                 energies=energy_out[:energy_report_number + 1],
                 temperatures=cooling_schedule(energy_report_idx[:energy_report_number + 1])
@@ -859,6 +940,11 @@ class OCN:
             assume_unique=True
         )
         energy_idx = np.where(mask)[0]
+
+        watershed_id = np.where(np.isnan(array_out[:, 2]), -9999, array_out[:, 2])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            watershed_id = watershed_id.astype(np.int32)
         return xr.Dataset(
             data_vars={
                 "energy_rasters": (
@@ -868,6 +954,10 @@ class OCN:
                 "area_rasters": (
                     ["iteration", "y", "x"], 
                     array_out[:array_report_number + 1, 1]
+                ),
+                "watershed_id": (
+                    ["iteration", "y", "x"], 
+                    watershed_id[:array_report_number + 1]
                 ),
                 "energies": (["iteration"], energy_out[energy_idx]),
                 "temperatures": (["iteration"], cooling_schedule(array_report_idx[:array_report_number + 1]))
@@ -882,6 +972,7 @@ class OCN:
                 "resolution_m": self.resolution,
                 "gamma": self.gamma,
                 "master_seed": int(self.master_seed),
+                "wrap": self.wrap,
             }
         )
 
