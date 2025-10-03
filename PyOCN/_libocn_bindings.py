@@ -83,6 +83,7 @@ class FlowGrid_C(Structure):
         ("resolution", c_double),
         ("nroots", c_uint16),
         ("vertices", POINTER(Vertex_C)),  # Vertex*
+        ("wrap", c_bool),
     ]
 
 # linidx_t fg_cart_to_lin(CartPairC coords, CartPairC dims);
@@ -141,8 +142,8 @@ libocn.fg_copy_safe.restype = POINTER(FlowGrid_C)
 libocn.fg_destroy_safe.argtypes = [POINTER(FlowGrid_C)]
 libocn.fg_destroy_safe.restype = Status
 
-# Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new, bool wrap);
-libocn.fg_change_vertex_outflow.argtypes = [POINTER(FlowGrid_C), linidx_t, clockhand_t, c_bool]
+# Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new);
+libocn.fg_change_vertex_outflow.argtypes = [POINTER(FlowGrid_C), linidx_t, clockhand_t]
 libocn.fg_change_vertex_outflow.restype = Status
 
 # Status fg_flow_downstream_safe(FlowGrid *G, linidx_t a, uint8_t ncalls);
@@ -161,12 +162,12 @@ libocn.fg_display.restype = None
 libocn.ocn_compute_energy.argtypes = [POINTER(FlowGrid_C), c_double]
 libocn.ocn_compute_energy.restype = c_double
 
-# Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature, bool wrap);
-libocn.ocn_single_erosion_event.argtypes = [POINTER(FlowGrid_C), c_double, c_double, c_bool]
+# Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature);
+libocn.ocn_single_erosion_event.argtypes = [POINTER(FlowGrid_C), c_double, c_double]
 libocn.ocn_single_erosion_event.restype = Status
 
-# Status ocn_outer_ocn_loop(FlowGrid *G, uint32_t niterations, double gamma, double *annealing_schedule, bool wrap);
-libocn.ocn_outer_ocn_loop.argtypes = [POINTER(FlowGrid_C), c_uint32, c_double, POINTER(c_double), c_bool]
+# Status ocn_outer_ocn_loop(FlowGrid *G, uint32_t niterations, double gamma, double *annealing_schedule);
+libocn.ocn_outer_ocn_loop.argtypes = [POINTER(FlowGrid_C), c_uint32, c_double, POINTER(c_double)]
 libocn.ocn_outer_ocn_loop.restype = Status
 
 ########################

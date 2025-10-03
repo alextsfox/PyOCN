@@ -180,9 +180,6 @@ class OCN:
             warnings.warn(f"gamma values outside of [0, 1] may not be physically meaningful. Got {gamma}.")
         self.gamma = gamma
         
-        if not isinstance(wrap, bool):
-            raise TypeError(f"wrap must be a boolean. Got {type(wrap)}.")
-        self.__wrap = wrap
 
         self.master_seed = random_state
         
@@ -191,7 +188,8 @@ class OCN:
             raise TypeError(f"resolution must be numeric. Got {type(resolution)}")
         # instantiate the FlowGrid_C and assign an initial energy.
         self.verbosity = verbosity
-        self.__p_c_graph = fgconv.from_digraph(dag, resolution, verbose=(verbosity > 1), validate=validate)
+        # sets nroots, resolution, dims, wrap
+        self.__p_c_graph = fgconv.from_digraph(dag, resolution, verbose=(verbosity > 1), validate=validate, wrap=wrap)
         self.__p_c_graph.contents.energy = self.compute_energy()
 
     @classmethod
@@ -324,7 +322,7 @@ class OCN:
         cpy.verbosity = self.verbosity
         cpy.master_seed = self.master_seed
         self.__p_c_graph.contents.resolution = self.resolution
-        cpy.__wrap = self.wrap
+        cpy.__p_c_graph.contents.wrap = self.wrap
 
         cpy_p_c_graph = _bindings.libocn.fg_copy_safe(self.__p_c_graph)
         if not cpy_p_c_graph:
@@ -421,7 +419,7 @@ class OCN:
         bool
             Current wrap setting.
         """
-        return self.__wrap
+        return self.__p_c_graph.contents.wrap
     @property
     def master_seed(self) -> int:
         """
@@ -509,8 +507,8 @@ class OCN:
         path : str or Pathlike
             The output path for the resulting gtiff file.
         unwrap : bool, default True
-            If True, unwraps the DAG to a non-wrapping representation
-            before exporting. This will result in a larger raster if
+            If True, unwraps the DAG to a continuous dag with non-periodic
+            boundaries before exporting. This will result in a larger raster if
             the current OCN is wrapping.
         """
         try:
@@ -560,6 +558,13 @@ class OCN:
         """
         Export the current FlowGrid to a numpy array with shape (2, rows, cols).
         Has two channels: 0=energy, 1=drained_area.
+
+        Parameters
+        ----------
+        unwrap : bool, default True
+            If True, unwraps the DAG to a non-wrapping representation
+            before exporting. This will result in a larger raster if
+            the current OCN is wrapping.
         """
         dag = self.to_digraph()
         dims = self.dims
@@ -648,7 +653,6 @@ class OCN:
             self.__p_c_graph,
             self.gamma, 
             temperature,
-            self.wrap,
         ))
 
         array_out = self.to_numpy(unwrap=False)
@@ -875,7 +879,6 @@ class OCN:
                     iterations_this_loop, 
                     self.gamma, 
                     anneal_ptr,
-                    self.wrap,
                 ))
                 e_new = self.energy
                 completed_iterations += iterations_this_loop

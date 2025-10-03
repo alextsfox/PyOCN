@@ -67,6 +67,8 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
 
     # is a DAG
     if validate:
+        if not isinstance(wrap, bool):
+            raise TypeError(f"wrap must be a bool, got {type(wrap)}")
         if not isinstance(G, nx.DiGraph):
             raise TypeError(f"G must be a networkx.DiGraph, got {type(G)}")
         if not nx.is_directed_acyclic_graph(G):
@@ -236,8 +238,8 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
             raise e
     
     p_c_graph.contents.resolution = float(resolution)
-
     p_c_graph.contents.nroots = len([n for n in G.nodes if G.out_degree(n) == 0])
+    p_c_graph.contents.wrap = wrap
 
     if p_c_graph.contents.nroots > 1:
         warnings.warn(f"FlowGrid has {p_c_graph.contents.nroots} root nodes (nodes with no downstream). This will slow down certain operations.")

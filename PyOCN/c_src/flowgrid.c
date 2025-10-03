@@ -217,7 +217,7 @@ Status fg_destroy_safe(FlowGrid *G){
 // ##################################
 // # Network manipulation/traversal #
 // ##################################
-Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new, bool wrap){
+Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new){
     Status code;
     CartPair dims = G->dims;
     Vertex vert, vert_down_old, vert_down_new;
@@ -234,7 +234,7 @@ Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new, b
     if (code == OOB_ERROR) return OOB_ERROR;
 
     // a_down_new is trickier to get.
-    code = fg_clockhand_to_lin_safe(&a_down_new, a, down_new, dims, wrap);
+    code = fg_clockhand_to_lin_safe(&a_down_new, a, down_new, dims, G->wrap);
     if (code == OOB_ERROR) return OOB_ERROR;
     vert_down_new = fg_get_lin(G, a_down_new);  // we can use unsafe here because we already checked bounds
 

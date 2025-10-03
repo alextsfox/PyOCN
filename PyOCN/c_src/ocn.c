@@ -82,7 +82,7 @@ Status update_energy_single_root(FlowGrid *G, drainedarea_t da_inc, linidx_t a, 
     return SUCCESS;
 }
 
-Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature, bool wrap){
+Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     Status code;
 
     Vertex vert;
@@ -117,7 +117,7 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature, b
         for (uint8_t ntries = 0; ntries < 8; ntries++){  // try a new direction each time, up to 8 times. Count these as separate tries.
             down_new  = (down_new + 1) % 8;
 
-            code = fg_change_vertex_outflow(G, a, down_new, wrap);
+            code = fg_change_vertex_outflow(G, a, down_new);
             if (code != SUCCESS) continue;
 
             // retrieve the downstream vertices
@@ -128,13 +128,13 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature, b
             for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;
             code = fg_flow_downstream_safe(G, a_down_old, 1);
             if (code != SUCCESS){
-                fg_change_vertex_outflow(G, a, down_old, wrap);  // undo the swap, try again
+                fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
             }
             // for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;
             code = fg_flow_downstream_safe(G, a, 2);
             if (code != SUCCESS){
-                fg_change_vertex_outflow(G, a, down_old, wrap);  // undo the swap, try again
+                fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
             }
 
@@ -176,7 +176,7 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature, b
         // reject swap: undo everything and try again
         update_drained_area(G, da_inc, a_down_old);  // add removed drainage back to old path
         update_drained_area(G, -da_inc, a_down_new);  // remove added drainage from new path
-        fg_change_vertex_outflow(G, a, down_old, wrap);  // undo the outflow change
+        fg_change_vertex_outflow(G, a, down_old);  // undo the outflow change
     } else {  // if there's only one root, we can use a more efficient method
         update_energy_single_root(G, -da_inc, a_down_old, gamma);  // remove drainage from old path and update energy
         update_energy_single_root(G, da_inc, a_down_new, gamma);  // add drainage to new path and update energy
@@ -187,17 +187,17 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature, b
         // reject swap: undo everything and try again
         update_energy_single_root(G, da_inc, a_down_old, gamma);  // add removed drainage back to old path and update energy
         update_energy_single_root(G, -da_inc, a_down_new, gamma);  // remove added drainage from new path and update energy
-        fg_change_vertex_outflow(G, a, down_old, wrap);  // undo the outflow change
+        fg_change_vertex_outflow(G, a, down_old);  // undo the outflow change
     }
     
     
     return EROSION_FAILURE;  // if we reach here, we failed to find a valid swap in many, many tries
 }
 
-Status ocn_outer_ocn_loop(FlowGrid *G, uint32_t niterations, double gamma, double *annealing_schedule, bool wrap){
+Status ocn_outer_ocn_loop(FlowGrid *G, uint32_t niterations, double gamma, double *annealing_schedule){
     Status code;
     for (uint32_t i = 0; i < niterations; i++){
-        code = ocn_single_erosion_event(G, gamma, annealing_schedule[i], wrap);
+        code = ocn_single_erosion_event(G, gamma, annealing_schedule[i]);
         if ((code != SUCCESS) && (code != EROSION_FAILURE)) return code;
     }
     return SUCCESS;

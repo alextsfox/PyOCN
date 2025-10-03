@@ -83,6 +83,8 @@ def net_type_to_dag(net_type:Literal["I", "H", "V", "T", "E"], dims:tuple, pbar:
         The network dimensions as ``(rows, cols)``. Both must be positive even integers.
     pbar : bool, default False
         If True, display a progress bar while constructing the graph.
+    wrap : bool, default False
+        If True, create the graph with periodic boundary conditions (toroidal).
 
     Returns
     -------

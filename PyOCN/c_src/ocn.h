@@ -31,10 +31,9 @@ double ocn_compute_energy(FlowGrid *G, double gamma);
  * @param G Pointer to the FlowGrid.
  * @param gamma The exponent used in the energy calculation.
  * @param temperature The temperature parameter for the Metropolis-Hastings acceptance criterion.
- * @param wrap If true, allows wrapping around the edges of the grid (toroidal). If false, no wrapping is applied.
  * @return Status code indicating success or failure.
  */
-Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature, bool wrap);
+Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature);
 
 /**
  * @brief Perform multiple erosion events on the flowgrid.
@@ -46,6 +45,6 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature, b
  * @param wrap If true, allows wrapping around the edges of the grid (toroidal). If false, no wrapping is applied.
  * @return Status code indicating success or failure
  */
-Status ocn_outer_ocn_loop(FlowGrid *G, uint32_t niterations, double gamma, double *annealing_schedule, bool wrap);
+Status ocn_outer_ocn_loop(FlowGrid *G, uint32_t niterations, double gamma, double *annealing_schedule);
 
 #endif // OCN_H
