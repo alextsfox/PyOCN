@@ -231,6 +231,7 @@ def simulated_annealing_schedule(
     term2 = cooling_rate * n_constant / nnodes
 
     def schedule(i):
+        i = np.asarray(i)
         return np.where(i < n_constant, E0, E0 * np.exp(term1*i + term2))
 
     return schedule
@@ -347,7 +348,7 @@ def assign_subwatersheds(dag: nx.DiGraph) -> None:
     subwatersheds = list(set(nx.ancestors(dag, outlet)) | {outlet} for outlet in subwatershed_outlets)
     subwatersheds = [dag.subgraph(wshd) for wshd in subwatersheds]
     for i, wshd in enumerate(subwatersheds):
-        nx.set_node_attributes(wshd, i, 'watershed_id')
+        nx.set_node_attributes(wshd, i + 1, 'watershed_id')
     for r in roots:
         nx.set_node_attributes(dag, {r: -1}, 'watershed_id')
 
