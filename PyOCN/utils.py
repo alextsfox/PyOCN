@@ -250,7 +250,8 @@ def unwrap_digraph(dag: nx.DiGraph, dims: tuple[int, int]) -> nx.DiGraph:
     Returns
     -------
     nx.DiGraph
-        A new directed acyclic graph with unwrapped grid coordinates.
+        A new directed acyclic graph with unwrapped grid coordinates. May not be
+        consistent with a grid structure.
 
     Raises
     ------
@@ -265,8 +266,10 @@ def unwrap_digraph(dag: nx.DiGraph, dims: tuple[int, int]) -> nx.DiGraph:
     span a toroidal topology and will no longer cover a dense grid of nodes.
     """
     new_dag = dag.copy()
+    
     for _ in range(2):
         for n in nx.topological_sort(new_dag):
+
             pos = new_dag.nodes[n]['pos']
             r, c = pos
             succs = list(new_dag.successors(n))

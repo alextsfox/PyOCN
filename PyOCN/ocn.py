@@ -586,30 +586,70 @@ class OCN:
 
     def to_xarray(self, unwrap:bool=True) -> "xr.Dataset":
         """
-        Export the current FlowGrid to an xarray Dataset with data variables:
-        `energy_rasters`, `area_rasters`, and `watershed_id`.
-        The `watershed_id` band contains integer watershed IDs assigned to each node,
-        with root nodes assigned a value of -1. NA values are either np.nan (for energy and drained_area)
-        or -9999 (for watershed_id).
+        Export the current FlowGrid to an xarray Dataset
+        
         Parameters
         ----------
         unwrap : bool, default True
             If True, unwraps the DAG to a non-wrapping representation
             before exporting. This will result in a larger raster if
-            the current OCN is wrapping."""
+            the current OCN is wrapping. If unwrapping, the (0,0) coordinate
+            will be set to the position of the "main" root node, defined as
+            the root node with the smallest row*cols + col value. Otherwise,
+            (0,0) will be the top-left corner of the grid.
+        
+        Returns
+        -------
+        xr.Dataset
+         an xarray Dataset with data variables:
+            - `energy_rasters` (np.float64) representing energy at each grid cell
+            - `area_rasters` (np.float64) representing drained area at each grid cell
+            - `watershed_id` (np.int32). NA value is -9999. Roots have value -1. Represents the watershed membership ID for each grid cell.
+        and coordinates:
+            - `y` (float) representing the northing coordinate of each row in meters
+            - `x` (float) representing the easting coordinate of each column in meters
+        """
+
         try:
             import xarray as xr
         except ImportError as e:
             raise ImportError(
                 "PyOCN.OCN.to_xarray() requires xarray to be installed. Install with `pip install xarray`."
             ) from e
-        array_out = self.to_numpy(unwrap=unwrap)
+        
+        dims = self.dims
+
+        dag = self.to_digraph()
+        row_root, col_root = 0, 0
+        if self.wrap and unwrap:
+            roots = [n for n, d in dag.out_degree() if d==0]
+            main_root = min(roots, key=lambda n: dag.nodes[n]['pos'][0]*dims[1] + dag.nodes[n]['pos'][1])
+            
+            dag = unwrap_digraph(dag, dims)
+            positions = np.array(list(nx.get_node_attributes(dag, 'pos').values()))
+            max_r, max_c = positions.max(axis=0)
+            dims = (max_r + 1, max_c + 1)
+            
+            # compute the new position of the root node after unwrapping. This will be the new origin (0,0).
+            row_root, col_root = dag.nodes[main_root]['pos']
+
+        energy = np.full(dims, np.nan)
+        drained_area = np.full(dims, np.nan)
+        watershed_id = np.full(dims, np.nan)
+        for node in dag.nodes:
+            r, c = dag.nodes[node]['pos']
+            energy[r, c] = dag.nodes[node]['energy']
+            drained_area[r, c] = dag.nodes[node]['drained_area']
+            watershed_id[r, c] = dag.nodes[node]['watershed_id']
+        array_out = np.stack([energy, drained_area, watershed_id], axis=0)
+
         dims = array_out.shape[1:]
 
         watershed_id = np.where(np.isnan(array_out[2]), -9999, array_out[2])
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             watershed_id = watershed_id.astype(np.int32)
+
         return xr.Dataset(
             data_vars={
                 "energy_rasters": (["y", "x"], array_out[0].astype(np.float64)),
@@ -617,8 +657,8 @@ class OCN:
                 "watershed_id": (["y", "x"], watershed_id),
             },
             coords={
-                "y": ("y", np.arange(dims[0])*self.resolution),
-                "x": ("x", np.arange(dims[1])*self.resolution),
+                "y": ("y", np.linspace(-row_root, (-row_root + (dims[0]-1)), dims[0])*self.resolution),
+                "x": ("x", np.linspace(-col_root, (-col_root + (dims[1]-1)), dims[1])*self.resolution),
             },
             attrs={
                 "description": "OCN fit result arrays",
