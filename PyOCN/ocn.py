@@ -801,190 +801,17 @@ class OCN:
         moves (:math:`\Delta E < 0`) are always accepted.
         """
 
-        # validate inputs
-        if n_iterations is None:
-            n_iterations = int(40*self.dims[0]*self.dims[1])
-        if not (isinstance(n_iterations, int) and n_iterations > 0):
-            raise ValueError(f"n_iterations must be a positive integer, got {n_iterations}")
-        n_iterations = max(energy_reports*10, n_iterations)
-
-        if (not (isinstance(iteration_start, (int, np.integer)) and iteration_start >= 0)):
-            raise ValueError(f"iteration_start must be a non-negative integer, got {iteration_start}")
-
-        if (not isinstance(tol, Number)) or tol < 0:
-            if tol is not None:
-                raise ValueError(f"tol must be a positive number or None, got {tol}")
-
-        memory_est = array_reports*self.dims[0]*self.dims[1]*2*8 
-        if memory_est > 20e6:
-            warnings.warn(f"Requesting {array_reports} array is estimated to use {memory_est/1e6:.2f}MB of memory. Consider reducing array_reports or increasing max_iterations_per_loop if memory is a concern.")
-
-        if (
-            (cooling_rate < 0.5 or constant_phase > 0.1) 
-            and n_iterations <= 50*self.dims[0]*self.dims[1]
-        ):
-            warnings.warn("Using cooling_rate < 0.5 and constant_phase > 0.1 with may cause convergence issues. Consider increasing n_iterations.")
-        
-        # make sure energy is up to date, useful if the user modified any parameters manually
-        self.__p_c_graph.contents.energy = self.compute_energy()
-        cooling_schedule = simulated_annealing_schedule(
-            dims=self.dims,
-            E0=self.energy,
+        return fit_basic(
+            ocn=self,
+            cooling_rate=cooling_rate,
             constant_phase=constant_phase,
             n_iterations=n_iterations,
-            cooling_rate=cooling_rate,
-        )
-
-        # preallocate output arrays
-        max_iterations_per_loop = int(max_iterations_per_loop)
-        max_iterations_per_loop = max(1, max_iterations_per_loop)
-        n_iterations = int(n_iterations)
-        n_iterations = max(1, n_iterations)
-        max_iterations_per_loop = min(n_iterations, max_iterations_per_loop)
-        energy_report_interval = n_iterations // energy_reports
-        energy_report_interval = max(energy_report_interval, max_iterations_per_loop)
-        
-        array_report_interval = n_iterations // array_reports
-        array_report_interval = max(array_report_interval, max_iterations_per_loop)
-        
-        energy_out = np.empty(
-            n_iterations//energy_report_interval + 2 + n_iterations//array_report_interval + 2, # always report energy when reporting arrays
-            dtype=np.float64)
-        energy_out[0] = self.energy
-
-        array_out = np.empty([
-            n_iterations//array_report_interval + 2, # adjust array_reports to be a multiple of n_loops
-            3,
-            self.dims[0],
-            self.dims[1]
-        ])
-        array_out[0] = self.to_numpy(unwrap=False)
-
-        anneal_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
-        anneal_ptr = anneal_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-
-        with tqdm(total=n_iterations, desc="OCN Optimization", unit_scale=True, dynamic_ncols=True, disable=not (pbar or self.verbosity >= 1)) as pbar:
-            pbar.set_postfix({"Energy": self.energy, "P(Accept)": 1.0})
-            pbar.update(0)
-            
-            array_report_number = 0
-            energy_report_number = 0
-            array_report_idx = [0]
-            energy_report_idx = [0]
-            
-            self._advance_seed()
-
-            completed_iterations = 0
-            while completed_iterations < n_iterations:
-                iterations_this_loop = min(max_iterations_per_loop, n_iterations - completed_iterations)
-                anneal_buf[:iterations_this_loop] = cooling_schedule(
-                    np.arange(completed_iterations, completed_iterations + iterations_this_loop)
-                )
-
-                e_old = self.energy
-                check_status(_bindings.libocn.ocn_outer_ocn_loop(
-                    self.__p_c_graph, 
-                    iterations_this_loop, 
-                    self.gamma, 
-                    anneal_ptr,
-                ))
-                e_new = self.energy
-                completed_iterations += iterations_this_loop
-                
-                if (completed_iterations % array_report_interval) < max_iterations_per_loop:
-                    array_report_number += 1
-                    array_report_idx.append(completed_iterations)
-                    array_out[array_report_number] = self.to_numpy(unwrap=False)
-                    energy_report_number += 1
-                    energy_report_idx.append(completed_iterations)
-                    energy_out[energy_report_number] = e_new
-                elif (completed_iterations % energy_report_interval) < max_iterations_per_loop:
-                    energy_report_number += 1
-                    energy_report_idx.append(completed_iterations)
-                    energy_out[energy_report_number] = e_new
-
-                if tol is not None and e_new < e_old and abs((e_old - e_new)/e_old) < tol:
-                    pbar.set_postfix({
-                        "Energy": self.energy, 
-                        "T": anneal_buf[iterations_this_loop - 1],
-                        "Relative ΔE": (e_new - e_old)/e_old,
-                    })
-                    pbar.update(iterations_this_loop)
-                    break 
-
-                pbar.set_postfix({
-                    "Energy": self.energy, 
-                    "T": anneal_buf[iterations_this_loop - 1],
-                    "Relative ΔE": (e_new - e_old)/e_old,
-                })
-                pbar.update(iterations_this_loop)
-
-        array_report_idx = np.array(array_report_idx, dtype=np.int32)
-        energy_report_idx = np.array(energy_report_idx, dtype=np.int32)
-        
-        # return either FitResult or xarray.Dataset
-        if not xarray_out:
-            watershed_id = np.where(np.isnan(array_out[:, 2]), -9999, array_out[:, 2])
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=RuntimeWarning)
-                watershed_id = watershed_id.astype(np.int32)
-            return FitResult(
-                i_raster=array_report_idx[:array_report_number + 1],
-                energy_rasters=array_out[:array_report_number + 1, 0],
-                area_rasters=array_out[:array_report_number + 1, 1],
-                watershed_id=watershed_id[:array_report_number + 1],
-                i_energy=energy_report_idx[:energy_report_number + 1],
-                energies=energy_out[:energy_report_number + 1],
-                temperatures=cooling_schedule(energy_report_idx[:energy_report_number + 1])
-            )
-        
-        try:
-            import xarray as xr
-        except ImportError as e:
-            raise ImportError(
-                "PyOCN.OCN.fit() with xarray_out=True requires xarray to be installed. Install with `pip install xarray`."
-            ) from e
-
-        mask = np.isin(
-            energy_report_idx[:energy_report_number + 1], 
-            array_report_idx[:array_report_number + 1], 
-            assume_unique=True
-        )
-        energy_idx = np.where(mask)[0]
-
-        watershed_id = np.where(np.isnan(array_out[:, 2]), -9999, array_out[:, 2])
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            watershed_id = watershed_id.astype(np.int32)
-        return xr.Dataset(
-            data_vars={
-                "energy_rasters": (
-                    ["iteration", "y", "x"], 
-                    array_out[:array_report_number + 1, 0]
-                ),
-                "area_rasters": (
-                    ["iteration", "y", "x"], 
-                    array_out[:array_report_number + 1, 1]
-                ),
-                "watershed_id": (
-                    ["iteration", "y", "x"], 
-                    watershed_id[:array_report_number + 1]
-                ),
-                "energies": (["iteration"], energy_out[energy_idx]),
-                "temperatures": (["iteration"], cooling_schedule(array_report_idx[:array_report_number + 1]))
-            },
-            coords={
-                "iteration": ("iteration", array_report_idx),
-                "y": ("y", np.arange(self.dims[0])*self.resolution),
-                "x": ("x", np.arange(self.dims[1])*self.resolution),
-            },
-            attrs={
-                "description": "OCN fit result arrays",
-                "resolution_m": self.resolution,
-                "gamma": self.gamma,
-                "master_seed": int(self.master_seed),
-                "wrap": self.wrap,
-            }
+            pbar=pbar,
+            energy_reports=energy_reports,
+            array_reports=array_reports,
+            tol=tol,
+            max_iterations_per_loop=max_iterations_per_loop,
+            xarray_out=xarray_out,
         )
     
 def fit_basic(
@@ -1089,9 +916,16 @@ def fit_basic(
     """
     
     # make sure energy is up to date, useful if the user modified any parameters manually
-    ocn.__p_c_graph.contents.energy = ocn.compute_energy()
+    ocn._OCN__p_c_graph.contents.energy = ocn.compute_energy()
+    if constant_phase is None:
+        constant_phase = 0.0
+    if cooling_rate is None:
+        cooling_rate = 1.0
+    if n_iterations is None:
+        n_iterations = 40 * ocn.dims[0] * ocn.dims[1]
     cooling_func = simulated_annealing_schedule(
-        ocn=ocn,
+        dims=ocn.dims,
+        E0=ocn.energy,
         constant_phase=constant_phase,
         n_iterations=n_iterations,
         cooling_rate=cooling_rate,
