@@ -25,7 +25,7 @@ PyOCN.plotting
 
 import warnings
 import ctypes
-from typing import Any
+from typing import Any, Callable
 from os import PathLike
 from numbers import Number
 from pathlib import Path
@@ -702,13 +702,12 @@ class OCN:
             }
         )
 
-
-
     def fit(
         self,
-        n_iterations:int=None,
         cooling_rate:float=1.0,
         constant_phase:float=0.0,
+        n_iterations:int=None,
+        iteration_start:int=0,
         pbar:bool=False,
         energy_reports:int=1000,
         array_reports:int=1,
@@ -727,15 +726,19 @@ class OCN:
 
         Parameters
         ----------
-        n_iterations : int, optional
-            Total number of iterations. Defaults to ``40 * rows * cols``.
-            Always at least ``energy_reports * 10`` (this should only matter for
-            extremely small grids, where ``rows * cols < 256``).
         cooling_rate : float, default 1.0
             Exponential decay rate parameter for the annealing schedule (in [0, 1]).
         constant_phase : float, default 0.0
             Fraction of iterations to hold temperature constant before
             exponential decay begins (in [0, 1]).
+        n_iterations : int, optional
+            Total number of iterations. Defaults to ``40 * rows * cols``.
+            Always at least ``energy_reports * 10`` (this should only matter for
+            extremely small grids, where ``rows * cols < 256``).
+        iteration_start : int, default 0
+            The starting iteration index to pass to the cooling function. This is useful
+            for continuing an optimization from a previous run. If provided, n_iterations
+            is the number of additional iterations to perform.
         pbar : bool, default True
             Whether to display a progress bar.
         energy_reports : int, default 1000
@@ -775,6 +778,12 @@ class OCN:
 
         Notes
         -----
+
+        This is meant to be a convenience method for typical use cases and replicates
+        the simulated annealing algorithm proposed in Carraro et al. (2020). For more
+        advanced control over the optimization process use one of 
+            - :func:`fit_custom_schedule`
+
         At iteration ``i``, a proposal with energy change :math:`\Delta E` is
         accepted with probability
 
@@ -803,6 +812,9 @@ class OCN:
         if not (isinstance(n_iterations, int) and n_iterations > 0):
             raise ValueError(f"n_iterations must be a positive integer, got {n_iterations}")
         n_iterations = max(energy_reports*10, n_iterations)
+
+        if (not (isinstance(iteration_start, (int, np.integer)) and iteration_start >= 0)):
+            raise ValueError(f"iteration_start must be a non-negative integer, got {iteration_start}")
 
         if (not isinstance(tol, Number)) or tol < 0:
             if tol is not None:
@@ -866,7 +878,8 @@ class OCN:
             
             self._advance_seed()
             
-            completed_iterations = 0
+            completed_iterations = iteration_start
+            n_iterations += iteration_start
             while completed_iterations < n_iterations:
                 iterations_this_loop = min(max_iterations_per_loop, n_iterations - completed_iterations)
                 anneal_buf[:iterations_this_loop] = cooling_schedule(
@@ -978,7 +991,414 @@ class OCN:
                 "wrap": self.wrap,
             }
         )
+    
+def fit_basic(
+    ocn:OCN,
+    cooling_rate:float=1.0,
+    constant_phase:float=0.0,
+    n_iterations:int=None,
+    iteration_start:int=0,
+    pbar:bool=False,
+    energy_reports:int=1000,
+    array_reports:int=1,
+    tol:float=None,
+    max_iterations_per_loop=10_000,
+    xarray_out:bool=False,
+) -> "FitResult | xr.Dataset":
+    """
+    Optimize the OCN using simulated annealing.
 
+    This performs ``n_iterations`` erosion events, accepting or rejecting
+    proposals according to a temperature schedule. A proposal consists of
+    changing the outflow direction of a randomly selected vertex. The
+    new outflow direction is chosen uniformly from the valid neighbors.
+    A proposal is valid if it maintains a well-formed graph structure.
+
+    Parameters
+    ----------
+    ocn : OCN
+        The OCN instance to optimize.
+    cooling_rate : float, default 1.0
+        Exponential decay rate parameter for the annealing schedule (in [0, 1]).
+    constant_phase : float, default 0.0
+        Fraction of iterations to hold temperature constant before
+        exponential decay begins (in [0, 1]).
+    n_iterations : int, optional
+        Total number of iterations. Defaults to ``40 * rows * cols``.
+        Always at least ``energy_reports * 10`` (this should only matter for
+        extremely small grids, where ``rows * cols < 256``).
+    iteration_start : int, default 0
+        The starting iteration index to pass to the cooling function. This is useful
+        for continuing an optimization from a previous run. If provided, n_iterations
+        is the number of additional iterations to perform.
+    pbar : bool, default True
+        Whether to display a progress bar.
+    energy_reports : int, default 1000
+        Number of timepoints (approximately) at which energy is sampled. Must be > 0.
+    array_reports : int, default 0
+        Number of timepoints (approximately) at which the full grid is sampled to a numpy
+        array. If None, do not report arrays. The returned array will have
+        shape (array_reports, channels, rows, cols), where channel 0 (axis 1) is
+        energy and channel 1 is drained area.
+    tol : float, optional
+        If provided, optimization will stop early if the relative change
+        in energy between reports is less than `tol`. Must be positive.
+        If None (default), no early stopping is performed.
+        Recommended values are in the range 1e-4 to 1e-6.
+    max_iterations_per_loop: int, optional
+        If provided, the number of iterations steps to perform in each "chunk"
+        of optimization. Energy and output arrays can be reported no more often
+        than this. Recommended values are 1_000-1_000_000. Default is 10_000.
+    xarray_out : bool, default False
+        If True, the returned result will be an xarray.Dataset instead of a FitResult.
+        Requires xarray to be installed.
+    random_state : int | numpy.random.Generator | None, optional
+        Seed or generator for RNG seeding. If None, system entropy is used.
+        If an integer or Generator is provided, the new seed is drawn from it directly.
+
+    Returns
+    -------
+    FitResult | tuple[FitResult, "xr.Dataset"]
+
+    Raises
+    ------
+    ValueError
+
+    Warns
+    -----
+    UserWarning
+
+    Notes
+    -----
+
+    This is meant to be a convenience method for typical use cases and replicates
+    the simulated annealing algorithm proposed in Carraro et al. (2020). For more
+    advanced control over the optimization process use one of 
+        - :func:`fit_custom_schedule`
+
+    At iteration ``i``, a proposal with energy change :math:`\Delta E` is
+    accepted with probability
+
+    .. math::
+
+        P(\text{accept}) = e^{-\Delta E / T(i)}.
+
+    The temperature schedule is piecewise, held constant initially and then
+    decaying exponentially:
+
+    .. math::
+
+        T(i) = \begin{cases}
+            E_0 & i < C N \\
+            E_0 \cdot e^{\;i - C N} & i \ge C N
+        \end{cases}
+
+    where :math:`E_0` is the initial energy, :math:`N` is the total number
+    of iterations, and :math:`C` is ``constant_phase``. Decreasing-energy
+    moves (:math:`\Delta E < 0`) are always accepted.
+    """
+    
+    # make sure energy is up to date, useful if the user modified any parameters manually
+    ocn.__p_c_graph.contents.energy = ocn.compute_energy()
+    cooling_func = create_cooling_schedule(
+        ocn=ocn,
+        constant_phase=constant_phase,
+        n_iterations=n_iterations,
+        cooling_rate=cooling_rate,
+    )
+
+    return fit_custom_schedule(
+        ocn=ocn,
+        cooling_schedule=cooling_func,
+        n_iterations=n_iterations,
+        iteration_start=iteration_start,
+        pbar=pbar,
+        energy_reports=energy_reports,
+        array_reports=array_reports,
+        tol=tol,
+        max_iterations_per_loop=max_iterations_per_loop,
+        xarray_out=xarray_out,
+    )
+
+def fit_custom_schedule(
+    ocn: OCN,
+    cooling_func:Callable[[np.ndarray], np.ndarray],
+    n_iterations:int=None,
+    iteration_start:int=0,
+    pbar:bool=False,
+    energy_reports:int=1000,
+    array_reports:int=1,
+    tol:float=None,
+    max_iterations_per_loop=10_000,
+    xarray_out:bool=False,
+) -> "FitResult | xr.Dataset":
+    """
+    Optimize the OCN using a custom annealing function.
+
+    This performs ``n_iterations`` erosion events, accepting or rejecting
+    proposals according to a temperature schedule. A proposal consists of
+    changing the outflow direction of a randomly selected vertex. The
+    new outflow direction is chosen uniformly from the valid neighbors.
+    A proposal is valid if it maintains a well-formed graph structure.
+
+    Parameters
+    ----------
+    ocn : OCN
+        The OCN instance to optimize.
+    cooling_func : Callable[[np.ndarray], np.ndarray]
+        Custom cooling function that takes an array of iteration indices and returns
+        an array of temperatures. The user is responsible for ensuring that the
+        temperatures scale appropriately with the energy of the system. It is 
+        recommended that the initial temperature be on the order of the initial
+        energy of the system.
+    n_iterations : int, optional
+        Total number of iterations. Defaults to ``40 * rows * cols``.
+        Always at least ``energy_reports * 10`` (this should only matter for
+        extremely small grids, where ``rows * cols < 256``).
+    iteration_start : int, default 0
+        The starting iteration index to pass to the cooling function. This is useful
+        for continuing an optimization from a previous run. If provided, n_iterations
+        is the number of additional iterations to perform.
+    pbar : bool, default True
+        Whether to display a progress bar.
+    energy_reports : int, default 1000
+        Number of timepoints (approximately) at which energy is sampled. Must be > 0.
+    array_reports : int, default 0
+        Number of timepoints (approximately) at which the full grid is sampled to a numpy
+        array. If None, do not report arrays. The returned array will have
+        shape (array_reports, channels, rows, cols), where channel 0 (axis 1) is
+        energy and channel 1 is drained area.
+    tol : float, optional
+        If provided, optimization will stop early if the relative change
+        in energy between reports is less than `tol`. Must be positive.
+        If None (default), no early stopping is performed.
+        Recommended values are in the range 1e-4 to 1e-6.
+    max_iterations_per_loop: int, optional
+        If provided, the number of iterations steps to perform in each "chunk"
+        of optimization. Energy and output arrays can be reported no more often
+        than this. Recommended values are 1_000-1_000_000. Default is 10_000.
+    xarray_out : bool, default False
+        If True, the returned result will be an xarray.Dataset instead of a FitResult.
+        Requires xarray to be installed.
+    random_state : int | numpy.random.Generator | None, optional
+        Seed or generator for RNG seeding. If None, system entropy is used.
+        If an integer or Generator is provided, the new seed is drawn from it directly.
+
+    Returns
+    -------
+    FitResult | tuple[FitResult, "xr.Dataset"]
+
+    Raises
+    ------
+    ValueError
+
+    Warns
+    -----
+    UserWarning
+
+    Notes
+    -----
+
+    This is meant to be a convenience method for typical use cases and replicates
+    the simulated annealing algorithm proposed in Carraro et al. (2020). For more
+    advanced control over the optimization process use one of 
+        - :func:`fit_custom_schedule`
+
+    At iteration ``i``, a proposal with energy change :math:`\Delta E` is
+    accepted with probability
+
+    .. math::
+
+        P(\text{accept}) = e^{-\Delta E / T(i)}.
+
+    The temperature schedule is piecewise, held constant initially and then
+    decaying exponentially:
+
+    .. math::
+
+        T(i) = \begin{cases}
+            E_0 & i < C N \\
+            E_0 \cdot e^{\;i - C N} & i \ge C N
+        \end{cases}
+
+    where :math:`E_0` is the initial energy, :math:`N` is the total number
+    of iterations, and :math:`C` is ``constant_phase``. Decreasing-energy
+    moves (:math:`\Delta E < 0`) are always accepted.
+    """
+    # validate inputs
+    if n_iterations is None:
+        n_iterations = int(40*ocn.dims[0]*ocn.dims[1])
+    if not (isinstance(n_iterations, int) and n_iterations > 0):
+        raise ValueError(f"n_iterations must be a positive integer, got {n_iterations}")
+    n_iterations = max(energy_reports*10, n_iterations)
+
+    if (not isinstance(iteration_start, (int, np.integer))) or iteration_start < 0:
+        raise ValueError(f"iteration_start must be a non-negative integer, got {iteration_start}")
+
+    if (not isinstance(tol, Number)) or tol < 0:
+        if tol is not None:
+            raise ValueError(f"tol must be a positive number or None, got {tol}")
+
+    memory_est = array_reports*ocn.dims[0]*ocn.dims[1]*2*8 
+    if memory_est > 20e6:
+        warnings.warn(f"Requesting {array_reports} array is estimated to use {memory_est/1e6:.2f}MB of memory. Consider reducing array_reports or increasing max_iterations_per_loop if memory is a concern.")
+    
+    ocn.__p_c_graph.contents.energy = ocn.compute_energy()
+    cooling_schedule = cooling_func
+
+    # preallocate output arrays
+    max_iterations_per_loop = int(max_iterations_per_loop)
+    max_iterations_per_loop = max(1, max_iterations_per_loop)
+    n_iterations = int(n_iterations)
+    n_iterations = max(1, n_iterations)
+    max_iterations_per_loop = min(n_iterations, max_iterations_per_loop)
+    energy_report_interval = n_iterations // energy_reports
+    energy_report_interval = max(energy_report_interval, max_iterations_per_loop)
+    
+    array_report_interval = n_iterations // array_reports
+    array_report_interval = max(array_report_interval, max_iterations_per_loop)
+    
+    energy_out = np.empty(
+        n_iterations//energy_report_interval + 2 + n_iterations//array_report_interval + 2, # always report energy when reporting arrays
+        dtype=np.float64)
+    energy_out[0] = ocn.energy
+
+    array_out = np.empty([
+        n_iterations//array_report_interval + 2, # adjust array_reports to be a multiple of n_loops
+        3,
+        ocn.dims[0],
+        ocn.dims[1]
+    ])
+    array_out[0] = ocn.to_numpy(unwrap=False)
+
+    anneal_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
+    anneal_ptr = anneal_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+
+    with tqdm(total=n_iterations, desc="OCN Optimization", unit_scale=True, dynamic_ncols=True, disable=not (pbar or ocn.verbosity >= 1)) as pbar:
+        pbar.set_postfix({"Energy": ocn.energy, "P(Accept)": 1.0})
+        pbar.update(0)
+        
+        array_report_number = 0
+        energy_report_number = 0
+        array_report_idx = [0]
+        energy_report_idx = [0]
+        
+        ocn._advance_seed()
+        
+        completed_iterations = iteration_start
+        n_iterations += iteration_start
+        while completed_iterations < n_iterations:
+            iterations_this_loop = min(max_iterations_per_loop, n_iterations - completed_iterations)
+            anneal_buf[:iterations_this_loop] = cooling_schedule(
+                np.arange(completed_iterations, completed_iterations + iterations_this_loop)
+            )
+
+            e_old = ocn.energy
+            check_status(_bindings.libocn.ocn_outer_ocn_loop(
+                ocn.__p_c_graph, 
+                iterations_this_loop, 
+                ocn.gamma, 
+                anneal_ptr,
+            ))
+            e_new = ocn.energy
+            completed_iterations += iterations_this_loop
+            
+            if (completed_iterations % array_report_interval) < max_iterations_per_loop:
+                array_report_number += 1
+                array_report_idx.append(completed_iterations)
+                array_out[array_report_number] = ocn.to_numpy(unwrap=False)
+                energy_report_number += 1
+                energy_report_idx.append(completed_iterations)
+                energy_out[energy_report_number] = e_new
+            elif (completed_iterations % energy_report_interval) < max_iterations_per_loop:
+                energy_report_number += 1
+                energy_report_idx.append(completed_iterations)
+                energy_out[energy_report_number] = e_new
+
+            if tol is not None and e_new < e_old and abs((e_old - e_new)/e_old) < tol:
+                pbar.set_postfix({
+                    "Energy": ocn.energy, 
+                    "T": anneal_buf[iterations_this_loop - 1],
+                    "Relative ΔE": (e_new - e_old)/e_old,
+                })
+                pbar.update(iterations_this_loop)
+                break 
+
+            pbar.set_postfix({
+                "Energy": ocn.energy, 
+                "T": anneal_buf[iterations_this_loop - 1],
+                "Relative ΔE": (e_new - e_old)/e_old,
+            })
+            pbar.update(iterations_this_loop)
+
+    array_report_idx = np.array(array_report_idx, dtype=np.int32)
+    energy_report_idx = np.array(energy_report_idx, dtype=np.int32)
+    
+    # return either FitResult or xarray.Dataset
+    if not xarray_out:
+        watershed_id = np.where(np.isnan(array_out[:, 2]), -9999, array_out[:, 2])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            watershed_id = watershed_id.astype(np.int32)
+        return FitResult(
+            i_raster=array_report_idx[:array_report_number + 1],
+            energy_rasters=array_out[:array_report_number + 1, 0],
+            area_rasters=array_out[:array_report_number + 1, 1],
+            watershed_id=watershed_id[:array_report_number + 1],
+            i_energy=energy_report_idx[:energy_report_number + 1],
+            energies=energy_out[:energy_report_number + 1],
+            temperatures=cooling_schedule(energy_report_idx[:energy_report_number + 1])
+        )
+    
+    try:
+        import xarray as xr
+    except ImportError as e:
+        raise ImportError(
+            "PyOCN.OCN.fit() with xarray_out=True requires xarray to be installed. Install with `pip install xarray`."
+        ) from e
+
+    mask = np.isin(
+        energy_report_idx[:energy_report_number + 1], 
+        array_report_idx[:array_report_number + 1], 
+        assume_unique=True
+    )
+    energy_idx = np.where(mask)[0]
+
+    watershed_id = np.where(np.isnan(array_out[:, 2]), -9999, array_out[:, 2])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        watershed_id = watershed_id.astype(np.int32)
+    return xr.Dataset(
+        data_vars={
+            "energy_rasters": (
+                ["iteration", "y", "x"], 
+                array_out[:array_report_number + 1, 0]
+            ),
+            "area_rasters": (
+                ["iteration", "y", "x"], 
+                array_out[:array_report_number + 1, 1]
+            ),
+            "watershed_id": (
+                ["iteration", "y", "x"], 
+                watershed_id[:array_report_number + 1]
+            ),
+            "energies": (["iteration"], energy_out[energy_idx]),
+            "temperatures": (["iteration"], cooling_schedule(array_report_idx[:array_report_number + 1]))
+        },
+        coords={
+            "iteration": ("iteration", array_report_idx),
+            "y": ("y", np.arange(ocn.dims[0])*ocn.resolution),
+            "x": ("x", np.arange(ocn.dims[1])*ocn.resolution),
+        },
+        attrs={
+            "description": "OCN fit result arrays",
+            "resolution_m": ocn.resolution,
+            "gamma": ocn.gamma,
+            "master_seed": int(ocn.master_seed),
+            "wrap": ocn.wrap,
+        }
+    )
+    
 
 __all__ = [
     "OCN",
