@@ -36,7 +36,7 @@ import numpy as np
 from tqdm import tqdm
 
 from ._statushandler import check_status
-from .utils import create_cooling_schedule, net_type_to_dag, unwrap_dag, assign_subwatershed
+from .utils import simulated_annealing_schedule, net_type_to_dag, unwrap_digraph, assign_subwatersheds
 from . import _libocn_bindings as _bindings
 from . import _flowgrid_convert as fgconv
 
@@ -468,7 +468,7 @@ class OCN:
             - ``watershed_id``: integer watershed ID (roots have watershed id = -1)
         """
         dag = fgconv.to_digraph(self.__p_c_graph.contents)
-        assign_subwatershed(dag)
+        assign_subwatersheds(dag)
 
         node_energies = dict()
 
@@ -569,7 +569,7 @@ class OCN:
         dag = self.to_digraph()
         dims = self.dims
         if self.wrap and unwrap:
-            dag = unwrap_dag(dag, dims)
+            dag = unwrap_digraph(dag, dims)
             positions = np.array(list(nx.get_node_attributes(dag, 'pos').values()))
             max_r, max_c = positions.max(axis=0)
             dims = (max_r + 1, max_c + 1)
@@ -707,7 +707,6 @@ class OCN:
         cooling_rate:float=1.0,
         constant_phase:float=0.0,
         n_iterations:int=None,
-        iteration_start:int=0,
         pbar:bool=False,
         energy_reports:int=1000,
         array_reports:int=1,
@@ -735,10 +734,6 @@ class OCN:
             Total number of iterations. Defaults to ``40 * rows * cols``.
             Always at least ``energy_reports * 10`` (this should only matter for
             extremely small grids, where ``rows * cols < 256``).
-        iteration_start : int, default 0
-            The starting iteration index to pass to the cooling function. This is useful
-            for continuing an optimization from a previous run. If provided, n_iterations
-            is the number of additional iterations to perform.
         pbar : bool, default True
             Whether to display a progress bar.
         energy_reports : int, default 1000
@@ -832,8 +827,9 @@ class OCN:
         
         # make sure energy is up to date, useful if the user modified any parameters manually
         self.__p_c_graph.contents.energy = self.compute_energy()
-        cooling_schedule = create_cooling_schedule(
-            ocn=self,
+        cooling_schedule = simulated_annealing_schedule(
+            dims=self.dims,
+            E0=self.energy,
             constant_phase=constant_phase,
             n_iterations=n_iterations,
             cooling_rate=cooling_rate,
@@ -877,9 +873,8 @@ class OCN:
             energy_report_idx = [0]
             
             self._advance_seed()
-            
-            completed_iterations = iteration_start
-            n_iterations += iteration_start
+
+            completed_iterations = 0
             while completed_iterations < n_iterations:
                 iterations_this_loop = min(max_iterations_per_loop, n_iterations - completed_iterations)
                 anneal_buf[:iterations_this_loop] = cooling_schedule(
@@ -997,7 +992,6 @@ def fit_basic(
     cooling_rate:float=1.0,
     constant_phase:float=0.0,
     n_iterations:int=None,
-    iteration_start:int=0,
     pbar:bool=False,
     energy_reports:int=1000,
     array_reports:int=1,
@@ -1027,10 +1021,6 @@ def fit_basic(
         Total number of iterations. Defaults to ``40 * rows * cols``.
         Always at least ``energy_reports * 10`` (this should only matter for
         extremely small grids, where ``rows * cols < 256``).
-    iteration_start : int, default 0
-        The starting iteration index to pass to the cooling function. This is useful
-        for continuing an optimization from a previous run. If provided, n_iterations
-        is the number of additional iterations to perform.
     pbar : bool, default True
         Whether to display a progress bar.
     energy_reports : int, default 1000
@@ -1071,20 +1061,11 @@ def fit_basic(
     Notes
     -----
 
-    This is meant to be a convenience method for typical use cases and replicates
-    the simulated annealing algorithm proposed in Carraro et al. (2020). For more
-    advanced control over the optimization process use one of 
+    This method replicates the simulated annealing algorithm proposed in Carraro et al (2020). 
+    For more advanced control over the optimization process use one of 
         - :func:`fit_custom_schedule`
 
-    At iteration ``i``, a proposal with energy change :math:`\Delta E` is
-    accepted with probability
-
-    .. math::
-
-        P(\text{accept}) = e^{-\Delta E / T(i)}.
-
-    The temperature schedule is piecewise, held constant initially and then
-    decaying exponentially:
+    The temperature schedule for simulated annealing is a piecewise function of iteration:
 
     .. math::
 
@@ -1093,14 +1074,23 @@ def fit_basic(
             E_0 \cdot e^{\;i - C N} & i \ge C N
         \end{cases}
 
-    where :math:`E_0` is the initial energy, :math:`N` is the total number
+    where :math:`E_0` is the initial energy of the system, :math:`N` is the total number
     of iterations, and :math:`C` is ``constant_phase``. Decreasing-energy
     moves (:math:`\Delta E < 0`) are always accepted.
+    
+    Acceptance Criterion
+    --------------------
+    At iteration ``i``, a proposal with energy change :math:`\Delta E` is
+    accepted with probability
+
+    .. math::
+
+        P(\text{accept}) = e^{-\Delta E / T(i)}.
     """
     
     # make sure energy is up to date, useful if the user modified any parameters manually
     ocn.__p_c_graph.contents.energy = ocn.compute_energy()
-    cooling_func = create_cooling_schedule(
+    cooling_func = simulated_annealing_schedule(
         ocn=ocn,
         constant_phase=constant_phase,
         n_iterations=n_iterations,
@@ -1109,9 +1099,8 @@ def fit_basic(
 
     return fit_custom_schedule(
         ocn=ocn,
-        cooling_schedule=cooling_func,
+        cooling_func=cooling_func,
         n_iterations=n_iterations,
-        iteration_start=iteration_start,
         pbar=pbar,
         energy_reports=energy_reports,
         array_reports=array_reports,
@@ -1146,10 +1135,10 @@ def fit_custom_schedule(
     ocn : OCN
         The OCN instance to optimize.
     cooling_func : Callable[[np.ndarray], np.ndarray]
-        Custom cooling function that takes an array of iteration indices and returns
-        an array of temperatures. The user is responsible for ensuring that the
+        Custom cooling function that takes a 1d array of iteration indices and returns
+        a 1d array of temperatures. The user is responsible for ensuring that the
         temperatures scale appropriately with the energy of the system. It is 
-        recommended that the initial temperature be on the order of the initial
+        recommended that the initial temperature (at iteration 0) be on the order of the initial
         energy of the system.
     n_iterations : int, optional
         Total number of iterations. Defaults to ``40 * rows * cols``.
@@ -1158,7 +1147,8 @@ def fit_custom_schedule(
     iteration_start : int, default 0
         The starting iteration index to pass to the cooling function. This is useful
         for continuing an optimization from a previous run. If provided, n_iterations
-        is the number of additional iterations to perform.
+        is the number of additional iterations to perform. If >0, the cooling function
+        will be passed values starting at iteration_start.
     pbar : bool, default True
         Whether to display a progress bar.
     energy_reports : int, default 1000
@@ -1196,13 +1186,8 @@ def fit_custom_schedule(
     -----
     UserWarning
 
-    Notes
-    -----
-
-    This is meant to be a convenience method for typical use cases and replicates
-    the simulated annealing algorithm proposed in Carraro et al. (2020). For more
-    advanced control over the optimization process use one of 
-        - :func:`fit_custom_schedule`
+    Acceptance Criterion
+    --------------------
 
     At iteration ``i``, a proposal with energy change :math:`\Delta E` is
     accepted with probability
@@ -1211,8 +1196,12 @@ def fit_custom_schedule(
 
         P(\text{accept}) = e^{-\Delta E / T(i)}.
 
-    The temperature schedule is piecewise, held constant initially and then
-    decaying exponentially:
+    The temperature schedule :math:`T(i)` is a function of iteration provided by the user. 
+    
+    Simulated Annealing Schedule
+    ----------------------------
+    A typical choice is a piecewise function of iteration, held constant at :math:`E_0` initially and then
+    decaying exponentially, and this is the method used in :func:`fit_basic` and :func:`OCN.fit`:
 
     .. math::
 
@@ -1224,6 +1213,9 @@ def fit_custom_schedule(
     where :math:`E_0` is the initial energy, :math:`N` is the total number
     of iterations, and :math:`C` is ``constant_phase``. Decreasing-energy
     moves (:math:`\Delta E < 0`) are always accepted.
+
+    If desired, cooling functions of this exact form can be generated and passed to this function 
+    with :func:`simulated_annealing_schedule`.
     """
     # validate inputs
     if n_iterations is None:
@@ -1243,7 +1235,7 @@ def fit_custom_schedule(
     if memory_est > 20e6:
         warnings.warn(f"Requesting {array_reports} array is estimated to use {memory_est/1e6:.2f}MB of memory. Consider reducing array_reports or increasing max_iterations_per_loop if memory is a concern.")
     
-    ocn.__p_c_graph.contents.energy = ocn.compute_energy()
+    ocn._OCN__p_c_graph.contents.energy = ocn.compute_energy()
     cooling_schedule = cooling_func
 
     # preallocate output arrays
@@ -1295,7 +1287,7 @@ def fit_custom_schedule(
 
             e_old = ocn.energy
             check_status(_bindings.libocn.ocn_outer_ocn_loop(
-                ocn.__p_c_graph, 
+                ocn._OCN__p_c_graph, 
                 iterations_this_loop, 
                 ocn.gamma, 
                 anneal_ptr,

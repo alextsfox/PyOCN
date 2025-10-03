@@ -22,7 +22,7 @@ import warnings
 
 if TYPE_CHECKING:
     from .ocn import OCN
-from .utils import unwrap_dag
+from .utils import unwrap_digraph
 
 def _pos_to_xy(dag: nx.DiGraph) -> dict[Any, tuple[float, float]]:
     """
@@ -81,7 +81,7 @@ def plot_ocn_as_dag(ocn: OCN, attribute: str | None = None, ax=None, norm=None, 
     
     dag = ocn.to_digraph()
     if ocn.wrap:
-        dag = unwrap_dag(dag, ocn.dims)
+        dag = unwrap_digraph(dag, ocn.dims)
     pos = _pos_to_xy(dag)
 
     if ax is None:

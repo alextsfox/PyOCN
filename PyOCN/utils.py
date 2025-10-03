@@ -5,6 +5,7 @@ Utility functions for working with OCNs.
 from __future__ import annotations
 from itertools import product
 from typing import Any, Literal, Callable, TYPE_CHECKING
+from numbers import Number
 import networkx as nx
 import numpy as np
 from tqdm import tqdm
@@ -167,8 +168,9 @@ def net_type_to_dag(net_type:Literal["I", "H", "V", "T", "E"], dims:tuple, pbar:
         
     return G
 
-def create_cooling_schedule(
-    ocn: OCN,
+def simulated_annealing_schedule(
+    dims: tuple[int, int],
+    E0: float,
     constant_phase: float,
     n_iterations: int,
     cooling_rate: float,
@@ -181,8 +183,10 @@ def create_cooling_schedule(
 
     Parameters
     ----------
-    ocn : OCN
-        The OCN instance (used to infer the number of nodes, ``rows*cols``).
+    dims : tuple[int, int]
+        The dimensions of the grid as (rows, cols).
+    E0 : float
+        Initial energy value.
     constant_phase : float
         Fraction of iterations (``0 <= fraction <= 1``) during which the
         temperature remains constant at ``Energy[0]``.
@@ -209,20 +213,29 @@ def create_cooling_schedule(
     where ``E0`` is the initial energy, ``n0`` is the number of iterations in
     the constant phase, and ``N = rows * cols``.
     """
+    if (not isinstance(constant_phase, Number) or constant_phase < 0 or constant_phase > 1):
+        raise ValueError(f"constant_phase must be a number between 0 and 1. Got {constant_phase}")
+    if (not isinstance(n_iterations, int) or n_iterations <= 0):
+        raise ValueError(f"n_iterations must be a positive integer. Got {n_iterations}")
+    if not isinstance(cooling_rate, Number):
+        raise ValueError(f"cooling_rate must be a number. Got {cooling_rate}")
+    if not isinstance(E0, Number) or E0 <= 0:
+        raise ValueError(f"E0 must be a positive number. Got {E0}")
+    if not (isinstance(dims, tuple) and len(dims) == 2 and all(isinstance(d, int) and d > 0 for d in dims)):
+        raise ValueError(f"dims must be a tuple of two positive integers. Got {dims}")
+    
     n_constant = int(constant_phase * n_iterations)
-    nnodes = ocn.dims[0] * ocn.dims[1]
+    nnodes = dims[0] * dims[1]
 
     term1 = -cooling_rate / nnodes
     term2 = cooling_rate * n_constant / nnodes
 
-    e0 = ocn.energy
-
     def schedule(i):
-        return np.where(i < n_constant, e0, e0 * np.exp(term1*i + term2))
+        return np.where(i < n_constant, E0, E0 * np.exp(term1*i + term2))
 
     return schedule
 
-def unwrap_dag(dag: nx.DiGraph, dims: tuple[int, int]) -> nx.DiGraph:
+def unwrap_digraph(dag: nx.DiGraph, dims: tuple[int, int]) -> nx.DiGraph:
     """Come up with a mapping to "unwrap" gridcell coordinates from a with periodic boundary conditions
     to a nonperiodic grid.
 
@@ -299,7 +312,7 @@ def unwrap_dag(dag: nx.DiGraph, dims: tuple[int, int]) -> nx.DiGraph:
         new_dag.nodes[n]['pos'] = (r - row_off, c - col_off)
     return new_dag
 
-def assign_subwatershed(dag: nx.DiGraph) -> None:
+def assign_subwatersheds(dag: nx.DiGraph) -> None:
     """Assign a 'watershed_id' attribute to each node in the DAG, identifying subwatersheds.
 
     Parameters
@@ -354,7 +367,7 @@ def get_subwatersheds(dag : nx.DiGraph, node : Any) -> set[nx.DiGraph]:
 
     Note
     ----
-    The returned subtwatersheds are subgraph views of the input graph and share node
+    The returned subwatersheds are subgraph views of the input graph and share node
     and edge data with the original graph.
     """
     subwatershed_outlets = [n for n in dag.predecessors(node)]
