@@ -799,6 +799,9 @@ class OCN:
                 the root node with the smallest row*cols + col value
                 - The rasters will be unwrapped to a non-periodic representation, which may result in larger rasters.
                 - The size of the final rasters are the maximum extent of the unwrapped grid, taken across all iterations.
+
+            Generating reports requires additional memory and computation time.
+            
         tol : float, optional
             If provided, optimization will stop early if the relative change
             in energy between reports is less than `tol`. Must be positive.
