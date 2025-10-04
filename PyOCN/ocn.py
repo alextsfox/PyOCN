@@ -987,9 +987,13 @@ class OCN:
         anneal_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
         anneal_ptr = anneal_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
 
-        with tqdm(total=n_iterations, desc="OCN Optimization", unit_scale=True, dynamic_ncols=True, disable=not (pbar or self.verbosity >= 1)) as pbar:
-            pbar.set_postfix({"Energy": self.energy, "P(Accept)": 1.0})
-            pbar.update(0)
+        with tqdm(
+            total=n_iterations, 
+            desc="OCN", 
+            unit_scale=True, 
+            dynamic_ncols=True, 
+            disable=not (pbar or self.verbosity >= 1)
+        ) as pbar:
             
             self._advance_seed()
 
@@ -1035,31 +1039,41 @@ class OCN:
                 energy_out[len(energy_report_idx)] = e_new
                 energy_report_idx.append(completed_iterations)
 
-                if tol is not None and e_new < e_old and abs((e_old - e_new)/e_old) < tol:
+                # progress bar update
+                if pbar or self.verbosity >= 1:
+                    RED = '\033[31m'
+                    YELLOW = '\033[33m'
+                    CYAN = '\033[36m'
+                    END = '\033[0m'
+                    T_over_E = anneal_buf[iterations_this_loop - 1]/e_old*100
+                    ToE_str = f"{int(np.floor(T_over_E)):02d}.{int((T_over_E - np.floor(T_over_E))*100):02d}%"
+                    de_over_E = (e_new - e_old)/e_old*100
+                    dEoE_str = f"{int(np.floor(de_over_E)):02d}.{int((de_over_E - np.floor(de_over_E))*100):02d}%"
+                    if T_over_E > 0.75: ToE_str = RED + ToE_str + END
+                    elif T_over_E > 0.25: ToE_str = YELLOW + ToE_str + END
+                    else: ToE_str = CYAN + ToE_str + END
+                    if de_over_E > 5: dEoE_str = RED + dEoE_str + END
+                    elif de_over_E > -5: dEoE_str = YELLOW + dEoE_str + END
+                    else: dEoE_str = CYAN + dEoE_str + END
+
                     pbar.set_postfix({
-                        "Energy": self.energy, 
-                        "T": anneal_buf[iterations_this_loop - 1],
-                        "Relative ΔE": (e_new - e_old)/e_old,
+                        "E": f"{self.energy:.1e}", 
+                        "T/E": ToE_str,
+                        "ΔE/E": dEoE_str,
                     })
                     pbar.update(iterations_this_loop)
-                    break 
-
-                pbar.set_postfix({
-                    "Energy": self.energy, 
-                    "T": anneal_buf[iterations_this_loop - 1],
-                    "Relative ΔE": (e_new - e_old)/e_old,
-                })
-                pbar.update(iterations_this_loop)
-
-        # save energy and temp history
-        start = 1 if self.__history.shape[0] > 0 else 0  # avoid duplicating the initial state if continuing from previous fit
-        idx_offset = self.__history[-1, 0] if self.__history.shape[0] > 0 else 0
-        history = np.stack([
-            np.array(idx_offset - iteration_start + np.asarray(energy_report_idx)[start:]),
-            np.array(energy_out[start:len(energy_report_idx)]),
-            np.array(cooling_schedule(energy_report_idx[start:]))
-        ], axis=1)
-        self.__history = np.concatenate([self.__history, history], axis=0)
+                    
+                if tol is not None and e_new < e_old and abs((e_old - e_new)/e_old) < tol:
+                    break
+        # # save energy and temp history
+        # start = 1 if self.__history.shape[0] > 0 else 0  # avoid duplicating the initial state if continuing from previous fit
+        # idx_offset = self.__history[-1, 0] if self.__history.shape[0] > 0 else 0
+        # history = np.stack([
+        #     np.array(idx_offset - iteration_start + np.asarray(energy_report_idx)[start:]),
+        #     np.array(energy_out[start:len(energy_report_idx)]),
+        #     np.array(cooling_schedule(energy_report_idx[start:]))
+        # ], axis=1)
+        # self.__history = np.concatenate([self.__history, history], axis=0)
         
         if not xarray_out: 
             return
