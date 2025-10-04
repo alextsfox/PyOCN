@@ -1048,9 +1048,9 @@ class OCN:
                     T_over_E = anneal_buf[iterations_this_loop - 1]/e_old*100
                     ToE_str = f"{int(np.floor(T_over_E)):02d}.{int((T_over_E - np.floor(T_over_E))*100):02d}%"
                     de_over_E = (e_new - e_old)/e_old*100
-                    dEoE_str = f"{int(np.floor(de_over_E)):02d}.{int((de_over_E - np.floor(de_over_E))*100):02d}%"
-                    if T_over_E > 0.75: ToE_str = RED + ToE_str + END
-                    elif T_over_E > 0.25: ToE_str = YELLOW + ToE_str + END
+                    dEoE_str = f"{['+','-'][de_over_E < 0]}{int(np.abs(np.floor(de_over_E))):02d}.{int(np.abs(np.abs(de_over_E) - np.abs(np.floor(de_over_E)))*100):02d}%"
+                    if T_over_E > 50: ToE_str = RED + ToE_str + END
+                    elif T_over_E > 5: ToE_str = YELLOW + ToE_str + END
                     else: ToE_str = CYAN + ToE_str + END
                     if de_over_E > 5: dEoE_str = RED + dEoE_str + END
                     elif de_over_E > -5: dEoE_str = YELLOW + dEoE_str + END
@@ -1062,7 +1062,7 @@ class OCN:
                         "ΔE/E": dEoE_str,
                     })
                     pbar.update(iterations_this_loop)
-                    
+
                 if tol is not None and e_new < e_old and abs((e_old - e_new)/e_old) < tol:
                     break
         # # save energy and temp history
