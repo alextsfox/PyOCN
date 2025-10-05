@@ -108,7 +108,6 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
         if (a == 0 && a_step_dir == -1) a = nverts - 1;
         else if (a == nverts - 1 && a_step_dir == 1) a = 0;
         else a = (linidx_t)((int32_t)a + a_step_dir);
-        // a = (linidx_t)((int32_t)a + a_step_dir) % ((int32_t)dims.row * (int32_t)dims.col);
 
         code = fg_get_lin(&vert, G, a);
         if (code == OOB_ERROR) return OOB_ERROR;
@@ -130,13 +129,12 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
 
             // confirm that the new graph is well-formed (no cycles, still reaches root)
             for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;
-            code = fg_flow_downstream(G, a_down_old, 1);
+            code = fg_check_for_cycles(G, a_down_old, 1);
             if (code != SUCCESS){
                 fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
             }
-            // for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;
-            code = fg_flow_downstream(G, a, 2);
+            code = fg_check_for_cycles(G, a, 2);
             if (code != SUCCESS){
                 fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
@@ -150,14 +148,9 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     
     mh_eval:
     /*
-    TODO:CRITICAL PERFORMANCE ISSUE:
+    TODO: PERFORMANCE ISSUE:
     This function is supposed to update the energy of the flowgrid G after a 
-    change in drained area along the path starting at vertex a. The previous method
-    did not work: it would update the drained area along a path, then try to recompute
-    the energy by adding pow((da + da_inc), gamma) - pow(da, gamma) for each vertex
-    along the path. This is incorrect because the energy of each vertex depends on the
-    drained area of all upstream vertices, not just its own drained area. This is fine 
-    when gamma = 1, gamma = 0, or the number of roots = 1, but otherwise it is wrong.
+    change in drained area along the path starting at vertex a.
 
     Simple but inefficient fix (current): recompute the *entire* energy of the flowgrid from scratch
     each time this function is called.
