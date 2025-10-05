@@ -56,7 +56,9 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
     resolution: float
         The sidelength of each gridcell in meters. Default 1.
     validate: bool
-        Whether to check the input graph for validity before conversion. Default True. For internal use only.
+        Whether to check the input graph for validity before conversion. 
+        Default True. If false, the user is responsible for ensuring the graph is valid.
+        For internal use only. 
     Returns:
         p_c_graph: pointer to the created C FlowGrid structure.
     """
@@ -133,6 +135,7 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
             print("\tEdges connect only to adjacent nodes.")
 
 
+    # helper function to get the the bit number to set in the edges attribute
     def direction_bit(pos1, pos2):
         r1, c1 = pos1
         r2, c2 = pos2
@@ -161,6 +164,7 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
             raise ValueError(f"Node {n} at position {G.nodes[n]['pos']} has {len(succs)} successors, but must have at most 1.")
 
         G.nodes[n]["drained_area"] = resolution**2 + sum(G.nodes[p]["drained_area"] for p in preds)
+        
         G.nodes[n]["edges"] = 0
         for nbr in neighbors:
             G.nodes[n]["edges"] |= (1 << direction_bit(G.nodes[n]["pos"], G.nodes[nbr]["pos"]))

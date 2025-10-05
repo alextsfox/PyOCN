@@ -198,6 +198,8 @@ class OCN:
         dag = net_type_to_dag(net_type, dims)
         if verbosity == 1:
             print(" Done.")
+        
+        # no need to validate inputs when using a predefined net_type. Saves time.
         return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=False, wrap=wrap)
 
     @classmethod
@@ -424,11 +426,13 @@ class OCN:
             raise ValueError("RNG must be initialized with an integer/Generator/None.")
         self.__master_seed = np.random.default_rng(random_state).integers(0, int(2**32 - 1))
         _bindings.libocn.rng_seed(self.master_seed)
+
     def _advance_seed(self):
         random_state = self.master_seed
         new_random_state = np.random.default_rng(random_state).integers(0, int(2**32 - 1))
         self.__master_seed = new_random_state
         _bindings.libocn.rng_seed(self.__master_seed)
+
     @property
     def history(self) -> np.ndarray:
         """
@@ -646,8 +650,9 @@ class OCN:
 
         dims = array_out.shape[1:]
 
-
+        # replace nan with -9999 for watershed_id since integers can't be nan
         np.nan_to_num(array_out[2], copy=False, nan=-9999)
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             watershed_id = array_out[2].astype(np.int32)
@@ -859,6 +864,8 @@ class OCN:
             cooling_rate = 1.0
         if n_iterations is None:
             n_iterations = 40 * self.dims[0] * self.dims[1]
+
+        # create a cooling schedule from arguments
         cooling_func = simulated_annealing_schedule(
             dims=self.dims,
             E0=self.energy,
@@ -959,9 +966,8 @@ class OCN:
         n_iterations = int(n_iterations)
         n_iterations = max(1, n_iterations)
         max_iterations_per_loop = min(n_iterations, max_iterations_per_loop)
-        
 
-        # set up output arrays
+        # preallocate output arrays
         energy_out = np.empty(
             n_iterations//max_iterations_per_loop + 2, # always report energy when reporting arrays
             dtype=np.float64)
@@ -1027,7 +1033,7 @@ class OCN:
                 )
             ):
                 array_report_idx.append(completed_iterations)
-                ds_out_dict[completed_iterations] = self.to_xarray(unwrap=unwrap)
+                ds_out_dict[completed_iterations] = self.to_xarray(unwrap=unwrap)  # TODO: pre-allocate this dict?
 
 
             # progress bar update
@@ -1059,6 +1065,7 @@ class OCN:
                 })
                 pbar.update(iterations_this_loop)
 
+            # check for convergence if requested
             if tol is not None and e_new < e_old and abs((e_old - e_new)/e_old) < tol:
                 break
         
@@ -1079,6 +1086,9 @@ class OCN:
     
         # convert the ds_out_dict to a single xarray.Dataset with an iteration dimension if requested
         # TODO: move this to a separate function???
+        
+        # if unwrapping is requested, the output rasters may have different shapes, so we need to find the max extent
+        # across all reported arrays and create a new raster with that shape.
         
         # find the maximum extent of the unwrapped grid across all reported arrays
         coord_ranges = list((ds.x.data.min(), ds.x.data.max(), ds.y.data.min(), ds.y.data.max()) for ds in ds_out_dict.values())
@@ -1123,7 +1133,7 @@ class OCN:
             }
         )
 
-        # fill in the dataset with the unwrapped arrays
+        # fill in the dataset with the unwrapped arrays, matching coordinates
         for i, ds_i in ds_out_dict.items():
             ds.energy_rasters.loc[dict(iteration=i, y=ds_i.y, x=ds_i.x)] = ds_i.energy_rasters
             ds.area_rasters.loc[dict(iteration=i, y=ds_i.y, x=ds_i.x)] = ds_i.area_rasters
