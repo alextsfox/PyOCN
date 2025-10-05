@@ -89,6 +89,7 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
 
     Vertex vert;
     clockhand_t down_old, down_new;
+    int8_t down_step_dir;
     linidx_t a, a_down_old, a_down_new;
     int32_t a_step_dir;
     drainedarea_t da_inc;
@@ -101,13 +102,16 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     a = rand() % nverts;  // pick a random vertex
     a_step_dir = (rand() % 2)*2 - 1;  // pick a random direction to step in if we need a new vertex
     down_new = rand() % 8;  // pick a random new downstream direction
-
+    down_step_dir = (rand() % 2)*2 - 1;  // pick a random direction to step in if we need a new direction
 
     for (linidx_t nverts_tried = 0; nverts_tried < nverts; nverts_tried++){  // try a new vertex each time, up to the number of vertices in the graph
         // clunky way to wrap around, since apparently % on negative numbers is confusing as hell in C
         if (a == 0 && a_step_dir == -1) a = nverts - 1;
         else if (a == nverts - 1 && a_step_dir == 1) a = 0;
         else a = (linidx_t)((int32_t)a + a_step_dir);
+        if (down_new == 0 && down_step_dir == -1) down_new = 7;
+        else if (down_new == 7 && down_step_dir == 1) down_new = 0;
+        else down_new = (clockhand_t)((int8_t)down_new + down_step_dir);
 
         code = fg_get_lin(&vert, G, a);
         if (code == OOB_ERROR) return OOB_ERROR;
@@ -116,25 +120,26 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
         a_down_old = vert.adown;
         da_inc = vert.drained_area;
         
-        for (uint8_t ntries = 0; ntries < 8; ntries++){  // try a new direction each time, up to 8 times. Count these as separate tries.
+        for (uint8_t ndirections_tried = 0; ndirections_tried < 8; ndirections_tried++){  // try a new direction each time.
             down_new  = (down_new + 1) % 8;
 
+            // propose to rerout the outflow of vertex a to direction down_new
             code = fg_change_vertex_outflow(G, a, down_new);
             if (code != SUCCESS) continue;
 
-            // retrieve the downstream vertices
+            // retrieve the new downstream vertex index
             code = fg_get_lin(&vert, G, a);
             if (code == OOB_ERROR) return OOB_ERROR;
             a_down_new = vert.adown;
 
             // confirm that the new graph is well-formed (no cycles, still reaches root)
-            for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;
+            for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;  // reset visitation flags
             code = fg_check_for_cycles(G, a_down_old, 1);
             if (code != SUCCESS){
                 fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
             }
-            code = fg_check_for_cycles(G, a, 2);
+            code = fg_check_for_cycles(G, a, 2);  // no need to reset visitation flags, instead use a different check number
             if (code != SUCCESS){
                 fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
