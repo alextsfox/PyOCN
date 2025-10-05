@@ -24,10 +24,8 @@ PyOCN.plotting
 """
 
 """
-TODO de-obfuscate the return values of the fit methods. 
-I think include the external fit functions as methods of OCN
-The fit methods always save the energy to an attribute,
-and optionally return arrays if reports are requested.
+TODO: relax the even dims requirement
+TODO: have to_rasterio use the option to set the root node to 0,0 by using to_xarray as the backend instead of numpy?
 """
 
 import warnings
@@ -46,46 +44,6 @@ from ._statushandler import check_status
 from .utils import simulated_annealing_schedule, net_type_to_dag, unwrap_digraph, assign_subwatersheds
 from . import _libocn_bindings as _bindings
 from . import _flowgrid_convert as fgconv
-
-@dataclass(slots=True, frozen=True)
-class FitResult:
-    """
-    Result of OCN optimization.
-    
-    Attributes
-    -----------
-    i_raster : np.ndarray
-        List of iteration indices at which array snapshots were recorded.
-        Shape (n_reports,).
-    energy_rasters : np.ndarray
-        Array snapshots of energy recorded during fitting, shaped
-        (n_reports, band, rows, cols).
-    area_rasters: np.ndarray
-        Array snapshots of drained area recorded during fitting, shaped
-        (n_reports, rows, cols).
-    watershed_id : np.ndarray
-        Array snapshots of watershed IDs assigned during fitting, shaped
-        (n_reports, rows, cols). Roots are assigned -1. Non-draining cells are -9999.
-    i_energy : np.ndarray
-        List of iteration indices at which total energy snapshots were recorded.
-        Shape (n_reports,).
-    energies : np.ndarray
-        Total energy snapshots recorded during fitting.
-        Shape (n_reports,).
-    temperatures : np.ndarray
-        Temperature values at each recorded energy snapshot.
-        Shape (n_reports,).
-    """
-    i_raster: np.ndarray
-    energy_rasters: np.ndarray
-    area_rasters: np.ndarray
-    watershed_id: np.ndarray
-    i_energy: np.ndarray
-    energies: np.ndarray
-    temperatures: np.ndarray
-
-    def __str__(self):
-        return (f"FitResult(energies={len(self.energies)}, grids={len(self.energy_rasters)})")
 
 class OCN:
     """
@@ -116,12 +74,17 @@ class OCN:
 
     Optimization Methods
     --------------------
-    :meth:`compute_energy`
-        Compute the current energy of the network.
     :meth:`single_erosion_event`
         Perform a single erosion event at a given temperature.
     :meth:`fit`
-        Optimize the network using simulated annealing.
+        Optimize the network using the simulated annealing method from Carraro et al (2020).
+    :meth:`fit_custom_cooling`
+        Optimize the network using a custom cooling function.
+
+    Other methods
+    -------------
+    :meth:`compute_energy`
+        Compute the current energy of the network.
 
     Attributes
     ----------
@@ -130,7 +93,7 @@ class OCN:
     dims : tuple[int, int]
         Grid dimensions (rows, cols) of the FlowGrid (read-only property).
     resolution: float
-        The side length of each grid cell in meters (read-only property).
+        The side length of each grid cell (read-only property).
     nroots : int
         Number of root nodes in the current OCN grid (read-only property).
     gamma : float
@@ -140,10 +103,10 @@ class OCN:
     verbosity : int
         Verbosity level for underlying library output (0-2).
     wrap : bool
-        If true, allows wrapping around the edges of the grid (toroidal). If false, no wrapping is applied (read-only property).
+        If true, enables periodic boundary conditions on the FlowGrid (read-only property).
     history : np.ndarray
         numpy array of shape (n_iterations, 3) recording the iteration index, energy, and temperature at each iteration during optimization.
-        If multiple fit calls are made, history is appended to this array.
+        Updated each time an optimization method is called.
 
     Examples
     --------
@@ -151,28 +114,16 @@ class OCN:
     an OCN using PyOCN and Matplotlib. More examples are available in the
     `demo.ipynb` notebook in the repository (https://github.com/alextsfox/PyOCN).
 
-    >>> import PyOCN as po
-    >>> import matplotlib as mpl
+    >>> # Fit an OCN from a "Hip-roof" initial network shape and periodic boundary conditions
     >>> import matplotlib.pyplot as plt
-    >>> # initialize a V-shaped network on a 64x64 grid
-    >>> ocn = po.OCN.from_net_type(
-    >>>     net_type="V",
-    >>>     dims=(64, 64),
-    >>>     random_state=8472,
-    >>> )
-    >>> # optimize the network with simulated annealing
-    >>> TODO: update this example to match new fit API
-    >>> result = ocn.fit(pbar=True)
-    >>> # plot the energy and drained area evolution, along with the final raster
-    >>> fig, axs = plt.subplots(2, 1, height_ratios=[1, 4], figsize=(6, 8))
-    >>> axs[0].plot(result.i_energy, result.energies / np.max(result.energies))
-    >>> axs[0].plot(result.i_energy, result.temperatures / np.max(result.temperatures))
-    >>> axs[0].set_ylabel("Normalized Energy")
-    >>> axs[0].set_xlabel("Iteration")
-    >>> norm = mpl.colors.PowerNorm(gamma=0.5)
-    >>> po.plot_ocn_raster(ocn, attribute='drained_area', norm=norm, cmap="Blues", ax=axs[1])
-    >>> axs[1].set_axis_off()
+    >>> import matplotlib as mpl
+    >>> import PyOCN as po
+    >>> ocn = po.OCN.from_net_type("H", dims=(64, 64), wrap=True, random_state=8472, verbosity=0)
+    >>> ocn.fit()
+    >>> po.plot_ocn_raster(ocn, norm=mpl.colors.PowerNorm(gamma=0.5), attribute='drained_area')
+    >>> plt.show()
     """
+
     def __init__(self, dag: nx.DiGraph, resolution: float=1.0, gamma: float = 0.5, random_state=None, verbosity: int = 0, validate:bool=True, wrap : bool = False):
         """
         Construct an :class:`OCN` from a valid NetworkX ``DiGraph``.
@@ -188,18 +139,19 @@ class OCN:
             raise TypeError(f"gamma must be a scalar. Got {type(gamma)}.")
         if not (0 <= gamma <= 1):
             warnings.warn(f"gamma values outside of [0, 1] may not be physically meaningful. Got {gamma}.")
-        self.gamma = gamma
-        
-
-        self.master_seed = random_state
-        
-
         if not isinstance(resolution, Number):
             raise TypeError(f"resolution must be numeric. Got {type(resolution)}")
-        # instantiate the FlowGrid_C and assign an initial energy.
+        
         self.verbosity = verbosity
-        # sets nroots, resolution, dims, wrap
-        self.__p_c_graph = fgconv.from_digraph(dag, resolution, verbose=(verbosity > 1), validate=validate, wrap=wrap)
+        self.gamma = gamma
+        self.master_seed = random_state
+        self.__p_c_graph = fgconv.from_digraph(  # does most of the work 
+            dag, 
+            resolution, 
+            verbose=(verbosity > 1), 
+            validate=validate, 
+            wrap=wrap
+        )
         self.__p_c_graph.contents.energy = self.compute_energy()
 
         self.__history = np.empty((0, 3), dtype=np.float64)
@@ -212,12 +164,12 @@ class OCN:
         Parameters
         ----------
         net_type : str
-            Name of the network template to generate. See
-            :func:`~PyOCN.utils.net_type_to_dag` for supported types.
+            Predefined network type to instantiate from. Valid types are "H", "I", "E", and "V". See
+            :func:`~PyOCN.utils.net_type_to_dag` for more information.
         dims : tuple[int, int]
             Grid dimensions (rows, cols). Both must be positive even integers.
         resolution : int, optional
-            The side length of each grid cell in meters.
+            The side length of each grid cell.
         gamma : float, default 0.5
             Exponent in the energy model.
         random_state : int | numpy.random.Generator | None, optional
@@ -231,14 +183,7 @@ class OCN:
         -------
         OCN
             A newly constructed instance initialized from the specified
-            template and dimensions.
-
-        Raises
-        ------
-        TypeError
-            If ``dims`` is not a tuple.
-        ValueError
-            If ``dims`` is not two positive even integers.
+            network type and dimensions.
         """
         if not isinstance(dims, tuple):
             raise TypeError(f"dims must be a tuple of two positive even integers, got {type(dims)}")
@@ -265,7 +210,7 @@ class OCN:
         dag : nx.DiGraph
             Directed acyclic graph (DAG) representing the stream network.
         resolution : int, optional
-            The side length of each grid cell in meters.
+            The side length of each grid cell.
         gamma : float, default 0.5
             Exponent in the energy model.
         random_state : int | numpy.random.Generator | None, optional
@@ -298,7 +243,26 @@ class OCN:
         - Edges do not cross in the row-column plane.
         - Both ``m`` and ``n`` are even integers, and there are at least four
           vertices.
+
+        Examples
+        --------
+        >>> # creating a "zig-zag" network
+        >>> # O O O O
+        >>> # |/|/|/|
+        >>> # O O O X
+        >>> import networkx as nx
+        >>> import PyOCN as po
+        >>> import matplotlib as mpl
+        >>> dag = nx.DiGraph()
+        >>> for i in range(8):
+        ...     dag.add_node(i, pos=(i % 4, i // 4))
+        ...     if i < 7: dag.add_edge(i, i + 1)
+        >>> ocn = OCN.from_digraph(dag, random_state=8472)
+        >>> ocn.fit()
+        >>> po.plot_ocn_raster(ocn, norm=mpl.colors.PowerNorm(gamma=0.5), attribute='drained_area')
+        >>> plt.show()
         """
+
         return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=True, wrap=wrap)
 
     def __repr__(self):
@@ -320,7 +284,6 @@ class OCN:
             ctypes.sizeof(_bindings.FlowGrid_C) + 
             ctypes.sizeof(_bindings.Vertex_C)*(self.dims[0]*self.dims[1])
         )
-
     def __copy__(self) -> "OCN":
         """
         Create a deep copy of the OCN, including the underlying FlowGrid_C.
@@ -509,16 +472,17 @@ class OCN:
     
     def to_gtiff(self, west:float, north:float, crs: Any, path:str|PathLike, unwrap:bool=True):
         """
-        Export a raster of the current FlowGrid to a .gtiff file
+        Export a raster of the current FlowGrid to a GeoTIFF file
         using rasterio. The resulting raster has 3 bands: `energy`, `drained_area`, and `watershed_id`.
         The `watershed_id` band contains integer watershed IDs assigned to each node,
         with root nodes assigned a value of -1. NA values are either np.nan (for energy and drained_area)
         or -9999 (for watershed_id).
 
-        N.B. This uses the .resolution attribute to set pixel size in the raster
-        This is assumed to be in units as meters. Using a CRS with different units
-        may have unexpected results! It is recommended to choose a CRS with meter units
-        then transform to another CRS later if needed.
+        N.B. This uses the :attr:`resolution` attribute to set pixel size in the raster.
+        This function does not check for unit compatibility, so it is up to the user
+        to ensure the resolution and CRS units match. By default,
+        the resolution is set to 1.0. Using a CRS with degree units in this case
+        would result in a pixel size of 1 degree, which is likely not what you want.
 
         Parameters
         ----------
@@ -533,9 +497,12 @@ class OCN:
         path : str or Pathlike
             The output path for the resulting gtiff file.
         unwrap : bool, default True
-            If True, unwraps the DAG to a continuous dag with non-periodic
-            boundaries before exporting. This will result in a larger raster if
-            the current OCN is wrapping.
+            If True and the current OCN has periodic boundaries, the
+            resulting raster will be transformed so connected grid cells 
+            are adjacent in the raster. This will result in a larger raster
+            with some nan values. If False or the current OCN does not have
+            periodic boundaries, then no transformation is applied and the
+            raster will have the same dimensions as the current OCN grid.
         """
         try:
             import rasterio
@@ -588,9 +555,12 @@ class OCN:
         Parameters
         ----------
         unwrap : bool, default True
-            If True, unwraps the DAG to a non-wrapping representation
-            before exporting. This will result in a larger raster if
-            the current OCN is wrapping.
+            If True and the current OCN has periodic boundaries, the
+            resulting array will be transformed so connected grid cells 
+            are adjacent in the array. This will result in a larger array
+            with some nan values. If False or the current OCN does not have
+            periodic boundaries, then no transformation is applied and the
+            resulting array will have the same dimensions as the current OCN grid.
         """
         dag = self.to_digraph()
         dims = self.dims
@@ -617,9 +587,14 @@ class OCN:
         Parameters
         ----------
         unwrap : bool, default True
-            If True, unwraps the DAG to a non-wrapping representation
-            before exporting. This will result in a larger raster if
-            the current OCN is wrapping. If unwrapping, the (0,0) coordinate
+            If True and the current OCN has periodic boundaries, the
+            resulting rasters will be transformed so connected grid cells
+            are adjacent in the output. This will result in a larger raster
+            with some nan values. If False or the current OCN does not have
+            periodic boundaries, then no transformation is applied and the
+            resulting raster will have the same dimensions as the current OCN grid.
+            
+            When unwrapping, the (0,0) coordinate
             will be set to the position of the "main" root node, defined as
             the root node with the smallest row*cols + col value. Otherwise,
             (0,0) will be the top-left corner of the grid.
@@ -632,8 +607,8 @@ class OCN:
             - `area_rasters` (np.float64) representing drained area at each grid cell
             - `watershed_id` (np.int32). NA value is -9999. Roots have value -1. Represents the watershed membership ID for each grid cell.
         and coordinates:
-            - `y` (float) representing the northing coordinate of each row in meters
-            - `x` (float) representing the easting coordinate of each column in meters
+            - `y` (float) representing the northing coordinate of each row.
+            - `x` (float) representing the easting coordinate of each column.
         """
 
         try:
@@ -688,7 +663,7 @@ class OCN:
             },
             attrs={
                 "description": "OCN fit result arrays",
-                "resolution_m": self.resolution,
+                "resolution": self.resolution,
                 "gamma": self.gamma,
                 "master_seed": int(self.master_seed),
                 "wrap": self.wrap,
@@ -723,7 +698,9 @@ class OCN:
             temperature,
         ))
 
-        history = np.array([[self.__history[-1, 0] + 1, self.energy, temperature]])
+        # append to history
+        last_iteration = self.__history[-1, 0] if self.__history.shape[0] else 0
+        history = np.array([last_iteration + 1, self.energy, temperature]).reshape((1, 3))
         self.__history = np.concatenate((self.__history, history), axis=0)
         
         if not array_report:
@@ -778,15 +755,13 @@ class OCN:
             Whether to display a progress bar.
         array_reports : int, default 0
             Number of timepoints (approximately) at which to save the state of the FlowGrid.
-            If 0 (default), returns None. If >0, returns a FitResult or xarray.Dataset
+            If 0 (default), returns None. If >0, returns an xarray.Dataset
             containing the state of the FlowGrid at approximately evenly spaced intervals
-            throughout the optimization, including the initial and final states.
-            
-            array_reports > 0, the returned result will be an xarray.Dataset. Requires xarray to be installed.
+            throughout the optimization, including the initial and final states. Requires xarray to be installed.
             
             The returned xarray.Dataset will have coordinates:
-                - `y` (float) representing the northing coordinate of each row in meters
-                - `x` (float) representing the easting coordinate of each column in meters
+                - `y` (float) representing the northing coordinate of each row
+                - `x` (float) representing the easting coordinate of each column
                 - `iteration` (int) representing the iteration index at which the data was recorded
             data variables:
                 - `energy_rasters` (np.float64) representing energy at each grid cell
@@ -814,7 +789,7 @@ class OCN:
 
         Returns
         -------
-        FitResult | xr.Dataset | None
+        xr.Dataset | None
 
         Raises
         ------
@@ -925,7 +900,7 @@ class OCN:
 
         Returns
         -------
-        FitResult | xr.Dataset | None
+        xr.Dataset | None
 
         Raises
         ------
@@ -947,15 +922,18 @@ class OCN:
         if (not isinstance(tol, Number)) or tol < 0:
             if tol is not None:
                 raise ValueError(f"tol must be a positive number or None, got {tol}")
-
-        xarray_out = array_reports > 0
-
         memory_est = array_reports*self.dims[0]*self.dims[1]*2*8 
         if memory_est > 20e6:
             warnings.warn(f"Requesting {array_reports} array is estimated to use {memory_est/1e6:.2f}MB of memory. Consider reducing array_reports or increasing max_iterations_per_loop if memory is a concern.")
         
-        self.__p_c_graph.contents.energy = self.compute_energy()
-        cooling_schedule = cooling_func
+        xarray_out = array_reports > 0
+        if xarray_out:
+            try:
+                import xarray as xr
+            except ImportError as e:
+                raise ImportError(
+                    "PyOCN.OCN.fit() with array_report>0 requires xarray to be installed. Install with `pip install xarray`."
+                ) from e
 
         # preallocate output arrays
         max_iterations_per_loop = int(max_iterations_per_loop)
@@ -975,115 +953,110 @@ class OCN:
             array_report_interval = max(array_report_interval, max_iterations_per_loop)
         else:
             array_report_interval = n_iterations*2  # never report arrays
-        if array_reports and not xarray_out:  # we use a different method for xarray output
-            array_out = np.empty([
-                n_iterations//array_report_interval + 2, # adjust array_reports to be a multiple of n_loops
-                3,
-                self.dims[0],
-                self.dims[1]
-            ])
-            array_out[0] = self.to_numpy(unwrap=False)
 
+        # temporary buffer to use for passing temperatures to libocn
         anneal_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
         anneal_ptr = anneal_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
 
-        with tqdm(
-            total=n_iterations, 
-            desc="OCN", 
+        self._advance_seed()  # advance the RNG state to decorrelate from any previous calls
+
+        completed_iterations = iteration_start
+        n_iterations += iteration_start
+
+        # set up reporting
+        array_report_idx = []
+        energy_report_idx = []
+        ds_out_dict = dict()
+        array_report_idx.append(completed_iterations)
+        ds_out_dict[completed_iterations] = self.to_xarray(unwrap=self.wrap)
+        energy_out[0] = self.energy
+        energy_report_idx.append(completed_iterations)
+
+        pbar = tqdm(
+            total=n_iterations - iteration_start, 
+            desc="OCN Fit", 
             unit_scale=True, 
             dynamic_ncols=True, 
             disable=not (pbar or self.verbosity >= 1)
-        ) as pbar:
+        )
+        
+        while completed_iterations < n_iterations:
+            iterations_this_loop = min(max_iterations_per_loop, n_iterations - completed_iterations)
+            anneal_buf[:iterations_this_loop] = cooling_func(
+                np.arange(completed_iterations, completed_iterations + iterations_this_loop)
+            )
+
+            # main call to optimizer in libocn
+            e_old = self.energy
+            check_status(_bindings.libocn.ocn_outer_ocn_loop(
+                self.__p_c_graph, 
+                iterations_this_loop, 
+                self.gamma, 
+                anneal_ptr,
+            ))
+            e_new = self.energy
+            completed_iterations += iterations_this_loop
             
-            self._advance_seed()
-
-            completed_iterations = iteration_start
-            n_iterations += iteration_start
-
-            # set up reporting
-            array_report_idx = []
-            energy_report_idx = []
-            ds_out_dict = dict()
-            array_report_idx.append(completed_iterations)
-            ds_out_dict[completed_iterations] = self.to_xarray(unwrap=self.wrap)
-            energy_out[0] = self.energy
+            # always report energy
+            energy_out[len(energy_report_idx)] = e_new
             energy_report_idx.append(completed_iterations)
-            while completed_iterations < n_iterations:
-                iterations_this_loop = min(max_iterations_per_loop, n_iterations - completed_iterations)
-                anneal_buf[:iterations_this_loop] = cooling_schedule(
-                    np.arange(completed_iterations, completed_iterations + iterations_this_loop)
+            # report arrays if requested
+            if (
+                xarray_out 
+                and (
+                    (completed_iterations % array_report_interval) < max_iterations_per_loop  # intermediate report
+                    or completed_iterations >= n_iterations  # final report
                 )
+            ):
+                array_report_idx.append(completed_iterations)
+                ds_out_dict[completed_iterations] = self.to_xarray(unwrap=self.wrap)
 
-                e_old = self.energy
-                check_status(_bindings.libocn.ocn_outer_ocn_loop(
-                    self.__p_c_graph, 
-                    iterations_this_loop, 
-                    self.gamma, 
-                    anneal_ptr,
-                ))
-                e_new = self.energy
-                completed_iterations += iterations_this_loop
-                
-                # report arrays (and energy)
-                if (
-                    xarray_out
-                    and (
-                        (completed_iterations % array_report_interval) < max_iterations_per_loop
-                        or completed_iterations >= n_iterations
-                    )
-                ):
-                    array_report_idx.append(completed_iterations)
-                    ds_out_dict[completed_iterations] = self.to_xarray(unwrap=self.wrap)
 
-                # always report energy
-                energy_out[len(energy_report_idx)] = e_new
-                energy_report_idx.append(completed_iterations)
+            # progress bar update
+            # TODO: move this to a separate function
+            if pbar or self.verbosity >= 1:
+                RED = '\033[31m'
+                YELLOW = '\033[33m'
+                CYAN = '\033[36m'
+                END = '\033[0m'
+                T_over_E = anneal_buf[iterations_this_loop - 1]/e_old*100
+                ToE_str = f"{int(np.floor(T_over_E)):02d}.{int((T_over_E - np.floor(T_over_E))*100):02d}%"
+                de_over_E = (e_new - e_old)/e_old*100
+                dEoE_str = f"{['+','-'][de_over_E < 0]}{int(np.floor(np.abs(de_over_E))):02d}.{int(np.abs(de_over_E) - np.floor(np.abs(de_over_E))*100):02d}%"
+                if T_over_E > 50: ToE_str = RED + ToE_str + END
+                elif T_over_E > 5: ToE_str = YELLOW + ToE_str + END
+                else: ToE_str = CYAN + ToE_str + END
+                if de_over_E > 5: dEoE_str = RED + dEoE_str + END
+                elif de_over_E > -5: dEoE_str = YELLOW + dEoE_str + END
+                else: dEoE_str = CYAN + dEoE_str + END
 
-                # progress bar update
-                if pbar or self.verbosity >= 1:
-                    RED = '\033[31m'
-                    YELLOW = '\033[33m'
-                    CYAN = '\033[36m'
-                    END = '\033[0m'
-                    T_over_E = anneal_buf[iterations_this_loop - 1]/e_old*100
-                    ToE_str = f"{int(np.floor(T_over_E)):02d}.{int((T_over_E - np.floor(T_over_E))*100):02d}%"
-                    de_over_E = (e_new - e_old)/e_old*100
-                    dEoE_str = f"{['+','-'][de_over_E < 0]}{int(np.abs(np.floor(de_over_E))):02d}.{int(np.abs(np.abs(de_over_E) - np.abs(np.floor(de_over_E)))*100):02d}%"
-                    if T_over_E > 50: ToE_str = RED + ToE_str + END
-                    elif T_over_E > 5: ToE_str = YELLOW + ToE_str + END
-                    else: ToE_str = CYAN + ToE_str + END
-                    if de_over_E > 5: dEoE_str = RED + dEoE_str + END
-                    elif de_over_E > -5: dEoE_str = YELLOW + dEoE_str + END
-                    else: dEoE_str = CYAN + dEoE_str + END
+                pbar.set_postfix({
+                    "E": f"{self.energy:.1e}", 
+                    "T/E": ToE_str,
+                    "ΔE/E": dEoE_str,
+                })
+                pbar.update(iterations_this_loop)
 
-                    pbar.set_postfix({
-                        "E": f"{self.energy:.1e}", 
-                        "T/E": ToE_str,
-                        "ΔE/E": dEoE_str,
-                    })
-                    pbar.update(iterations_this_loop)
-
-                if tol is not None and e_new < e_old and abs((e_old - e_new)/e_old) < tol:
-                    break
-        # # save energy and temp history
-        # start = 1 if self.__history.shape[0] > 0 else 0  # avoid duplicating the initial state if continuing from previous fit
-        # idx_offset = self.__history[-1, 0] if self.__history.shape[0] > 0 else 0
-        # history = np.stack([
-        #     np.array(idx_offset - iteration_start + np.asarray(energy_report_idx)[start:]),
-        #     np.array(energy_out[start:len(energy_report_idx)]),
-        #     np.array(cooling_schedule(energy_report_idx[start:]))
-        # ], axis=1)
-        # self.__history = np.concatenate([self.__history, history], axis=0)
+            if tol is not None and e_new < e_old and abs((e_old - e_new)/e_old) < tol:
+                break
+        
+        pbar.close()
+        
+        # update energy and temperature history
+        last_history_iteration = int(self.history[-1, 0]) if self.history.shape[0] else 0
+        skip_first = 1 if self.history.shape[0] else 0
+        history = np.stack([
+            last_history_iteration + np.asarray(energy_report_idx)[skip_first:] - iteration_start,  # adjust indices if continuing from previous fit
+            energy_out[skip_first:len(energy_report_idx)],
+            cooling_func(np.asarray(energy_report_idx[skip_first:])),
+        ], axis=1).reshape(-1, 3)
+        self.__history = np.concatenate([self.__history, history], axis=0)
         
         if not xarray_out: 
-            return
+            return None
     
-        try:
-            import xarray as xr
-        except ImportError as e:
-            raise ImportError(
-                "PyOCN.OCN.fit() with array_report>0 requires xarray to be installed. Install with `pip install xarray`."
-            ) from e
+        # convert the ds_out_dict to a single xarray.Dataset with an iteration dimension if requested
+        # TODO: move this to a separate function???
         
         # find the maximum extent of the unwrapped grid across all reported arrays
         coord_ranges = list((ds.x.data.min(), ds.x.data.max(), ds.y.data.min(), ds.y.data.max()) for ds in ds_out_dict.values())
@@ -1097,7 +1070,6 @@ class OCN:
         new_ycoords = np.arange(ymin, ymax + self.resolution, self.resolution)
 
         data_shape = (len(ds_out_dict), len(new_ycoords), len(new_xcoords))
-
 
         # build an empty dataset
         ds = xr.Dataset(
@@ -1122,7 +1094,7 @@ class OCN:
             },
             attrs={
                 "description": "OCN fit result arrays",
-                "resolution_m": self.resolution,
+                "resolution": self.resolution,
                 "gamma": self.gamma,
                 "master_seed": int(self.master_seed),
                 "wrap": self.wrap,
