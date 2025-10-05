@@ -169,8 +169,6 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
         update_drained_area(G, -da_inc, a_down_old);  // remove drainage from old path
         update_drained_area(G, da_inc, a_down_new);  // add drainage to new path
         energy_new = ocn_compute_energy(G, gamma);  // recompute energy from scratch
-        // simulated annealing: accept with prob = exp(-delta_energy / temperature). note that p > 1 if energy decreases.
-        // printf("Old energy: %f, New energy: %f, Delta E: %f\n", energy_old, energy_new, energy_new - energy_old);
         if (simulate_annealing(energy_new, energy_old, temperature)){
             G->energy = energy_new;
             return SUCCESS;
