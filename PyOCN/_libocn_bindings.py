@@ -130,9 +130,9 @@ libocn.fg_destroy.restype = Status
 libocn.fg_change_vertex_outflow.argtypes = [POINTER(FlowGrid_C), linidx_t, clockhand_t]
 libocn.fg_change_vertex_outflow.restype = Status
 
-# Status fg_flow_downstream_safe(FlowGrid *G, linidx_t a, uint8_t ncalls);
-libocn.fg_flow_downstream_safe.argtypes = [POINTER(FlowGrid_C), linidx_t, c_uint8]
-libocn.fg_flow_downstream_safe.restype = Status
+# Status fg_flow_downstream(FlowGrid *G, linidx_t a, uint8_t ncalls);
+libocn.fg_flow_downstream.argtypes = [POINTER(FlowGrid_C), linidx_t, c_uint8]
+libocn.fg_flow_downstream.restype = Status
 
 # void fg_display(FlowGrid *G, bool use_utf8);
 libocn.fg_display.argtypes = [POINTER(FlowGrid_C), c_bool]

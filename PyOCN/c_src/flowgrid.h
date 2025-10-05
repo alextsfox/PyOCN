@@ -152,7 +152,7 @@ Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new);
  * @param ncalls A unique identifier for this traversal to mark visited vertices.
  * @return Status code indicating success or failure. Returns MALFORMED_GRAPH_WARNING if a cycle is detected.
  */
-Status fg_flow_downstream_safe(FlowGrid *G, linidx_t a, uint8_t ncalls);
+Status fg_flow_downstream(FlowGrid *G, linidx_t a, uint8_t ncalls);
 
 /**
  * @brief Display the flowgrid in the terminal using ASCII or UTF-8 characters.

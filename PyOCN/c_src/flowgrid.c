@@ -280,7 +280,7 @@ Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new){
     return SUCCESS;
 }
 
-Status fg_flow_downstream_safe(FlowGrid *G, linidx_t a, uint8_t ncalls){
+Status fg_flow_downstream(FlowGrid *G, linidx_t a, uint8_t ncalls){
     Vertex vert;
     Status code;
     code = fg_get_lin(&vert, G, a);
