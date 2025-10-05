@@ -129,12 +129,14 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
             a_down_new = vert.adown;
 
             // confirm that the new graph is well-formed (no cycles, still reaches root)
-            code = fg_flow_downstream(G, a_down_old);
+            for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;
+            code = fg_flow_downstream(G, a_down_old, 1);
             if (code != SUCCESS){
                 fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
             }
-            code = fg_flow_downstream(G, a);
+            // for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;
+            code = fg_flow_downstream(G, a, 2);
             if (code != SUCCESS){
                 fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;

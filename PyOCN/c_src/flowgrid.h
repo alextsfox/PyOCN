@@ -149,9 +149,10 @@ Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new);
  * @brief Follow the downstream path from a given vertex, marking each vertex as visited.
  * @param G Pointer to the FlowGrid.
  * @param a The linear index of the starting vertex.
+ * @param ncalls A unique identifier for this traversal to mark visited vertices.
  * @return Status code indicating success or failure. Returns MALFORMED_GRAPH_WARNING if a cycle is detected.
  */
-Status fg_flow_downstream(FlowGrid *G, linidx_t a);
+Status fg_flow_downstream(FlowGrid *G, linidx_t a, uint8_t ncalls);
 
 /**
  * @brief Display the flowgrid in the terminal using ASCII or UTF-8 characters.
