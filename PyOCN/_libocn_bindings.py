@@ -86,17 +86,17 @@ class FlowGrid_C(Structure):
         ("wrap", c_bool),
     ]
 
-# linidx_t fg_cart_to_lin_export(CartPairC coords, CartPairC dims);
-libocn.fg_cart_to_lin_export.argtypes = [CartPair_C, CartPair_C]
-libocn.fg_cart_to_lin_export.restype = linidx_t
+# linidx_t fg_cart_to_lin(CartPairC coords, CartPairC dims);
+libocn.fg_cart_to_lin.argtypes = [CartPair_C, CartPair_C]
+libocn.fg_cart_to_lin.restype = linidx_t
 
-# Status fg_get_lin_export(Vertex *out, FlowGrid *G, linidx_t a);
-libocn.fg_get_lin_export.argtypes = [POINTER(Vertex_C), POINTER(FlowGrid_C), linidx_t]
-libocn.fg_get_lin_export.restype = Status
+# Status fg_get_lin(Vertex *out, FlowGrid *G, linidx_t a);
+libocn.fg_get_lin.argtypes = [POINTER(Vertex_C), POINTER(FlowGrid_C), linidx_t]
+libocn.fg_get_lin.restype = Status
 
-# Status fg_set_lin_export(FlowGrid *G, Vertex vert, linidx_t a);
-libocn.fg_set_lin_export.argtypes = [POINTER(FlowGrid_C), Vertex_C, linidx_t]
-libocn.fg_set_lin_export.restype = Status
+# Status fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a);
+libocn.fg_set_lin.argtypes = [POINTER(FlowGrid_C), Vertex_C, linidx_t]
+libocn.fg_set_lin.restype = Status
 
 # Status fg_create_empty(CartPairC dims);
 libocn.fg_create_empty.argtypes = [CartPair_C]
