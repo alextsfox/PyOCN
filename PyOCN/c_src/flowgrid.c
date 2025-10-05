@@ -269,18 +269,20 @@ Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new){
     return SUCCESS;
 }
 
-Status fg_flow_downstream(FlowGrid *G, linidx_t a, uint8_t ncalls){
+Status fg_flow_downstream(FlowGrid *G, linidx_t a){
     Vertex vert;
     Status code;
+
+    // reset visited flags before starting traversal
+    for (linidx_t i = 0; i < G->dims.row * G->dims.col; i++) G->vertices[i].visited = 0;
+
     code = fg_get_lin(&vert, G, a);
     if (code != SUCCESS) return code;
 
     while (vert.downstream != IS_ROOT){
         // if we find ourselves in a cycle, exit immediately and signal to the caller
-        if (vert.visited == ncalls) return MALFORMED_GRAPH_WARNING;
-        else if ((vert.visited == ncalls - 1) && (vert.visited != 0)) return SUCCESS; // already fully visited this node in a previous call, so we can exit early
-        
-        vert.visited += ncalls;
+        if (vert.visited == 1) return MALFORMED_GRAPH_WARNING;
+        vert.visited = 1;
         fg_set_lin(G, vert, a);  // unsafe is ok here because we already checked bounds
 
         // get next vertex
