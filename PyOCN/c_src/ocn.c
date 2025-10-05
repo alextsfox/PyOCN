@@ -94,7 +94,6 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     drainedarea_t da_inc;
     CartPair dims = G->dims;
     linidx_t nverts = (linidx_t)dims.row * (linidx_t)dims.col;
-    uint8_t n_previous_checks = 0;  // used to mark visited nodes during cycle checks
 
     double energy_old, energy_new;
     energy_old = G->energy;
@@ -129,26 +128,17 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
             a_down_new = vert.adown;
 
             // confirm that the new graph is well-formed (no cycles, still reaches root)
-            if (n_previous_checks  == 0){
-                for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;
-            }
-            code = fg_check_for_cycles(G, a_down_old, n_previous_checks);
-            n_previous_checks = (n_previous_checks + 1) % 8;
+            for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;
+            code = fg_check_for_cycles(G, a_down_old, 1);
             if (code != SUCCESS){
                 fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
             }
-            
-            if (n_previous_checks  == 0){
-                for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;
-            }
-            code = fg_check_for_cycles(G, a, n_previous_checks);
-            n_previous_checks = (n_previous_checks + 1) % 8;  // increment the check counter, wrapping around at 8
+            code = fg_check_for_cycles(G, a, 2);
             if (code != SUCCESS){
                 fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
             }
-
 
             if (code == SUCCESS) goto mh_eval;  // if we reached here, the swap resulted in a well-formed graph, so we can move on the acceptance step
         }
