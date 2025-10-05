@@ -38,9 +38,11 @@ bool simulate_annealing(double energy_new, double energy_old, double temperature
 Status update_drained_area(FlowGrid *G, drainedarea_t da_inc, linidx_t a){
     Vertex vert;
     do {
-        vert = fg_get_lin(G, a);
+        Status code = fg_get_lin(&vert, G, a);
+        if (code == OOB_ERROR) return OOB_ERROR;
         vert.drained_area += da_inc;
-        fg_set_lin(G, vert, a);
+        code = fg_set_lin(G, vert, a);
+        if (code == OOB_ERROR) return OOB_ERROR;
         a = vert.adown;
     } while (vert.downstream != IS_ROOT);
 
@@ -70,7 +72,7 @@ Status update_energy_single_root(FlowGrid *G, drainedarea_t da_inc, linidx_t a, 
     double energy_old = 0.0;
     double energy_new = 0.0;
     do {
-        vert = fg_get_lin(G, a);
+        if (fg_get_lin(&vert, G, a) == OOB_ERROR) return OOB_ERROR;
 
         energy_old += pow(vert.drained_area, gamma);
         vert.drained_area += da_inc;
@@ -108,7 +110,8 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
         else a = (linidx_t)((int32_t)a + a_step_dir);
         // a = (linidx_t)((int32_t)a + a_step_dir) % ((int32_t)dims.row * (int32_t)dims.col);
 
-        vert = fg_get_lin(G, a);  // unsafe is ok here because a is guaranteed to be in bounds
+        code = fg_get_lin(&vert, G, a);
+        if (code == OOB_ERROR) return OOB_ERROR;
     
         down_old = vert.downstream;
         a_down_old = vert.adown;
@@ -121,7 +124,8 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
             if (code != SUCCESS) continue;
 
             // retrieve the downstream vertices
-            vert = fg_get_lin(G, a);
+            code = fg_get_lin(&vert, G, a);
+            if (code == OOB_ERROR) return OOB_ERROR;
             a_down_new = vert.adown;
 
             // confirm that the new graph is well-formed (no cycles, still reaches root)

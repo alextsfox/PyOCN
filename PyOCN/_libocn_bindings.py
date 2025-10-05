@@ -94,53 +94,37 @@ libocn.fg_cart_to_lin.restype = linidx_t
 libocn.fg_lin_to_cart.argtypes = [linidx_t, CartPair_C]
 libocn.fg_lin_to_cart.restype = CartPair_C
 
-# Status fg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, CartPairC dims, bool wrap);
-libocn.fg_clockhand_to_lin_safe.argtypes = [POINTER(linidx_t), linidx_t, clockhand_t, CartPair_C, c_bool]
-libocn.fg_clockhand_to_lin_safe.restype = Status
+# Status fg_clockhand_to_lin(linidx_t *a_down, linidx_t a, clockhand_t down, CartPairC dims, bool wrap);
+libocn.fg_clockhand_to_lin.argtypes = [POINTER(linidx_t), linidx_t, clockhand_t, CartPair_C, c_bool]
+libocn.fg_clockhand_to_lin.restype = Status
 
-# Status fg_get_cart_safe(Vertex *out, FlowGrid *G, CartPairC coords);
-libocn.fg_get_cart_safe.argtypes = [POINTER(Vertex_C), POINTER(FlowGrid_C), CartPair_C]
-libocn.fg_get_cart_safe.restype = Status
+# Status fg_get_cart(Vertex *out, FlowGrid *G, CartPairC coords);
+libocn.fg_get_cart.argtypes = [POINTER(Vertex_C), POINTER(FlowGrid_C), CartPair_C]
+libocn.fg_get_cart.restype = Status
 
-# Vertex fg_get_cart(FlowGrid *G, CartPairC coords);
-libocn.fg_get_cart.argtypes = [POINTER(FlowGrid_C), CartPair_C]
-libocn.fg_get_cart.restype = Vertex_C
-
-# Status fg_set_cart_safe(FlowGrid *G, Vertex vert, CartPairC coords);
-libocn.fg_set_cart_safe.argtypes = [POINTER(FlowGrid_C), Vertex_C, CartPair_C]
-libocn.fg_set_cart_safe.restype = Status
-
-# void fg_set_cart(FlowGrid *G, Vertex vert, CartPairC coords);
+# Status fg_set_cart(FlowGrid *G, Vertex vert, CartPairC coords);
 libocn.fg_set_cart.argtypes = [POINTER(FlowGrid_C), Vertex_C, CartPair_C]
-libocn.fg_set_cart.restype = None
+libocn.fg_set_cart.restype = Status
 
-# Status fg_get_lin_safe(Vertex *out, FlowGrid *G, linidx_t a);
-libocn.fg_get_lin_safe.argtypes = [POINTER(Vertex_C), POINTER(FlowGrid_C), linidx_t]
-libocn.fg_get_lin_safe.restype = Status
+# Status fg_get_lin(Vertex *out, FlowGrid *G, linidx_t a);
+libocn.fg_get_lin.argtypes = [POINTER(Vertex_C), POINTER(FlowGrid_C), linidx_t]
+libocn.fg_get_lin.restype = Status
 
-# Vertex fg_get_lin(FlowGrid *G, linidx_t a);
-libocn.fg_get_lin.argtypes = [POINTER(FlowGrid_C), linidx_t]
-libocn.fg_get_lin.restype = Vertex_C
-
-# Status fg_set_lin_safe(FlowGrid *G, Vertex vert, linidx_t a);
-libocn.fg_set_lin_safe.argtypes = [POINTER(FlowGrid_C), Vertex_C, linidx_t]
-libocn.fg_set_lin_safe.restype = Status
-
-# void fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a);
+# Status fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a);
 libocn.fg_set_lin.argtypes = [POINTER(FlowGrid_C), Vertex_C, linidx_t]
-libocn.fg_set_lin.restype = None
+libocn.fg_set_lin.restype = Status
 
-# Status fg_create_empty_safe(CartPairC dims);
-libocn.fg_create_empty_safe.argtypes = [CartPair_C]
-libocn.fg_create_empty_safe.restype = POINTER(FlowGrid_C)
+# Status fg_create_empty(CartPairC dims);
+libocn.fg_create_empty.argtypes = [CartPair_C]
+libocn.fg_create_empty.restype = POINTER(FlowGrid_C)
 
-# FlowGrid *fg_copy_safe(FlowGrid *G);
-libocn.fg_copy_safe.argtypes = [POINTER(FlowGrid_C)]
-libocn.fg_copy_safe.restype = POINTER(FlowGrid_C)
+# FlowGrid *fg_copy(FlowGrid *G);
+libocn.fg_copy.argtypes = [POINTER(FlowGrid_C)]
+libocn.fg_copy.restype = POINTER(FlowGrid_C)
 
-# Status fg_destroy_safe(FlowGrid *G);
-libocn.fg_destroy_safe.argtypes = [POINTER(FlowGrid_C)]
-libocn.fg_destroy_safe.restype = Status
+# Status fg_destroy(FlowGrid *G);
+libocn.fg_destroy.argtypes = [POINTER(FlowGrid_C)]
+libocn.fg_destroy.restype = Status
 
 # Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new);
 libocn.fg_change_vertex_outflow.argtypes = [POINTER(FlowGrid_C), linidx_t, clockhand_t]

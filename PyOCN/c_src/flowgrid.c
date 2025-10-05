@@ -69,7 +69,7 @@ CartPair fg_lin_to_cart(linidx_t a, CartPair dims){
     div_t adiv = div(a, dims.col);
     return (CartPair){adiv.quot, adiv.rem};
 }
-Status fg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims, bool wrap){
+Status fg_clockhand_to_lin(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims, bool wrap){
     CartPair row_col = fg_lin_to_cart(a, dims);
     OffsetPair offset = offsets[down];
     OffsetPair cart_down_off = {
@@ -116,7 +116,7 @@ Status fg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, 
 // # Getters + Setters          #
 // ##############################
 // cartesian
-Status fg_get_cart_safe(Vertex *out, FlowGrid *G, CartPair coords){
+Status fg_get_cart(Vertex *out, FlowGrid *G, CartPair coords){
     if (
         G == NULL 
         || out == NULL 
@@ -130,11 +130,11 @@ Status fg_get_cart_safe(Vertex *out, FlowGrid *G, CartPair coords){
     *out = G->vertices[a];
     return SUCCESS;
 }
-Vertex fg_get_cart(FlowGrid *G, CartPair coords){
-    linidx_t a = fg_cart_to_lin(coords, G->dims);
-    return G->vertices[a];
-}
-Status fg_set_cart_safe(FlowGrid *G, Vertex vert, CartPair coords){
+// Vertex fg_get_cart(FlowGrid *G, CartPair coords){
+//     linidx_t a = fg_cart_to_lin(coords, G->dims);
+//     return G->vertices[a];
+// }
+Status fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords){
     if (
         G == NULL 
         || coords.row < 0 
@@ -146,33 +146,33 @@ Status fg_set_cart_safe(FlowGrid *G, Vertex vert, CartPair coords){
     G->vertices[a] = vert;
     return SUCCESS;
 }
-void fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords){
-    linidx_t a = fg_cart_to_lin(coords, G->dims);
-    G->vertices[a] = vert;
-}
+// void fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords){
+//     linidx_t a = fg_cart_to_lin(coords, G->dims);
+//     G->vertices[a] = vert;
+// }
 
 // linear
-Status fg_get_lin_safe(Vertex *out, FlowGrid *G, linidx_t a){
+Status fg_get_lin(Vertex *out, FlowGrid *G, linidx_t a){
     if (G == NULL || out == NULL || a < 0 || a >= ((linidx_t)G->dims.row * (linidx_t)G->dims.col)) return OOB_ERROR;
     *out = G->vertices[a];
     return SUCCESS;
 }
-Vertex fg_get_lin(FlowGrid *G, linidx_t a){
-    return G->vertices[a];
-}
-Status fg_set_lin_safe(FlowGrid *G, Vertex vert, linidx_t a){
+// Vertex fg_get_lin(FlowGrid *G, linidx_t a){
+//     return G->vertices[a];
+// }
+Status fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a){
     if (G == NULL || a < 0 || a >= ((linidx_t)G->dims.row * (linidx_t)G->dims.col)) return OOB_ERROR;
     G->vertices[a] = vert;
     return SUCCESS;
 }
-void fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a){
-    G->vertices[a] = vert;
-}
+// void fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a){
+//     G->vertices[a] = vert;
+// }
 
 // ##############################
 // # Create/destroy flowgrid #
 // ##############################
-FlowGrid *fg_create_empty_safe(CartPair dims){
+FlowGrid *fg_create_empty(CartPair dims){
     if (dims.row % 2 != 0 || dims.col % 2 != 0) return NULL;  // dimensions must be even
 
     FlowGrid *G = malloc(sizeof(FlowGrid));
@@ -191,9 +191,9 @@ FlowGrid *fg_create_empty_safe(CartPair dims){
     return G;
 }
 
-FlowGrid *fg_copy_safe(FlowGrid *G){
+FlowGrid *fg_copy(FlowGrid *G){
     if (G == NULL || G->vertices == NULL) return NULL;
-    FlowGrid *out = fg_create_empty_safe(G->dims);
+    FlowGrid *out = fg_create_empty(G->dims);
     if (out == NULL) return NULL;
     out->dims = G->dims;
     out->energy = G->energy;
@@ -205,7 +205,7 @@ FlowGrid *fg_copy_safe(FlowGrid *G){
     return out;
 }
 
-Status fg_destroy_safe(FlowGrid *G){
+Status fg_destroy(FlowGrid *G){
     if (G != NULL){
         if (G->vertices != NULL) free(G->vertices); G->vertices = NULL;
         free(G); 
@@ -225,18 +225,19 @@ Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new){
     clockhand_t down_old;
     
     // 1. Get G[a], G[a_down_old], G[adownnew] safely
-    code = fg_get_lin_safe(&vert, G, a);
+    code = fg_get_lin(&vert, G, a);
     if (code == OOB_ERROR) return OOB_ERROR;
     down_old = vert.downstream;
 
     a_down_old = vert.adown;
-    code = fg_get_lin_safe(&vert_down_old, G, a_down_old);
+    code = fg_get_lin(&vert_down_old, G, a_down_old);
     if (code == OOB_ERROR) return OOB_ERROR;
 
     // a_down_new is trickier to get.
-    code = fg_clockhand_to_lin_safe(&a_down_new, a, down_new, dims, G->wrap);
+    code = fg_clockhand_to_lin(&a_down_new, a, down_new, dims, G->wrap);
     if (code == OOB_ERROR) return OOB_ERROR;
-    vert_down_new = fg_get_lin(G, a_down_new);  // we can use unsafe here because we already checked bounds
+    code = fg_get_lin(&vert_down_new, G, a_down_new);  // we can use unsafe here because we already checked bounds
+    if (code == OOB_ERROR) return OOB_ERROR;
 
     // 2. check for any immediate problems with the swap that would malform the graph
     // check that the new downstream is valid (does not check for large cycles or for root access)
@@ -255,7 +256,8 @@ Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new){
         case 3: check_row_col.row += 1; break;  // SE flow: check S vertex
         case 5: check_row_col.row += 1; break;  // SW flow: check S vertex
     }
-    fg_get_cart_safe(&cross_check_vert, G, check_row_col);
+    code = fg_get_cart(&cross_check_vert, G, check_row_col);
+    if (code == OOB_ERROR) return OOB_ERROR;
     switch (down_new){
         case 1: if (cross_check_vert.edges & (1u << 3)) return SWAP_WARNING; break;  // NE flow: N vertex cannot have a SE edge
         case 7: if (cross_check_vert.edges & (1u << 5)) return SWAP_WARNING; break;  // NW flow: N vertex cannot have a SW edge
@@ -281,7 +283,7 @@ Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new){
 Status fg_flow_downstream_safe(FlowGrid *G, linidx_t a, uint8_t ncalls){
     Vertex vert;
     Status code;
-    code = fg_get_lin_safe(&vert, G, a);
+    code = fg_get_lin(&vert, G, a);
     if (code != SUCCESS) return code;
 
     while (vert.downstream != IS_ROOT){
@@ -294,7 +296,7 @@ Status fg_flow_downstream_safe(FlowGrid *G, linidx_t a, uint8_t ncalls){
 
         // get next vertex
         a = vert.adown;
-        code = fg_get_lin_safe(&vert, G, a);
+        code = fg_get_lin(&vert, G, a);
         if (code != SUCCESS) return code;
     }
     return SUCCESS;  // found root successfully, no cycles found

@@ -272,7 +272,7 @@ class OCN:
         return f"OCN(gamma={self.gamma}, energy={self.energy}, dims={self.dims}, resolution={self.resolution}m, verbosity={self.verbosity})"
     def __del__(self):
         try:
-            _bindings.libocn.fg_destroy_safe(self.__p_c_graph)
+            _bindings.libocn.fg_destroy(self.__p_c_graph)
             self.__p_c_graph = None
         except AttributeError:
             pass
@@ -301,7 +301,7 @@ class OCN:
         cpy.__p_c_graph.contents.resolution = self.resolution
         cpy.__p_c_graph.contents.wrap = self.wrap
 
-        cpy_p_c_graph = _bindings.libocn.fg_copy_safe(self.__p_c_graph)
+        cpy_p_c_graph = _bindings.libocn.fg_copy(self.__p_c_graph)
         if not cpy_p_c_graph:
             raise MemoryError("Failed to copy FlowGrid_C in OCN.__copy__")
         cpy.__p_c_graph = cpy_p_c_graph

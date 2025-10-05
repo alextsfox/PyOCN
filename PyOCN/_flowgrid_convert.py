@@ -26,7 +26,7 @@ def to_digraph(c_graph:_bindings.FlowGrid_C) -> nx.DiGraph:
                 _bindings.CartPair_C(row=r, col=c), 
                 c_graph.dims
             )
-            check_status(_bindings.libocn.fg_get_lin_safe(
+            check_status(_bindings.libocn.fg_get_lin(
                 byref(vert_c), 
                 byref(c_graph),
                 a,
@@ -214,7 +214,7 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
             print("\tChecked for crossing edges.")
 
     # By now, the graph is validated and has all necessary attributes to create the C FlowGrid structure.
-    p_c_graph = _bindings.libocn.fg_create_empty_safe(_bindings.CartPair_C(row=rows, col=cols))
+    p_c_graph = _bindings.libocn.fg_create_empty(_bindings.CartPair_C(row=rows, col=cols))
     if not p_c_graph:
         raise MemoryError("Failed to allocate memory for FlowGrid_C.")
     for n in G.nodes:
@@ -231,9 +231,9 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
             visited=G.nodes[n]["visited"],
         )
         try:
-            check_status(_bindings.libocn.fg_set_lin_safe(p_c_graph, v_c, a))
+            check_status(_bindings.libocn.fg_set_lin(p_c_graph, v_c, a))
         except Exception as e:
-            _bindings.libocn.fg_destroy_safe(p_c_graph)
+            _bindings.libocn.fg_destroy(p_c_graph)
             p_c_graph = None
             raise e
     
@@ -263,7 +263,7 @@ def validate_digraph(dag:nx.DiGraph, verbose:bool=False) -> bool|str:
     """
     try:
         p_c_graph = from_digraph(dag, verbose=verbose)
-        _bindings.libocn.fg_destroy_safe(p_c_graph)
+        _bindings.libocn.fg_destroy(p_c_graph)
         p_c_graph = None
     except Exception as e:  # _digraph_to_flowgrid_c will destroy p_c_graph on failure
         return str(e)
@@ -282,7 +282,7 @@ def validate_flowgrid(c_graph:_bindings.FlowGrid_C, verbose:bool=False) -> bool|
     try:
         dag = to_digraph(c_graph, verbose=verbose)
         p_c_graph = from_digraph(dag, verbose=verbose)
-        _bindings.libocn.fg_destroy_safe(p_c_graph)
+        _bindings.libocn.fg_destroy(p_c_graph)
         p_c_graph = None
     except Exception as e:  # _digraph_to_flowgrid_c will destroy p_c_graph on failure
         return str(e)

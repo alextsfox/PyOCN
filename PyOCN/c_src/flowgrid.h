@@ -77,7 +77,7 @@ CartPair fg_lin_to_cart(linidx_t a, CartPair dims);
  * @param wrap If true, the graph wraps around at the edges.
  * @return Status code indicating success or failure
  */
-Status fg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims, bool wrap);
+Status fg_clockhand_to_lin(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims, bool wrap);
 
 /**
  * @brief Get the vertex at the given Cartesian coordinates safely.
@@ -86,15 +86,7 @@ Status fg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, 
  * @param coords The Cartesian coordinates of the vertex to retrieve.
  * @return Status code indicating success or failure
  */
-Status fg_get_cart_safe(Vertex *out, FlowGrid *G, CartPair coords);
-
-/**
- * @brief Get the vertex at the given Cartesian coordinates unsafely.
- * @param G Pointer to the FlowGrid.
- * @param coords The Cartesian coordinates of the vertex to retrieve.
- * @return The vertex at the specified coordinates.
- */
-Vertex fg_get_cart(FlowGrid *G, CartPair coords);
+Status fg_get_cart(Vertex *out, FlowGrid *G, CartPair coords);
 
 /**
  * @brief Set the vertex at the given Cartesian coordinates safely.
@@ -103,15 +95,7 @@ Vertex fg_get_cart(FlowGrid *G, CartPair coords);
  * @param coords The Cartesian coordinates where the vertex should be set.
  * @return Status code indicating success or failure
  */
-Status fg_set_cart_safe(FlowGrid *G, Vertex vert, CartPair coords);
-
-/**
- * @brief Set the vertex at the given Cartesian coordinates unsafely.
- * @param G Pointer to the FlowGrid.
- * @param vert The vertex to use to update the graph with.
- * @param coords The Cartesian coordinates where the vertex should be set.
- */
-void fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords);
+Status fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords);
 
 /**
  * @brief Get the vertex at the given linear index safely.
@@ -120,15 +104,7 @@ void fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords);
  * @param a The linear index of the vertex to retrieve.
  * @return Status code indicating success or failure
  */
-Status fg_get_lin_safe(Vertex *out, FlowGrid *G, linidx_t a);
-
-/**
- * @brief Get the vertex at the given linear index unsafely.
- * @param G Pointer to the FlowGrid.
- * @param a The linear index of the vertex to retrieve.
- * @return The vertex at the specified linear index.
- */
-Vertex fg_get_lin(FlowGrid *G, linidx_t a);
+Status fg_get_lin(Vertex *out, FlowGrid *G, linidx_t a);
 
 /**
  * @brief Set the vertex at the given linear index safely.
@@ -137,36 +113,28 @@ Vertex fg_get_lin(FlowGrid *G, linidx_t a);
  * @param a The linear index where the vertex should be set.
  * @return Status code indicating success or failure
  */
-Status fg_set_lin_safe(FlowGrid *G, Vertex vert, linidx_t a);
-
-/**
- * @brief Set the vertex at the given linear index unsafely.
- * @param G Pointer to the FlowGrid.
- * @param vert The vertex to use to update the graph with.
- * @param a The linear index where the vertex should be set.
- */
-void fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a);
+Status fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a);
 
 /**
  * @brief Create an empty flowgrid with given dimensions safely.
  * @param dims The dimensions of the graph (rows, cols).
  * @return The created FlowGrid. Returns NULL if dimensions are invalid or memory allocation fails.
  */
-FlowGrid *fg_create_empty_safe(CartPair dims);
+FlowGrid *fg_create_empty(CartPair dims);
 
 /**
  * @brief Create a deep copy of a flowgrid safely.
  * @param G Pointer to the FlowGrid to copy.
  * @return A deep copy of the FlowGrid. Returns NULL if G is NULL or memory allocation fails.
  */
-FlowGrid *fg_copy_safe(FlowGrid *G);
+FlowGrid *fg_copy(FlowGrid *G);
 
 /**
  * @brief Safely destroy a flowgrid, freeing its resources.
  * @param G Pointer to the FlowGrid to destroy.
  * @return Status code indicating success or failure
  */
-Status fg_destroy_safe(FlowGrid *G);
+Status fg_destroy(FlowGrid *G);
 
 /**
  * @brief Change the outflow direction of a vertex safely.
