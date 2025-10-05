@@ -277,10 +277,10 @@ Status fg_check_for_cycles(FlowGrid *G, linidx_t a, uint8_t n_previous_checks){
 
     while (vert.downstream != IS_ROOT){
         // if we find ourselves in a cycle, exit immediately and signal to the caller
-        if (vert.visited == n_previous_checks) return MALFORMED_GRAPH_WARNING;
-        else if ((vert.visited == n_previous_checks - 1) && (vert.visited != 0)) return SUCCESS; // already fully visited this node in a previous call, so we can exit early
-        
-        vert.visited += n_previous_checks;
+        if (vert.visited & (1 << n_previous_checks)) return MALFORMED_GRAPH_WARNING;
+        else if (vert.visited & (0xFF ^ (1 << n_previous_checks))) return SUCCESS; // already fully visited this node in a previous call, so we can exit early
+        vert.visited |= (1 << n_previous_checks);  // mark this node as visited in this traversal
+
         fg_set_lin(G, vert, a);  // unsafe is ok here because we already checked bounds
 
         // get next vertex
