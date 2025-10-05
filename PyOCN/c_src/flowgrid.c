@@ -62,13 +62,13 @@ const OffsetPair offsets[8] = {
 // }
 
 // for now, we just use normal row-major order
-linidx_t fg_cart_to_lin(CartPair coords, CartPair dims){
-    return ((linidx_t)coords.row * (linidx_t)dims.col + (linidx_t)coords.col);
+linidx_t fg_cart_to_lin_export(CartPair coords, CartPair dims){
+    return fg_cart_to_lin(coords, dims);
 }
-CartPair fg_lin_to_cart(linidx_t a, CartPair dims){
-    div_t adiv = div(a, dims.col);
-    return (CartPair){adiv.quot, adiv.rem};
-}
+// CartPair fg_lin_to_cart(linidx_t a, CartPair dims){
+//     div_t adiv = div(a, dims.col);
+//     return (CartPair){adiv.quot, adiv.rem};
+// }
 Status fg_clockhand_to_lin(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims, bool wrap){
     CartPair row_col = fg_lin_to_cart(a, dims);
     OffsetPair offset = offsets[down];
@@ -116,54 +116,50 @@ Status fg_clockhand_to_lin(linidx_t *a_down, linidx_t a, clockhand_t down, CartP
 // # Getters + Setters          #
 // ##############################
 // cartesian
-Status fg_get_cart(Vertex *out, FlowGrid *G, CartPair coords){
-    if (
-        G == NULL 
-        || out == NULL 
-        || coords.row < 0 
-        || coords.row >= G->dims.row 
-        || coords.col < 0 
-        || coords.col >= G->dims.col
-    ) return OOB_ERROR;
+// Status fg_get_cart(Vertex *out, FlowGrid *G, CartPair coords){
+//     if (
+//         G == NULL 
+//         || out == NULL 
+//         || coords.row < 0 
+//         || coords.row >= G->dims.row 
+//         || coords.col < 0 
+//         || coords.col >= G->dims.col
+//     ) return OOB_ERROR;
     
-    linidx_t a = fg_cart_to_lin(coords, G->dims);
-    *out = G->vertices[a];
-    return SUCCESS;
-}
+//     linidx_t a = fg_cart_to_lin(coords, G->dims);
+//     *out = G->vertices[a];
+//     return SUCCESS;
+// }
 // Vertex fg_get_cart(FlowGrid *G, CartPair coords){
 //     linidx_t a = fg_cart_to_lin(coords, G->dims);
 //     return G->vertices[a];
 // }
-Status fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords){
-    if (
-        G == NULL 
-        || coords.row < 0 
-        || coords.row >= G->dims.row 
-        || coords.col < 0 
-        || coords.col >= G->dims.col
-    ) return OOB_ERROR;
-    linidx_t a = fg_cart_to_lin(coords, G->dims);
-    G->vertices[a] = vert;
-    return SUCCESS;
-}
+// Status fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords){
+//     if (
+//         G == NULL 
+//         || coords.row < 0 
+//         || coords.row >= G->dims.row 
+//         || coords.col < 0 
+//         || coords.col >= G->dims.col
+//     ) return OOB_ERROR;
+//     linidx_t a = fg_cart_to_lin(coords, G->dims);
+//     G->vertices[a] = vert;
+//     return SUCCESS;
+// }
 // void fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords){
 //     linidx_t a = fg_cart_to_lin(coords, G->dims);
 //     G->vertices[a] = vert;
 // }
 
 // linear
-Status fg_get_lin(Vertex *out, FlowGrid *G, linidx_t a){
-    if (G == NULL || out == NULL || a < 0 || a >= ((linidx_t)G->dims.row * (linidx_t)G->dims.col)) return OOB_ERROR;
-    *out = G->vertices[a];
-    return SUCCESS;
+Status fg_get_lin_export(Vertex *out, FlowGrid *G, linidx_t a){
+    return fg_get_lin(out, G, a);
 }
 // Vertex fg_get_lin(FlowGrid *G, linidx_t a){
 //     return G->vertices[a];
 // }
-Status fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a){
-    if (G == NULL || a < 0 || a >= ((linidx_t)G->dims.row * (linidx_t)G->dims.col)) return OOB_ERROR;
-    G->vertices[a] = vert;
-    return SUCCESS;
+Status fg_set_lin_export(FlowGrid *G, Vertex vert, linidx_t a){
+    return fg_set_lin(G, vert, a);
 }
 // void fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a){
 //     G->vertices[a] = vert;

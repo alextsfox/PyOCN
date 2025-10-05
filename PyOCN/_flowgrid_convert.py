@@ -22,11 +22,11 @@ def to_digraph(c_graph:_bindings.FlowGrid_C) -> nx.DiGraph:
         vert_c = _bindings.Vertex_C()
         pbar = product(range(c_graph.dims.row), range(c_graph.dims.col))
         for r, c in pbar:
-            a = _bindings.libocn.fg_cart_to_lin(
+            a = _bindings.libocn.fg_cart_to_lin_export(
                 _bindings.CartPair_C(row=r, col=c), 
                 c_graph.dims
             )
-            check_status(_bindings.libocn.fg_get_lin(
+            check_status(_bindings.libocn.fg_get_lin_export(
                 byref(vert_c), 
                 byref(c_graph),
                 a,
@@ -170,7 +170,7 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
         if len(succs):
             nsucc = succs[0]
             G.nodes[n]["downstream"] = direction_bit(G.nodes[n]["pos"], G.nodes[nsucc]["pos"])
-            G.nodes[n]["adown"] = _bindings.libocn.fg_cart_to_lin(
+            G.nodes[n]["adown"] = _bindings.libocn.fg_cart_to_lin_export(
                 _bindings.CartPair_C(row=G.nodes[nsucc]["pos"][0], col=G.nodes[nsucc]["pos"][1]),
                 _bindings.CartPair_C(row=rows, col=cols)
             )
@@ -219,7 +219,7 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
         raise MemoryError("Failed to allocate memory for FlowGrid_C.")
     for n in G.nodes:
         r, c = G.nodes[n]["pos"]
-        a = _bindings.libocn.fg_cart_to_lin(
+        a = _bindings.libocn.fg_cart_to_lin_export(
             _bindings.CartPair_C(row=r, col=c),
             _bindings.CartPair_C(row=rows, col=cols)
         )
@@ -231,7 +231,7 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
             visited=G.nodes[n]["visited"],
         )
         try:
-            check_status(_bindings.libocn.fg_set_lin(p_c_graph, v_c, a))
+            check_status(_bindings.libocn.fg_set_lin_export(p_c_graph, v_c, a))
         except Exception as e:
             _bindings.libocn.fg_destroy(p_c_graph)
             p_c_graph = None

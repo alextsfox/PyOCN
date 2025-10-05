@@ -63,10 +63,17 @@ typedef struct {
 } FlowGrid;
 
 /** @brief Coordinate Transformation */
-linidx_t fg_cart_to_lin(CartPair coords, CartPair dims);
+inline linidx_t fg_cart_to_lin(CartPair coords, CartPair dims){
+    return ((linidx_t)coords.row * (linidx_t)dims.col + (linidx_t)coords.col);
+}
+linidx_t fg_cart_to_lin_export(CartPair coords, CartPair dims);
 
 /** @brief Coordinate Transformation */
-CartPair fg_lin_to_cart(linidx_t a, CartPair dims);
+inline CartPair fg_lin_to_cart(linidx_t a, CartPair dims){
+    div_t adiv = div(a, dims.col);
+    return (CartPair){adiv.quot, adiv.rem};
+}
+
 
 /**
  * @brief Given a linear index and a clockhand direction, find the linear index of the vertex in that direction.
@@ -86,7 +93,20 @@ Status fg_clockhand_to_lin(linidx_t *a_down, linidx_t a, clockhand_t down, CartP
  * @param coords The Cartesian coordinates of the vertex to retrieve.
  * @return Status code indicating success or failure
  */
-Status fg_get_cart(Vertex *out, FlowGrid *G, CartPair coords);
+inline Status fg_get_cart(Vertex *out, FlowGrid *G, CartPair coords){
+    if (
+        G == NULL 
+        || out == NULL 
+        || coords.row < 0 
+        || coords.row >= G->dims.row 
+        || coords.col < 0 
+        || coords.col >= G->dims.col
+    ) return OOB_ERROR;
+    
+    linidx_t a = fg_cart_to_lin(coords, G->dims);
+    *out = G->vertices[a];
+    return SUCCESS;
+}
 
 /**
  * @brief Set the vertex at the given Cartesian coordinates safely.
@@ -95,7 +115,18 @@ Status fg_get_cart(Vertex *out, FlowGrid *G, CartPair coords);
  * @param coords The Cartesian coordinates where the vertex should be set.
  * @return Status code indicating success or failure
  */
-Status fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords);
+inline Status fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords){
+    if (
+        G == NULL 
+        || coords.row < 0 
+        || coords.row >= G->dims.row 
+        || coords.col < 0 
+        || coords.col >= G->dims.col
+    ) return OOB_ERROR;
+    linidx_t a = fg_cart_to_lin(coords, G->dims);
+    G->vertices[a] = vert;
+    return SUCCESS;
+}
 
 /**
  * @brief Get the vertex at the given linear index safely.
@@ -104,7 +135,12 @@ Status fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords);
  * @param a The linear index of the vertex to retrieve.
  * @return Status code indicating success or failure
  */
-Status fg_get_lin(Vertex *out, FlowGrid *G, linidx_t a);
+inline Status fg_get_lin(Vertex *out, FlowGrid *G, linidx_t a){
+    if (G == NULL || out == NULL || a < 0 || a >= ((linidx_t)G->dims.row * (linidx_t)G->dims.col)) return OOB_ERROR;
+    *out = G->vertices[a];
+    return SUCCESS;
+}
+Status fg_get_lin_export(Vertex *out, FlowGrid *G, linidx_t a);
 
 /**
  * @brief Set the vertex at the given linear index safely.
@@ -113,7 +149,12 @@ Status fg_get_lin(Vertex *out, FlowGrid *G, linidx_t a);
  * @param a The linear index where the vertex should be set.
  * @return Status code indicating success or failure
  */
-Status fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a);
+inline Status fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a){
+    if (G == NULL || a < 0 || a >= ((linidx_t)G->dims.row * (linidx_t)G->dims.col)) return OOB_ERROR;
+    G->vertices[a] = vert;
+    return SUCCESS;
+}
+Status fg_set_lin_export(FlowGrid *G, Vertex vert, linidx_t a);
 
 /**
  * @brief Create an empty flowgrid with given dimensions safely.
