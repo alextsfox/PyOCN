@@ -1,5 +1,6 @@
 recursive-include PyOCN/c_src *.c *.h
 include readme.md
+include CHANGELOG.md
 include styleguide.md
 include LICENSE
 include PyOCN/c_src/build.sh
