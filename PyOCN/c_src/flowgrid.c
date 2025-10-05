@@ -39,6 +39,7 @@ const OffsetPair offsets[8] = {
 };
 
 // // 2d raster is block-tiled in memory to improve cache locality. Turns out this doesn't make much of a difference.
+// // we may end up using some variation of this later, so leaving it here for now.
 // const cartidx_t TILE_SIZE = 2;
 // linidx_t fg_cart_to_lin(CartPair coords, CartPair dims){
 //     cartidx_t row = coords.row;
@@ -130,10 +131,7 @@ Status fg_get_cart(Vertex *out, FlowGrid *G, CartPair coords){
     *out = G->vertices[a];
     return SUCCESS;
 }
-// Vertex fg_get_cart(FlowGrid *G, CartPair coords){
-//     linidx_t a = fg_cart_to_lin(coords, G->dims);
-//     return G->vertices[a];
-// }
+
 Status fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords){
     if (
         G == NULL 
@@ -146,10 +144,6 @@ Status fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords){
     G->vertices[a] = vert;
     return SUCCESS;
 }
-// void fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords){
-//     linidx_t a = fg_cart_to_lin(coords, G->dims);
-//     G->vertices[a] = vert;
-// }
 
 // linear
 Status fg_get_lin(Vertex *out, FlowGrid *G, linidx_t a){
@@ -157,17 +151,12 @@ Status fg_get_lin(Vertex *out, FlowGrid *G, linidx_t a){
     *out = G->vertices[a];
     return SUCCESS;
 }
-// Vertex fg_get_lin(FlowGrid *G, linidx_t a){
-//     return G->vertices[a];
-// }
+
 Status fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a){
     if (G == NULL || a < 0 || a >= ((linidx_t)G->dims.row * (linidx_t)G->dims.col)) return OOB_ERROR;
     G->vertices[a] = vert;
     return SUCCESS;
 }
-// void fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a){
-//     G->vertices[a] = vert;
-// }
 
 // ##############################
 // # Create/destroy flowgrid #
