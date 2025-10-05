@@ -646,11 +646,11 @@ class OCN:
 
         dims = array_out.shape[1:]
 
-        watershed_id = np.where(np.isnan(array_out[2]), -9999, array_out[2])
+
+        np.nan_to_num(array_out[2], copy=False, nan=-9999)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
-            watershed_id = watershed_id.astype(np.int32)
-
+            watershed_id = array_out[2].astype(np.int32)
         return xr.Dataset(
             data_vars={
                 "energy_rasters": (["y", "x"], array_out[0].astype(np.float64)),
@@ -670,7 +670,7 @@ class OCN:
             }
         )
 
-    def single_iteration(self, temperature:float, array_report:bool=False) -> "xr.Dataset | None":
+    def single_iteration(self, temperature:float, array_report:bool=False, unwrap:bool=True) -> "xr.Dataset | None":
         """ 
         Perform a single iteration of the optimization algorithm at a given temperature. Updates the internal history attribute.
         See :meth:`fit` for details on the algorithm.
@@ -684,6 +684,13 @@ class OCN:
             If True (default), the returned result will be an xarray.Dataset.
             See :meth:`fit` for details. The returned object will have an iteration dimension of size 1.
             Requires xarray to be installed.
+        unwrap : bool, default True
+            If True and the current OCN has periodic boundaries, the
+            resulting rasters will be transformed so connected grid cells
+            are adjacent in the output. This will result in a larger raster
+            with some nan values. If False or the current OCN does not have
+            periodic boundaries, then no transformation is applied and the
+            resulting raster will have the same dimensions as the current OCN grid.
 
         Raises
         ------
@@ -705,8 +712,8 @@ class OCN:
         
         if not array_report:
             return None
-        
-        ds = self.to_xarray(unwrap=self.unwrap)
+
+        ds = self.to_xarray(unwrap=unwrap)
         ds = ds.expand_dims({"iteration": [0]})
 
         return ds
@@ -720,6 +727,7 @@ class OCN:
         array_reports:int=0,
         tol:float=None,
         max_iterations_per_loop=10_000,
+        unwrap:bool=True,
     ) -> "xr.Dataset | None":
         """
         Convenience function to optimize the OCN using the simulated annealing algorithm from Carraro et al (2020).
@@ -786,6 +794,13 @@ class OCN:
             If provided, the number of iterations steps to perform in each "chunk"
             of optimization. Energy and output arrays can be reported no more often
             than this. Recommended values are 1_000-1_000_000. Default is 10_000.
+        unwrap: bool, default True
+            If True and the current OCN has periodic boundaries, the
+            resulting rasters will be transformed so connected grid cells
+            are adjacent in the output. This will result in a larger raster
+            with some nan values. If False or the current OCN does not have
+            periodic boundaries, then no transformation is applied and the
+            resulting raster will have the same dimensions as the current OCN grid.
 
         Returns
         -------
@@ -859,6 +874,7 @@ class OCN:
             array_reports=array_reports,
             tol=tol,
             max_iterations_per_loop=max_iterations_per_loop,
+            unwrap=unwrap,
         )
 
     def fit_custom_cooling(
@@ -870,6 +886,7 @@ class OCN:
         array_reports:int=0,
         tol:float=None,
         max_iterations_per_loop=10_000,
+        unwrap:bool=True,
     ) -> "xr.Dataset | None":
         """
         Optimize the OCN using the a custom cooling schedule. This allows for
@@ -897,6 +914,7 @@ class OCN:
         array_reports : int, default 0
         tol : float, optional
         max_iterations_per_loop: int, optional
+        unwrap: bool, default True
 
         Returns
         -------
@@ -1009,7 +1027,7 @@ class OCN:
                 )
             ):
                 array_report_idx.append(completed_iterations)
-                ds_out_dict[completed_iterations] = self.to_xarray(unwrap=self.wrap)
+                ds_out_dict[completed_iterations] = self.to_xarray(unwrap=unwrap)
 
 
             # progress bar update
@@ -1022,12 +1040,16 @@ class OCN:
                 T_over_E = anneal_buf[iterations_this_loop - 1]/e_old*100
                 ToE_str = f"{int(np.floor(T_over_E)):02d}.{int((T_over_E - np.floor(T_over_E))*100):02d}%"
                 de_over_E = (e_new - e_old)/e_old*100
-                dEoE_str = f"{['+','-'][de_over_E < 0]}{int(np.floor(np.abs(de_over_E))):02d}.{int(np.abs(de_over_E) - np.floor(np.abs(de_over_E))*100):02d}%"
+
+                dEoE_sign = '+' if de_over_E >= 0 else '-'
+                dEoE_integer_part = int(np.floor(np.abs(de_over_E)))
+                dEoE_fractional_part = int((np.abs(de_over_E) - dEoE_integer_part)*100)
+                dEoE_str = f"{dEoE_sign}{dEoE_integer_part:02d}.{dEoE_fractional_part:02d}%"
                 if T_over_E > 50: ToE_str = RED + ToE_str + END
                 elif T_over_E > 5: ToE_str = YELLOW + ToE_str + END
                 else: ToE_str = CYAN + ToE_str + END
-                if de_over_E > 5: dEoE_str = RED + dEoE_str + END
-                elif de_over_E > -5: dEoE_str = YELLOW + dEoE_str + END
+                if de_over_E > 1: dEoE_str = RED + dEoE_str + END
+                elif de_over_E > -1: dEoE_str = YELLOW + dEoE_str + END
                 else: dEoE_str = CYAN + dEoE_str + END
 
                 pbar.set_postfix({
