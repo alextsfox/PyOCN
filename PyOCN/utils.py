@@ -237,8 +237,8 @@ def simulated_annealing_schedule(
     return schedule
 
 def unwrap_digraph(dag: nx.DiGraph, dims: tuple[int, int]) -> nx.DiGraph:
-    """Come up with a mapping to "unwrap" gridcell coordinates from a with periodic boundary conditions
-    to a nonperiodic grid.
+    """"unwrap" gridcell coordinate attributes in a directed acyclic graph to place connected
+    nodes adjacent to each other, removing periodic boundary conditions.
 
     Parameters
     ----------
@@ -317,7 +317,11 @@ def unwrap_digraph(dag: nx.DiGraph, dims: tuple[int, int]) -> nx.DiGraph:
     return new_dag
 
 def assign_subwatersheds(dag: nx.DiGraph) -> None:
-    """Assign a 'watershed_id' attribute to each node in the DAG, identifying subwatersheds.
+    """Assign a 'watershed_id' attribute to each node in the DAG. 
+    The resulting watershed_ids will be of the highest order possible,
+    meaning that ids are assigned based on watersheds that drain directly into the 
+    root nodes of the graph. To assign ids to lower order watersheds, consider first
+    partitioning the graph into smaller subgraphs using the `get_subwatersheds` function.
 
     Parameters
     ----------
@@ -372,7 +376,8 @@ def get_subwatersheds(dag : nx.DiGraph, node : Any) -> set[nx.DiGraph]:
     Note
     ----
     The returned subwatersheds are subgraph views of the input graph and share node
-    and edge data with the original graph.
+    and edge data with the original graph. Unless copied, any changes to node or edge attributes
+    in the subwatersheds will affect the original graph.
     """
     subwatershed_outlets = [n for n in dag.predecessors(node)]
     subwatersheds = set(set(nx.ancestors(dag, outlet)) | {outlet} for outlet in subwatershed_outlets)
