@@ -8,6 +8,31 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath('..'))
 
+autodoc_mock_imports = [
+    'PyOCN._libocn_bindings',
+    'PyOCN._statushandler', 
+    'PyOCN.c_src',
+    'networkx',
+    'matplotlib', 
+    'numpy',
+    'xarray',
+    'tqdm',
+    'ctypes',
+    'rasterio',
+    'warnings',
+    'struct',
+    'itertools',
+]
+# Better autodoc configuration
+autodoc_typehints = "description"
+autodoc_typehints_description_target = "documented"
+autodoc_default_options = {
+    'members': True,
+    'undoc-members': True,
+    'show-inheritance': True,
+    'imported-members': True,
+}
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
@@ -23,7 +48,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.viewcode', 
     'sphinx.ext.napoleon',
-    'sphinx_autodoc_typehints',  # pip install sphinx-autodoc-typehints
+    # 'sphinx_autodoc_typehints',  # pip install sphinx-autodoc-typehints
     'myst_parser',              # pip install myst-parser
 ]
 # MyST settings

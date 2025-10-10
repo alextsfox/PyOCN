@@ -1,0 +1,9 @@
+sphinx
+sphinx-rtd-theme
+myst-parser
+sphinx-autodoc-typehints
+networkx
+matplotlib
+numpy
+xarray
+tqdm
