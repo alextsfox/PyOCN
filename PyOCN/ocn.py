@@ -298,10 +298,10 @@ class OCN:
         cpy = object.__new__(type(self))
         cpy.gamma = self.gamma
         cpy.verbosity = self.verbosity
-        cpy.master_seed = self.master_seed
+        cpy.__master_seed = self.master_seed
         cpy.__history = self.history.copy()
-        cpy.__p_c_graph.contents.resolution = self.resolution
-        cpy.__p_c_graph.contents.wrap = self.wrap
+        # cpy.__p_c_graph.contents.resolution = self.resolution
+        # cpy.__p_c_graph.contents.wrap = self.wrap
 
         cpy_p_c_graph = _bindings.libocn.fg_copy(self.__p_c_graph)
         if not cpy_p_c_graph:
@@ -992,7 +992,8 @@ class OCN:
         energy_report_idx = []
         ds_out_dict = dict()
         array_report_idx.append(completed_iterations)
-        ds_out_dict[completed_iterations] = self.to_xarray(unwrap=self.wrap)
+        if xarray_out:
+            ds_out_dict[completed_iterations] = self.to_xarray(unwrap=self.wrap)
         energy_out[0] = self.energy
         energy_report_idx.append(completed_iterations)
 

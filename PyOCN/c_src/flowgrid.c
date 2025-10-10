@@ -176,7 +176,10 @@ FlowGrid *fg_create_empty(CartPair dims){
 
     G->dims = dims;
     G->vertices = vertices;
-    
+    G->energy = 0.0;
+    G->resolution = 1.0;
+    G->nroots = 0;
+    G->wrap = false;
     return G;
 }
 
@@ -186,6 +189,9 @@ FlowGrid *fg_copy(FlowGrid *G){
     if (out == NULL) return NULL;
     out->dims = G->dims;
     out->energy = G->energy;
+    out->resolution = G->resolution;
+    out->nroots = G->nroots;
+    out->wrap = G->wrap;
     linidx_t nvertices = (linidx_t)G->dims.row * (linidx_t)G->dims.col;
     memcpy(
         out->vertices, 
