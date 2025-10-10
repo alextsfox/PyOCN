@@ -13,6 +13,7 @@
 #include "status.h"
 #include "flowgrid.h"
 #include "ocn.h"
+#include "rng.h"
 
 /**
  * @brief Simulated annealing acceptance criterion.
@@ -21,11 +22,11 @@
  * @param temperature The current temperature.
  * @return true if the new state is accepted, false otherwise.
  */
-bool simulate_annealing(double energy_new, double energy_old, double temperature){
-    double u = (double)rand() / (double)RAND_MAX;
-    double delta_energy = energy_new - energy_old;
-    double p = exp(-delta_energy / temperature);
-    return u < p;
+static inline bool simulate_annealing(double energy_new, double energy_old, double inv_temperature, rng_state_t *rng){
+    const double delta_energy = energy_new - energy_old;
+    if (delta_energy <= 0.0) return true;  // Always accept improvements
+    const double p = exp(-delta_energy * inv_temperature);
+    return rng_uniformdouble(rng) < p;
 }
 
 /**
@@ -35,7 +36,7 @@ bool simulate_annealing(double energy_new, double energy_old, double temperature
  * @param a The linear index of the starting vertex.
  * @return Status code indicating success or failure
  */
-Status update_drained_area(FlowGrid *G, drainedarea_t da_inc, linidx_t a){
+static inline Status update_drained_area(FlowGrid *G, drainedarea_t da_inc, linidx_t a){
     Vertex vert;
     do {
         Status code = fg_get_lin(&vert, G, a);
@@ -96,13 +97,15 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     CartPair dims = G->dims;
     linidx_t nverts = (linidx_t)dims.row * (linidx_t)dims.col;
 
+    double inv_temperature = 1.0 / temperature;
+
     double energy_old, energy_new;
     energy_old = G->energy;
     
-    a = rand() % nverts;  // pick a random vertex
-    a_step_dir = (rand() % 2)*2 - 1;  // pick a random direction to step in if we need a new vertex
-    down_new = rand() % 8;  // pick a random new downstream direction
-    down_step_dir = (rand() % 2)*2 - 1;  // pick a random direction to step in if we need a new direction
+    a = rng_randint32(&G->rng) % nverts;  // pick a random vertex
+    a_step_dir = (rng_randint32(&G->rng) % 2)*2 - 1;  // pick a random direction to step in if we need a new vertex
+    down_new = rng_randint32(&G->rng) >> 29;  // bit shift of 29 gives a number from 0-7
+    down_step_dir = (rng_randint32(&G->rng) % 2)*2 - 1;  // pick a random direction to step in if we need a new direction
 
     for (linidx_t nverts_tried = 0; nverts_tried < nverts; nverts_tried++){  // try a new vertex each time, up to the number of vertices in the graph
         // clunky way to wrap around, since apparently % on negative numbers is confusing as hell in C
@@ -169,7 +172,7 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
         update_drained_area(G, -da_inc, a_down_old);  // remove drainage from old path
         update_drained_area(G, da_inc, a_down_new);  // add drainage to new path
         energy_new = ocn_compute_energy(G, gamma);  // recompute energy from scratch
-        if (simulate_annealing(energy_new, energy_old, temperature)){
+        if (simulate_annealing(energy_new, energy_old, inv_temperature, &G->rng)){
             G->energy = energy_new;
             return SUCCESS;
         }
@@ -181,7 +184,7 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
         update_energy_single_root(G, -da_inc, a_down_old, gamma);  // remove drainage from old path and update energy
         update_energy_single_root(G, da_inc, a_down_new, gamma);  // add drainage to new path and update energy
         energy_new = G->energy;
-        if (simulate_annealing(energy_new, energy_old, temperature)){
+        if (simulate_annealing(energy_new, energy_old, temperature, &G->rng)){
             return SUCCESS;
         }
         // reject swap: undo everything and try again

@@ -144,7 +144,7 @@ class OCN:
         
         self.verbosity = verbosity
         self.gamma = gamma
-        self.master_seed = random_state
+        self.rng = random_state
         self.__p_c_graph = fgconv.from_digraph(  # does most of the work 
             dag, 
             resolution, 
@@ -298,10 +298,8 @@ class OCN:
         cpy = object.__new__(type(self))
         cpy.gamma = self.gamma
         cpy.verbosity = self.verbosity
-        cpy.__master_seed = self.master_seed
+        
         cpy.__history = self.history.copy()
-        # cpy.__p_c_graph.contents.resolution = self.resolution
-        # cpy.__p_c_graph.contents.wrap = self.wrap
 
         cpy_p_c_graph = _bindings.libocn.fg_copy(self.__p_c_graph)
         if not cpy_p_c_graph:
@@ -400,18 +398,18 @@ class OCN:
         """
         return self.__p_c_graph.contents.wrap
     @property
-    def master_seed(self) -> int:
+    def rng(self) -> tuple[int, int, int, int]:
         """
-        The seed used to initialize the internal RNG.
-
         Returns
         -------
-        int
-            Current master seed.
+        tuple[int, int, int, int]
+            the current random state of the internal RNG as four 32-bit unsigned integers.
         """
-        return self.__master_seed
-    @master_seed.setter
-    def master_seed(self, random_state:int|None|np.random.Generator=None):
+        s = (int(si) for si in self.__p_c_graph.contents.rng.s)
+        return s
+    
+    @rng.setter
+    def rng(self, random_state:int|None|np.random.Generator=None):
         """
         Seed the internal RNG.
 
@@ -424,14 +422,9 @@ class OCN:
         """
         if not isinstance(random_state, (int, np.integer, type(None), np.random.Generator)):
             raise ValueError("RNG must be initialized with an integer/Generator/None.")
-        self.__master_seed = np.random.default_rng(random_state).integers(0, int(2**32 - 1))
-        _bindings.libocn.rng_seed(self.master_seed)
-
-    def _advance_seed(self):
-        random_state = self.master_seed
-        new_random_state = np.random.default_rng(random_state).integers(0, int(2**32 - 1))
-        self.__master_seed = new_random_state
-        _bindings.libocn.rng_seed(self.__master_seed)
+        seed = np.random.default_rng(random_state).integers(0, int(2**32 - 1))
+        rng = _bindings.rng_state_t()
+        _bindings.libocn.rng_seed(ctypes.byref(rng), seed)
 
     @property
     def history(self) -> np.ndarray:
@@ -670,7 +663,7 @@ class OCN:
                 "description": "OCN fit result arrays",
                 "resolution": self.resolution,
                 "gamma": self.gamma,
-                "master_seed": int(self.master_seed),
+                "master_seed": int(self.rng),
                 "wrap": self.wrap,
             }
         )
@@ -703,7 +696,6 @@ class OCN:
             If the underlying C routine reports an error status.
         """
         # FlowGrid *G, uint32_t *total_tries, double gamma, double temperature
-        self._advance_seed()
         check_status(_bindings.libocn.ocn_single_erosion_event(
             self.__p_c_graph,
             self.gamma, 
@@ -1004,7 +996,6 @@ class OCN:
         )
         
         while completed_iterations < n_iterations:
-            self._advance_seed()  # advance the RNG state to decorrelate from any previous calls
             iterations_this_loop = min(max_iterations_per_loop, n_iterations - completed_iterations)
             anneal_buf[:iterations_this_loop] = cooling_func(
                 np.arange(completed_iterations, completed_iterations + iterations_this_loop)
@@ -1128,7 +1119,7 @@ class OCN:
                 "description": "OCN fit result arrays",
                 "resolution": self.resolution,
                 "gamma": self.gamma,
-                "master_seed": int(self.master_seed),
+                "master_seed": int(self.rng),
                 "wrap": self.wrap,
             }
         )

@@ -180,6 +180,7 @@ FlowGrid *fg_create_empty(CartPair dims){
     G->resolution = 1.0;
     G->nroots = 0;
     G->wrap = false;
+    G->rng = (rng_state_t){0};  // initialize RNG state to zero; user should seed it later
     return G;
 }
 
@@ -192,6 +193,7 @@ FlowGrid *fg_copy(FlowGrid *G){
     out->resolution = G->resolution;
     out->nroots = G->nroots;
     out->wrap = G->wrap;
+    out->rng = G->rng;
     linidx_t nvertices = (linidx_t)G->dims.row * (linidx_t)G->dims.col;
     memcpy(
         out->vertices, 

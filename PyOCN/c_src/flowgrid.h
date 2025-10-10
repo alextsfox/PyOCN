@@ -8,6 +8,7 @@
 #define FLOWGRID_H
 
 #include <stdint.h>
+#include "rng.h"
 
 // basic types
 typedef double drainedarea_t;
@@ -60,6 +61,7 @@ typedef struct {
     uint16_t nroots;
     Vertex *vertices;
     bool wrap;
+    rng_state_t rng;
 } FlowGrid;
 
 /** @brief Coordinate Transformation */

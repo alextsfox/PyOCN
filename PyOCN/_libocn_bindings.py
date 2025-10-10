@@ -37,6 +37,9 @@ def _load_libocn():
 
 libocn = _load_libocn()
 
+
+
+
 #############################
 #   STATUS.H EQUIVALENTS    #
 #############################
@@ -48,6 +51,27 @@ OOB_ERROR = int(Status.in_dll(libocn, "OOB_ERROR").value)
 NULL_POINTER_ERROR = int(Status.in_dll(libocn, "NULL_POINTER_ERROR").value)
 SWAP_WARNING = int(Status.in_dll(libocn, "SWAP_WARNING").value)
 MALFORMED_GRAPH_WARNING = int(Status.in_dll(libocn, "MALFORMED_GRAPH_WARNING").value)
+
+########################
+#  RNG.H EQUIVALENTS   #
+########################
+
+class rng_state_t(Structure):
+    _fields_ = [
+        ("s", c_uint32 * 4),
+    ]
+
+# void rng_seed(rng_state_t *rng, uint32_t seed);
+libocn.rng_seed.argtypes = [POINTER(rng_state_t), c_uint32]
+libocn.rng_seed.restype = None
+
+# void rng_seed_random(rng_state_t *state);
+libocn.rng_seed_random.argtypes = [POINTER(rng_state_t)]
+libocn.rng_seed_random.restype = None
+
+# uint32_t rng_randint32(rng_state_t *state);
+libocn.rng_randint32.argtypes = [POINTER(rng_state_t)]
+libocn.rng_randint32.restype = c_uint32
 
 #############################
 # STREAMGRAPH.H EQUIVALENTS #
@@ -84,6 +108,7 @@ class FlowGrid_C(Structure):
         ("nroots", c_uint16),
         ("vertices", POINTER(Vertex_C)),  # Vertex*
         ("wrap", c_bool),
+        ("rng", rng_state_t),  # rng_state_t
     ]
 
 # linidx_t fg_cart_to_lin(CartPairC coords, CartPairC dims);
@@ -126,17 +151,6 @@ libocn.ocn_single_erosion_event.restype = Status
 libocn.ocn_outer_ocn_loop.argtypes = [POINTER(FlowGrid_C), c_uint32, c_double, POINTER(c_double)]
 libocn.ocn_outer_ocn_loop.restype = Status
 
-########################
-#  RNG.H EQUIVALENTS   #
-########################
-
-# void rng_seed(unsigned int seed);
-libocn.rng_seed.argtypes = [c_uint32]
-libocn.rng_seed.restype = None
-
-# void rng_seed_random();
-libocn.rng_seed_random.argtypes = []
-libocn.rng_seed_random.restype = None
 
 __all__ = [
     "SUCCESS",
