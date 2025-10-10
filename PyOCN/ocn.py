@@ -144,7 +144,6 @@ class OCN:
         
         self.verbosity = verbosity
         self.gamma = gamma
-        self.rng = random_state
         self.__p_c_graph = fgconv.from_digraph(  # does most of the work 
             dag, 
             resolution, 
@@ -152,6 +151,7 @@ class OCN:
             validate=validate, 
             wrap=wrap
         )
+        self.rng = random_state
         self.__p_c_graph.contents.energy = self.compute_energy()
 
         self.__history = np.empty((0, 3), dtype=np.float64)
@@ -405,7 +405,8 @@ class OCN:
         tuple[int, int, int, int]
             the current random state of the internal RNG as four 32-bit unsigned integers.
         """
-        s = (int(si) for si in self.__p_c_graph.contents.rng.s)
+        
+        s = tuple(self.__p_c_graph.contents.rng.s)
         return s
     
     @rng.setter
@@ -425,6 +426,7 @@ class OCN:
         seed = np.random.default_rng(random_state).integers(0, int(2**32 - 1))
         rng = _bindings.rng_state_t()
         _bindings.libocn.rng_seed(ctypes.byref(rng), seed)
+        self.__p_c_graph.contents.rng = rng
 
     @property
     def history(self) -> np.ndarray:

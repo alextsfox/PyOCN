@@ -82,6 +82,54 @@ class TestBasicOCN(unittest.TestCase):
 
         self.assertAlmostEqual(ocn.energy, ocn_copy.energy, places=6)
 
+    def test_ocn_rng(self):
+        """Test that the rng property returns the expected random state."""
+        ocn = po.OCN.from_net_type(
+            net_type="V",
+            dims=(64, 64),
+            random_state=8472,
+        )
+        expected_rng = (510574073, 2087720647, 3836914231, 3781483648)
+        
+        self.assertEqual(
+            ocn.rng, 
+            expected_rng, 
+            f"Expected RNG state {expected_rng}, got {ocn.rng}"
+        )
+
+        ocn.rng = 8470
+        self.assertNotEqual(
+            ocn.rng, 
+            expected_rng, 
+            f"After changing seed, RNG state should differ from {expected_rng}"
+        )
+
+        # Reset to original seed and check
+        ocn.rng = 8472
+        self.assertEqual(
+            ocn.rng, 
+            expected_rng, 
+            f"After resetting, expected RNG state {expected_rng}, got {ocn.rng}"
+        )
+
+        ocn.rng = 8472
+        ocn.rng = 8472
+        ocn.rng = 8472
+        self.assertEqual(
+            ocn.rng, 
+            expected_rng, 
+            f"Setting rng to the same seed multiple times should not change the state. Expected {expected_rng}, got {ocn.rng}"
+        )
+
+        ocn.single_iteration(0)
+        self.assertNotEqual(
+            ocn.rng, 
+            expected_rng, 
+            f"After iteration, RNG state should differ from {expected_rng}. Got {ocn.rng}"
+        )
+
+
+
 
     
 
