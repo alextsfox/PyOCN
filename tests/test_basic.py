@@ -89,7 +89,7 @@ class TestBasicOCN(unittest.TestCase):
             dims=(64, 64),
             random_state=8472,
         )
-        expected_rng = (510574073, 2087720647, 3836914231, 3781483648)
+        expected_rng = 40451845669725511932870495160880127104
         
         self.assertEqual(
             ocn.rng, 

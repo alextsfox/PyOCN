@@ -978,8 +978,8 @@ class OCN:
                 and (e_new <= e_old) 
                 and (abs((e_old - e_new)/e_old) if e_old > 0 else np.inf < tol)
             ):
-                print("Convergence reached, stopping optimization.")
-                # if self.verbosity >= 0:
+                if self.verbosity > 1:
+                    print("Convergence reached, stopping optimization.")
                 break
         
         pbar.close()
