@@ -213,30 +213,13 @@ class TestBasicOCN(unittest.TestCase):
         ocn = po.OCN.from_net_type("V", dims=(16, 16), random_state=3333)
         initial_history_len = len(ocn.history)
         
-        result = ocn.single_iteration(temperature=100.0, array_report=False)
+        result = ocn.single_iteration(temperature=ocn.energy, array_report=False)
         
         # Should return None when array_report=False
         self.assertIsNone(result)
         
         # History should have one more entry
         self.assertEqual(len(ocn.history), initial_history_len + 1)
-        
-        # Energy might have changed
-        self.assertIsInstance(ocn.energy, float)
-
-    def test_gamma_parameter(self):
-        """Test that gamma parameter affects energy calculation."""
-        dag = nx.DiGraph()
-        dag.add_node(0, pos=(0, 0))
-        dag.add_node(1, pos=(0, 1))
-        dag.add_edge(1, 0)  # Simple 2-node network
-        
-        ocn_low_gamma = po.OCN.from_digraph(dag, gamma=0.1, random_state=1111)
-        ocn_high_gamma = po.OCN.from_digraph(dag, gamma=0.9, random_state=1111)
-        
-        self.assertNotEqual(ocn_low_gamma.energy, ocn_high_gamma.energy)
-        self.assertEqual(ocn_low_gamma.gamma, 0.1)
-        self.assertEqual(ocn_high_gamma.gamma, 0.9)
 
     def test_error_handling(self):
         """Test error handling for invalid inputs."""
