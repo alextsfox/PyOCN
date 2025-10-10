@@ -9,6 +9,15 @@ PyOCN Documentation
 This is a package to generate optimal channel networks (OCNs), based on the algorithm described in Carraro et al. (2020). *Generation and application of river network analogues for use in ecology and evolution. Ecology and Evolution.* doi:10.1002/ece3.6479 
 and mirrors some of the functionality of the OCNet R package (https://lucarraro.github.io/OCNet/).
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Contents:
+
+   installation
+   quickstart
+   api
+   examples
+
 Installation
 ============
 
@@ -30,7 +39,6 @@ Quick Start
 .. code-block:: python
 
    import PyOCN as po
-   import matplotlib.pyplot as plt
 
    # Create an OCN from a predefined initial network type
    ocn = po.OCN.from_net_type("I", dims=(32, 32), gamma=0.5, random_state=42)

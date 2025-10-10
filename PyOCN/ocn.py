@@ -1,23 +1,3 @@
-from __future__ import annotations
-import warnings
-import ctypes
-from typing import Any, Callable, TYPE_CHECKING, Union
-from os import PathLike
-from numbers import Number
-from pathlib import Path
-
-import networkx as nx 
-import numpy as np
-from tqdm import tqdm
-
-from ._statushandler import check_status
-from .utils import simulated_annealing_schedule, net_type_to_dag, unwrap_digraph, assign_subwatersheds
-from . import _libocn_bindings as _bindings
-from . import _flowgrid_convert as fgconv
-
-if TYPE_CHECKING:
-    import xarray as xr
-
 """
 High-level Optimized Channel Network (OCN) interface.
 
@@ -43,8 +23,27 @@ PyOCN.plotting
         Helper functions for visualization and plotting
 """
 
-#TODO: have to_rasterio use the option to set the root node to 0,0 by using to_xarray as the backend instead of numpy?
+"""
+TODO: relax the even dims requirement
+TODO: have to_rasterio use the option to set the root node to 0,0 by using to_xarray as the backend instead of numpy?
+"""
 
+import warnings
+import ctypes
+from typing import Any, Callable
+from os import PathLike
+from numbers import Number
+from pathlib import Path
+from dataclasses import dataclass
+
+import networkx as nx 
+import numpy as np
+from tqdm import tqdm
+
+from ._statushandler import check_status
+from .utils import simulated_annealing_schedule, net_type_to_dag, unwrap_digraph, assign_subwatersheds
+from . import _libocn_bindings as _bindings
+from . import _flowgrid_convert as fgconv
 
 class OCN:
     """
@@ -411,7 +410,7 @@ class OCN:
         return s
     
     @rng.setter
-    def rng(self, random_state: Union[int, None, np.random.Generator] = None):
+    def rng(self, random_state:int|None|np.random.Generator=None):
         """
         Seed the internal RNG.
 
