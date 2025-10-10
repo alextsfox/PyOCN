@@ -39,6 +39,7 @@ const OffsetPair offsets[8] = {
 };
 
 // // 2d raster is block-tiled in memory to improve cache locality. Turns out this doesn't make much of a difference.
+// // we may end up using some variation of this later, so leaving it here for now.
 // const cartidx_t TILE_SIZE = 2;
 // linidx_t fg_cart_to_lin(CartPair coords, CartPair dims){
 //     cartidx_t row = coords.row;
@@ -69,13 +70,34 @@ CartPair fg_lin_to_cart(linidx_t a, CartPair dims){
     div_t adiv = div(a, dims.col);
     return (CartPair){adiv.quot, adiv.rem};
 }
-Status fg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims){
+Status fg_clockhand_to_lin(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims, bool wrap){
     CartPair row_col = fg_lin_to_cart(a, dims);
     OffsetPair offset = offsets[down];
     OffsetPair cart_down_off = {
         .row = (int16_t)row_col.row + offset.row,
         .col = (int16_t)row_col.col + offset.col
     };
+
+    // bool edge_does_wrap = false;
+    if (wrap){
+        if (cart_down_off.row == -1){
+            // edge_does_wrap = true;
+            cart_down_off.row += dims.row;
+        } 
+        else if (cart_down_off.row == (int16_t)dims.row){
+            // edge_does_wrap = true;
+            cart_down_off.row -= dims.row;
+        } 
+        if (cart_down_off.col == -1){
+            // edge_does_wrap = true;
+            cart_down_off.col += dims.col;
+        } 
+        else if (cart_down_off.col == (int16_t)dims.col){
+            // edge_does_wrap = true;
+            cart_down_off.col -= dims.col;
+        } 
+    }
+
     if (
         cart_down_off.row < 0 
         || cart_down_off.row >= (int16_t)dims.row 
@@ -88,7 +110,6 @@ Status fg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, 
     };
 
     *a_down = fg_cart_to_lin(cart_down, dims);
-
     return SUCCESS;
 }
 
@@ -96,7 +117,7 @@ Status fg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, 
 // # Getters + Setters          #
 // ##############################
 // cartesian
-Status fg_get_cart_safe(Vertex *out, FlowGrid *G, CartPair coords){
+Status fg_get_cart(Vertex *out, FlowGrid *G, CartPair coords){
     if (
         G == NULL 
         || out == NULL 
@@ -110,11 +131,8 @@ Status fg_get_cart_safe(Vertex *out, FlowGrid *G, CartPair coords){
     *out = G->vertices[a];
     return SUCCESS;
 }
-Vertex fg_get_cart(FlowGrid *G, CartPair coords){
-    linidx_t a = fg_cart_to_lin(coords, G->dims);
-    return G->vertices[a];
-}
-Status fg_set_cart_safe(FlowGrid *G, Vertex vert, CartPair coords){
+
+Status fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords){
     if (
         G == NULL 
         || coords.row < 0 
@@ -126,34 +144,25 @@ Status fg_set_cart_safe(FlowGrid *G, Vertex vert, CartPair coords){
     G->vertices[a] = vert;
     return SUCCESS;
 }
-void fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords){
-    linidx_t a = fg_cart_to_lin(coords, G->dims);
-    G->vertices[a] = vert;
-}
 
 // linear
-Status fg_get_lin_safe(Vertex *out, FlowGrid *G, linidx_t a){
+Status fg_get_lin(Vertex *out, FlowGrid *G, linidx_t a){
     if (G == NULL || out == NULL || a < 0 || a >= ((linidx_t)G->dims.row * (linidx_t)G->dims.col)) return OOB_ERROR;
     *out = G->vertices[a];
     return SUCCESS;
 }
-Vertex fg_get_lin(FlowGrid *G, linidx_t a){
-    return G->vertices[a];
-}
-Status fg_set_lin_safe(FlowGrid *G, Vertex vert, linidx_t a){
+
+Status fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a){
     if (G == NULL || a < 0 || a >= ((linidx_t)G->dims.row * (linidx_t)G->dims.col)) return OOB_ERROR;
     G->vertices[a] = vert;
     return SUCCESS;
-}
-void fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a){
-    G->vertices[a] = vert;
 }
 
 // ##############################
 // # Create/destroy flowgrid #
 // ##############################
-FlowGrid *fg_create_empty_safe(CartPair dims){
-    if (dims.row % 2 != 0 || dims.col % 2 != 0) return NULL;  // dimensions must be even
+FlowGrid *fg_create_empty(CartPair dims){
+    if (dims.row <= 0 || dims.col <= 0) return NULL;
 
     FlowGrid *G = malloc(sizeof(FlowGrid));
     if (G == NULL) return NULL;
@@ -167,16 +176,24 @@ FlowGrid *fg_create_empty_safe(CartPair dims){
 
     G->dims = dims;
     G->vertices = vertices;
-    
+    G->energy = 0.0;
+    G->resolution = 1.0;
+    G->nroots = 0;
+    G->wrap = false;
+    G->rng = (rng_state_t){0};  // initialize RNG state to zero; user should seed it later
     return G;
 }
 
-FlowGrid *fg_copy_safe(FlowGrid *G){
+FlowGrid *fg_copy(FlowGrid *G){
     if (G == NULL || G->vertices == NULL) return NULL;
-    FlowGrid *out = fg_create_empty_safe(G->dims);
+    FlowGrid *out = fg_create_empty(G->dims);
     if (out == NULL) return NULL;
     out->dims = G->dims;
     out->energy = G->energy;
+    out->resolution = G->resolution;
+    out->nroots = G->nroots;
+    out->wrap = G->wrap;
+    out->rng = G->rng;
     linidx_t nvertices = (linidx_t)G->dims.row * (linidx_t)G->dims.col;
     memcpy(
         out->vertices, 
@@ -185,7 +202,7 @@ FlowGrid *fg_copy_safe(FlowGrid *G){
     return out;
 }
 
-Status fg_destroy_safe(FlowGrid *G){
+Status fg_destroy(FlowGrid *G){
     if (G != NULL){
         if (G->vertices != NULL) free(G->vertices); G->vertices = NULL;
         free(G); 
@@ -205,18 +222,19 @@ Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new){
     clockhand_t down_old;
     
     // 1. Get G[a], G[a_down_old], G[adownnew] safely
-    code = fg_get_lin_safe(&vert, G, a);
+    code = fg_get_lin(&vert, G, a);
     if (code == OOB_ERROR) return OOB_ERROR;
     down_old = vert.downstream;
 
     a_down_old = vert.adown;
-    code = fg_get_lin_safe(&vert_down_old, G, a_down_old);
+    code = fg_get_lin(&vert_down_old, G, a_down_old);
     if (code == OOB_ERROR) return OOB_ERROR;
 
     // a_down_new is trickier to get.
-    code = fg_clockhand_to_lin_safe(&a_down_new, a, down_new, dims);
+    code = fg_clockhand_to_lin(&a_down_new, a, down_new, dims, G->wrap);
     if (code == OOB_ERROR) return OOB_ERROR;
-    vert_down_new = fg_get_lin(G, a_down_new);  // we can use unsafe here because we already checked bounds
+    code = fg_get_lin(&vert_down_new, G, a_down_new);  // we can use unsafe here because we already checked bounds
+    if (code == OOB_ERROR) return OOB_ERROR;
 
     // 2. check for any immediate problems with the swap that would malform the graph
     // check that the new downstream is valid (does not check for large cycles or for root access)
@@ -235,7 +253,8 @@ Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new){
         case 3: check_row_col.row += 1; break;  // SE flow: check S vertex
         case 5: check_row_col.row += 1; break;  // SW flow: check S vertex
     }
-    fg_get_cart_safe(&cross_check_vert, G, check_row_col);
+    code = fg_get_cart(&cross_check_vert, G, check_row_col);
+    if (code == OOB_ERROR) return OOB_ERROR;
     switch (down_new){
         case 1: if (cross_check_vert.edges & (1u << 3)) return SWAP_WARNING; break;  // NE flow: N vertex cannot have a SE edge
         case 7: if (cross_check_vert.edges & (1u << 5)) return SWAP_WARNING; break;  // NW flow: N vertex cannot have a SW edge
@@ -258,23 +277,23 @@ Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new){
     return SUCCESS;
 }
 
-Status fg_flow_downstream_safe(FlowGrid *G, linidx_t a, uint8_t ncalls){
+Status fg_check_for_cycles(FlowGrid *G, linidx_t a, uint8_t check_number){
     Vertex vert;
     Status code;
-    code = fg_get_lin_safe(&vert, G, a);
+    code = fg_get_lin(&vert, G, a);
     if (code != SUCCESS) return code;
 
     while (vert.downstream != IS_ROOT){
         // if we find ourselves in a cycle, exit immediately and signal to the caller
-        if (vert.visited == ncalls) return MALFORMED_GRAPH_WARNING;
-        else if ((vert.visited == ncalls - 1) && (vert.visited != 0)) return SUCCESS; // already fully visited this node in a previous call, so we can exit early
+        if (vert.visited == check_number) return MALFORMED_GRAPH_WARNING;
+        else if ((vert.visited != check_number) && (vert.visited != 0)) return SUCCESS; // already fully visited this node in a previous call, so we can exit early
+        vert.visited += check_number;
         
-        vert.visited += ncalls;
         fg_set_lin(G, vert, a);  // unsafe is ok here because we already checked bounds
 
         // get next vertex
         a = vert.adown;
-        code = fg_get_lin_safe(&vert, G, a);
+        code = fg_get_lin(&vert, G, a);
         if (code != SUCCESS) return code;
     }
     return SUCCESS;  // found root successfully, no cycles found

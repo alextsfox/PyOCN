@@ -25,6 +25,8 @@ TODO*
 # random jupyter stuff
 testing.py
 testing.ipynb
+sandbox.py
+sandbox.ipynb
 
 # python cache files
 **/__pycache__/

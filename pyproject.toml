@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "PyOCN"
-version = "1.0.20251001"
+version = "1.2.20251010"
 description = "Optimal Channel Networks (OCN) in Python with a C core"
 readme = "readme.md"
 requires-python = ">=3.10"
@@ -26,6 +26,7 @@ raster = [
 [project.urls]
 Repository = "https://github.com/alextsfox/PyOCN"
 Documentation = "https://pyocn.readthedocs.io"  # or your docs URL
+Changelog = "https://github.com/alextsfox/PyOCN/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 include = ["PyOCN*"]

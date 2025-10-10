@@ -26,7 +26,7 @@ def to_digraph(c_graph:_bindings.FlowGrid_C) -> nx.DiGraph:
                 _bindings.CartPair_C(row=r, col=c), 
                 c_graph.dims
             )
-            check_status(_bindings.libocn.fg_get_lin_safe(
+            check_status(_bindings.libocn.fg_get_lin(
                 byref(vert_c), 
                 byref(c_graph),
                 a,
@@ -45,7 +45,7 @@ def to_digraph(c_graph:_bindings.FlowGrid_C) -> nx.DiGraph:
         
         return dag
 
-def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate:bool=True) -> POINTER:
+def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate:bool=True, wrap:bool=False) -> POINTER:
     """
     Convert a NetworkX directed graph into a FlowGrid_C. Called by the OCN constructor.
 
@@ -56,7 +56,9 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
     resolution: float
         The sidelength of each gridcell in meters. Default 1.
     validate: bool
-        Whether to check the input graph for validity before conversion. Default True. For internal use only.
+        Whether to check the input graph for validity before conversion. 
+        Default True. If false, the user is responsible for ensuring the graph is valid.
+        For internal use only. 
     Returns:
         p_c_graph: pointer to the created C FlowGrid structure.
     """
@@ -67,6 +69,8 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
 
     # is a DAG
     if validate:
+        if not isinstance(wrap, bool):
+            raise TypeError(f"wrap must be a bool, got {type(wrap)}")
         if not isinstance(G, nx.DiGraph):
             raise TypeError(f"G must be a networkx.DiGraph, got {type(G)}")
         if not nx.is_directed_acyclic_graph(G):
@@ -120,13 +124,18 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
         for u, v in G.edges:
             r1, c1 = G.nodes[u]["pos"]
             r2, c2 = G.nodes[v]["pos"]
-            if max(abs(r1 - r2), abs(c1 - c2)) != 1:
+            dr, dc = abs(r2 - r1), abs(c2 - c1)
+            if wrap:
+                dr = min(dr, rows - dr)
+                dc = min(dc, cols - dc)
+            if max(dr, dc) != 1:
                 raise ValueError(f"Edge ({u}->{v}) connects non-adjacent nodes at positions {(r1,c1)} and {(r2,c2)}.")
         
         if verbose:
             print("\tEdges connect only to adjacent nodes.")
 
 
+    # helper function to get the the bit number to set in the edges attribute
     def direction_bit(pos1, pos2):
         r1, c1 = pos1
         r2, c2 = pos2
@@ -155,6 +164,7 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
             raise ValueError(f"Node {n} at position {G.nodes[n]['pos']} has {len(succs)} successors, but must have at most 1.")
 
         G.nodes[n]["drained_area"] = resolution**2 + sum(G.nodes[p]["drained_area"] for p in preds)
+        
         G.nodes[n]["edges"] = 0
         for nbr in neighbors:
             G.nodes[n]["edges"] |= (1 << direction_bit(G.nodes[n]["pos"], G.nodes[nbr]["pos"]))
@@ -208,7 +218,7 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
             print("\tChecked for crossing edges.")
 
     # By now, the graph is validated and has all necessary attributes to create the C FlowGrid structure.
-    p_c_graph = _bindings.libocn.fg_create_empty_safe(_bindings.CartPair_C(row=rows, col=cols))
+    p_c_graph = _bindings.libocn.fg_create_empty(_bindings.CartPair_C(row=rows, col=cols))
     if not p_c_graph:
         raise MemoryError("Failed to allocate memory for FlowGrid_C.")
     for n in G.nodes:
@@ -225,15 +235,15 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
             visited=G.nodes[n]["visited"],
         )
         try:
-            check_status(_bindings.libocn.fg_set_lin_safe(p_c_graph, v_c, a))
+            check_status(_bindings.libocn.fg_set_lin(p_c_graph, v_c, a))
         except Exception as e:
-            _bindings.libocn.fg_destroy_safe(p_c_graph)
+            _bindings.libocn.fg_destroy(p_c_graph)
             p_c_graph = None
             raise e
     
     p_c_graph.contents.resolution = float(resolution)
-
     p_c_graph.contents.nroots = len([n for n in G.nodes if G.out_degree(n) == 0])
+    p_c_graph.contents.wrap = wrap
 
     if p_c_graph.contents.nroots > 1:
         warnings.warn(f"FlowGrid has {p_c_graph.contents.nroots} root nodes (nodes with no downstream). This will slow down certain operations.")
@@ -257,7 +267,7 @@ def validate_digraph(dag:nx.DiGraph, verbose:bool=False) -> bool|str:
     """
     try:
         p_c_graph = from_digraph(dag, verbose=verbose)
-        _bindings.libocn.fg_destroy_safe(p_c_graph)
+        _bindings.libocn.fg_destroy(p_c_graph)
         p_c_graph = None
     except Exception as e:  # _digraph_to_flowgrid_c will destroy p_c_graph on failure
         return str(e)
@@ -276,7 +286,7 @@ def validate_flowgrid(c_graph:_bindings.FlowGrid_C, verbose:bool=False) -> bool|
     try:
         dag = to_digraph(c_graph, verbose=verbose)
         p_c_graph = from_digraph(dag, verbose=verbose)
-        _bindings.libocn.fg_destroy_safe(p_c_graph)
+        _bindings.libocn.fg_destroy(p_c_graph)
         p_c_graph = None
     except Exception as e:  # _digraph_to_flowgrid_c will destroy p_c_graph on failure
         return str(e)

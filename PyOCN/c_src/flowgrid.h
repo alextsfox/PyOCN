@@ -8,6 +8,7 @@
 #define FLOWGRID_H
 
 #include <stdint.h>
+#include "rng.h"
 
 // basic types
 typedef double drainedarea_t;
@@ -59,6 +60,8 @@ typedef struct {
     double resolution;
     uint16_t nroots;
     Vertex *vertices;
+    bool wrap;
+    rng_state_t rng;
 } FlowGrid;
 
 /** @brief Coordinate Transformation */
@@ -73,9 +76,10 @@ CartPair fg_lin_to_cart(linidx_t a, CartPair dims);
  * @param a The starting linear index.
  * @param down The clockhand direction to move in.
  * @param dims The dimensions of the graph.
+ * @param wrap If true, the graph wraps around at the edges.
  * @return Status code indicating success or failure
  */
-Status fg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims);
+Status fg_clockhand_to_lin(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims, bool wrap);
 
 /**
  * @brief Get the vertex at the given Cartesian coordinates safely.
@@ -84,15 +88,7 @@ Status fg_clockhand_to_lin_safe(linidx_t *a_down, linidx_t a, clockhand_t down, 
  * @param coords The Cartesian coordinates of the vertex to retrieve.
  * @return Status code indicating success or failure
  */
-Status fg_get_cart_safe(Vertex *out, FlowGrid *G, CartPair coords);
-
-/**
- * @brief Get the vertex at the given Cartesian coordinates unsafely.
- * @param G Pointer to the FlowGrid.
- * @param coords The Cartesian coordinates of the vertex to retrieve.
- * @return The vertex at the specified coordinates.
- */
-Vertex fg_get_cart(FlowGrid *G, CartPair coords);
+Status fg_get_cart(Vertex *out, FlowGrid *G, CartPair coords);
 
 /**
  * @brief Set the vertex at the given Cartesian coordinates safely.
@@ -101,15 +97,7 @@ Vertex fg_get_cart(FlowGrid *G, CartPair coords);
  * @param coords The Cartesian coordinates where the vertex should be set.
  * @return Status code indicating success or failure
  */
-Status fg_set_cart_safe(FlowGrid *G, Vertex vert, CartPair coords);
-
-/**
- * @brief Set the vertex at the given Cartesian coordinates unsafely.
- * @param G Pointer to the FlowGrid.
- * @param vert The vertex to use to update the graph with.
- * @param coords The Cartesian coordinates where the vertex should be set.
- */
-void fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords);
+Status fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords);
 
 /**
  * @brief Get the vertex at the given linear index safely.
@@ -118,15 +106,7 @@ void fg_set_cart(FlowGrid *G, Vertex vert, CartPair coords);
  * @param a The linear index of the vertex to retrieve.
  * @return Status code indicating success or failure
  */
-Status fg_get_lin_safe(Vertex *out, FlowGrid *G, linidx_t a);
-
-/**
- * @brief Get the vertex at the given linear index unsafely.
- * @param G Pointer to the FlowGrid.
- * @param a The linear index of the vertex to retrieve.
- * @return The vertex at the specified linear index.
- */
-Vertex fg_get_lin(FlowGrid *G, linidx_t a);
+Status fg_get_lin(Vertex *out, FlowGrid *G, linidx_t a);
 
 /**
  * @brief Set the vertex at the given linear index safely.
@@ -135,36 +115,28 @@ Vertex fg_get_lin(FlowGrid *G, linidx_t a);
  * @param a The linear index where the vertex should be set.
  * @return Status code indicating success or failure
  */
-Status fg_set_lin_safe(FlowGrid *G, Vertex vert, linidx_t a);
-
-/**
- * @brief Set the vertex at the given linear index unsafely.
- * @param G Pointer to the FlowGrid.
- * @param vert The vertex to use to update the graph with.
- * @param a The linear index where the vertex should be set.
- */
-void fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a);
+Status fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a);
 
 /**
  * @brief Create an empty flowgrid with given dimensions safely.
  * @param dims The dimensions of the graph (rows, cols).
  * @return The created FlowGrid. Returns NULL if dimensions are invalid or memory allocation fails.
  */
-FlowGrid *fg_create_empty_safe(CartPair dims);
+FlowGrid *fg_create_empty(CartPair dims);
 
 /**
  * @brief Create a deep copy of a flowgrid safely.
  * @param G Pointer to the FlowGrid to copy.
  * @return A deep copy of the FlowGrid. Returns NULL if G is NULL or memory allocation fails.
  */
-FlowGrid *fg_copy_safe(FlowGrid *G);
+FlowGrid *fg_copy(FlowGrid *G);
 
 /**
  * @brief Safely destroy a flowgrid, freeing its resources.
  * @param G Pointer to the FlowGrid to destroy.
  * @return Status code indicating success or failure
  */
-Status fg_destroy_safe(FlowGrid *G);
+Status fg_destroy(FlowGrid *G);
 
 /**
  * @brief Change the outflow direction of a vertex safely.
@@ -176,13 +148,18 @@ Status fg_destroy_safe(FlowGrid *G);
 Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new);
 
 /** 
- * @brief Follow the downstream path from a given vertex, marking each vertex as visited.
+ * @brief Follow the downstream path from a given vertex, marking each vertex as visited. This function
+ * follows the downstream path from a vertex until it reaches a root node or detects a cycle. Cycle detection
+ * is performed through the visitation flag: each vertex's visitation flag is incremented by check_number when visited.
+ * If a vertex is encountered with a visitation flag equal to the current check_number, this indicates a cycle, and the function returns a warning.
+ * If a vertex is encountered with a different, nonzero visitation flag, it indicates that this path has already been fully validated in a previous traversal, allowing for an early exit.
+ * This optimization allows us to perform multiple traversals much more efficiently (~30% faster).
  * @param G Pointer to the FlowGrid.
  * @param a The linear index of the starting vertex.
- * @param ncalls A unique identifier for this traversal to mark visited vertices.
+ * @param check_number A unique identifier for this traversal to mark visited vertices. 
  * @return Status code indicating success or failure. Returns MALFORMED_GRAPH_WARNING if a cycle is detected.
  */
-Status fg_flow_downstream_safe(FlowGrid *G, linidx_t a, uint8_t ncalls);
+Status fg_check_for_cycles(FlowGrid *G, linidx_t a, uint8_t check_number);
 
 /**
  * @brief Display the flowgrid in the terminal using ASCII or UTF-8 characters.

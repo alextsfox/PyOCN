@@ -13,6 +13,7 @@
 #include "status.h"
 #include "flowgrid.h"
 #include "ocn.h"
+#include "rng.h"
 
 /**
  * @brief Simulated annealing acceptance criterion.
@@ -21,11 +22,11 @@
  * @param temperature The current temperature.
  * @return true if the new state is accepted, false otherwise.
  */
-bool simulate_annealing(double energy_new, double energy_old, double temperature){
-    double u = (double)rand() / (double)RAND_MAX;
-    double delta_energy = energy_new - energy_old;
-    double p = exp(-delta_energy / temperature);
-    return u < p;
+static inline bool simulate_annealing(double energy_new, double energy_old, double inv_temperature, rng_state_t *rng){
+    const double delta_energy = energy_new - energy_old;
+    if (delta_energy <= 0.0) return true;  // Always accept improvements
+    const double p = exp(-delta_energy * inv_temperature);
+    return rng_uniformdouble(rng) < p;
 }
 
 /**
@@ -35,12 +36,14 @@ bool simulate_annealing(double energy_new, double energy_old, double temperature
  * @param a The linear index of the starting vertex.
  * @return Status code indicating success or failure
  */
-Status update_drained_area(FlowGrid *G, drainedarea_t da_inc, linidx_t a){
+static inline Status update_drained_area(FlowGrid *G, drainedarea_t da_inc, linidx_t a){
     Vertex vert;
     do {
-        vert = fg_get_lin(G, a);
+        Status code = fg_get_lin(&vert, G, a);
+        if (code == OOB_ERROR) return OOB_ERROR;
         vert.drained_area += da_inc;
-        fg_set_lin(G, vert, a);
+        code = fg_set_lin(G, vert, a);
+        if (code == OOB_ERROR) return OOB_ERROR;
         a = vert.adown;
     } while (vert.downstream != IS_ROOT);
 
@@ -70,7 +73,7 @@ Status update_energy_single_root(FlowGrid *G, drainedarea_t da_inc, linidx_t a, 
     double energy_old = 0.0;
     double energy_new = 0.0;
     do {
-        vert = fg_get_lin(G, a);
+        if (fg_get_lin(&vert, G, a) == OOB_ERROR) return OOB_ERROR;
 
         energy_old += pow(vert.drained_area, gamma);
         vert.drained_area += da_inc;
@@ -87,52 +90,59 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
 
     Vertex vert;
     clockhand_t down_old, down_new;
+    int8_t down_step_dir;
     linidx_t a, a_down_old, a_down_new;
     int32_t a_step_dir;
     drainedarea_t da_inc;
     CartPair dims = G->dims;
     linidx_t nverts = (linidx_t)dims.row * (linidx_t)dims.col;
 
+    double inv_temperature = 1.0 / temperature;
+
     double energy_old, energy_new;
     energy_old = G->energy;
     
-    a = rand() % nverts;  // pick a random vertex
-    a_step_dir = (rand() % 2)*2 - 1;  // pick a random direction to step in if we need a new vertex
-    down_new = rand() % 8;  // pick a random new downstream direction
-
+    a = rng_randint32(&G->rng) % nverts;  // pick a random vertex
+    a_step_dir = (rng_randint32(&G->rng) % 2)*2 - 1;  // pick a random direction to step in if we need a new vertex
+    down_new = rng_randint32(&G->rng) >> 29;  // bit shift of 29 gives a number from 0-7
+    down_step_dir = (rng_randint32(&G->rng) % 2)*2 - 1;  // pick a random direction to step in if we need a new direction
 
     for (linidx_t nverts_tried = 0; nverts_tried < nverts; nverts_tried++){  // try a new vertex each time, up to the number of vertices in the graph
         // clunky way to wrap around, since apparently % on negative numbers is confusing as hell in C
         if (a == 0 && a_step_dir == -1) a = nverts - 1;
         else if (a == nverts - 1 && a_step_dir == 1) a = 0;
         else a = (linidx_t)((int32_t)a + a_step_dir);
-        // a = (linidx_t)((int32_t)a + a_step_dir) % ((int32_t)dims.row * (int32_t)dims.col);
+        if (down_new == 0 && down_step_dir == -1) down_new = 7;
+        else if (down_new == 7 && down_step_dir == 1) down_new = 0;
+        else down_new = (clockhand_t)((int8_t)down_new + down_step_dir);
 
-        vert = fg_get_lin(G, a);  // unsafe is ok here because a is guaranteed to be in bounds
+        code = fg_get_lin(&vert, G, a);
+        if (code == OOB_ERROR) return OOB_ERROR;
     
         down_old = vert.downstream;
         a_down_old = vert.adown;
         da_inc = vert.drained_area;
         
-        for (uint8_t ntries = 0; ntries < 8; ntries++){  // try a new direction each time, up to 8 times. Count these as separate tries.
+        for (uint8_t ndirections_tried = 0; ndirections_tried < 8; ndirections_tried++){  // try a new direction each time.
             down_new  = (down_new + 1) % 8;
 
+            // propose to rerout the outflow of vertex a to direction down_new
             code = fg_change_vertex_outflow(G, a, down_new);
             if (code != SUCCESS) continue;
-            
-            // retrieve the downstream vertices
-            vert = fg_get_lin(G, a);
+
+            // retrieve the new downstream vertex index
+            code = fg_get_lin(&vert, G, a);
+            if (code == OOB_ERROR) return OOB_ERROR;
             a_down_new = vert.adown;
 
             // confirm that the new graph is well-formed (no cycles, still reaches root)
-            for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;
-            code = fg_flow_downstream_safe(G, a_down_old, 1);
+            for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;  // reset visitation flags
+            code = fg_check_for_cycles(G, a_down_old, 1);
             if (code != SUCCESS){
                 fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
             }
-            // for (linidx_t i = 0; i < nverts; i++) G->vertices[i].visited = 0;
-            code = fg_flow_downstream_safe(G, a, 2);
+            code = fg_check_for_cycles(G, a, 2);  // no need to reset visitation flags, instead use a different check number
             if (code != SUCCESS){
                 fg_change_vertex_outflow(G, a, down_old);  // undo the swap, try again
                 continue;
@@ -146,14 +156,9 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     
     mh_eval:
     /*
-    TODO:CRITICAL PERFORMANCE ISSUE:
+    TODO: PERFORMANCE ISSUE:
     This function is supposed to update the energy of the flowgrid G after a 
-    change in drained area along the path starting at vertex a. The previous method
-    did not work: it would update the drained area along a path, then try to recompute
-    the energy by adding pow((da + da_inc), gamma) - pow(da, gamma) for each vertex
-    along the path. This is incorrect because the energy of each vertex depends on the
-    drained area of all upstream vertices, not just its own drained area. This is fine 
-    when gamma = 1, gamma = 0, or the number of roots = 1, but otherwise it is wrong.
+    change in drained area along the path starting at vertex a.
 
     Simple but inefficient fix (current): recompute the *entire* energy of the flowgrid from scratch
     each time this function is called.
@@ -167,9 +172,7 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
         update_drained_area(G, -da_inc, a_down_old);  // remove drainage from old path
         update_drained_area(G, da_inc, a_down_new);  // add drainage to new path
         energy_new = ocn_compute_energy(G, gamma);  // recompute energy from scratch
-        // simulated annealing: accept with prob = exp(-delta_energy / temperature). note that p > 1 if energy decreases.
-        // printf("Old energy: %f, New energy: %f, Delta E: %f\n", energy_old, energy_new, energy_new - energy_old);
-        if (simulate_annealing(energy_new, energy_old, temperature)){
+        if (simulate_annealing(energy_new, energy_old, inv_temperature, &G->rng)){
             G->energy = energy_new;
             return SUCCESS;
         }
@@ -181,7 +184,7 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
         update_energy_single_root(G, -da_inc, a_down_old, gamma);  // remove drainage from old path and update energy
         update_energy_single_root(G, da_inc, a_down_new, gamma);  // add drainage to new path and update energy
         energy_new = G->energy;
-        if (simulate_annealing(energy_new, energy_old, temperature)){
+        if (simulate_annealing(energy_new, energy_old, temperature, &G->rng)){
             return SUCCESS;
         }
         // reject swap: undo everything and try again
