@@ -982,8 +982,6 @@ class OCN:
         anneal_buf = np.empty(max_iterations_per_loop, dtype=np.float64)
         anneal_ptr = anneal_buf.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
 
-        self._advance_seed()  # advance the RNG state to decorrelate from any previous calls
-
         completed_iterations = iteration_start
         n_iterations += iteration_start
 
@@ -1006,6 +1004,7 @@ class OCN:
         )
         
         while completed_iterations < n_iterations:
+            self._advance_seed()  # advance the RNG state to decorrelate from any previous calls
             iterations_this_loop = min(max_iterations_per_loop, n_iterations - completed_iterations)
             anneal_buf[:iterations_this_loop] = cooling_func(
                 np.arange(completed_iterations, completed_iterations + iterations_this_loop)
@@ -1076,7 +1075,7 @@ class OCN:
         last_history_iteration = int(self.history[-1, 0]) if self.history.shape[0] else 0
         skip_first = 1 if self.history.shape[0] else 0
         history = np.stack([
-            last_history_iteration + np.asarray(energy_report_idx)[skip_first:] - iteration_start,  # adjust indices if continuing from previous fit
+            last_history_iteration + np.asarray(energy_report_idx)[skip_first:] - iteration_start,
             energy_out[skip_first:len(energy_report_idx)],
             cooling_func(np.asarray(energy_report_idx[skip_first:])),
         ], axis=1).reshape(-1, 3)

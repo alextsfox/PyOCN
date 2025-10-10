@@ -59,8 +59,28 @@ class TestBasicOCN(unittest.TestCase):
         ocn.fit(array_reports=0)
         ocn_copy.fit(array_reports=0)
         
-
         self.assertEqual(ocn.energy, ocn_copy.energy, "Energies do not match after fitting.")
+
+    def test_ocn_custom_cooling(self):
+        """Test that custom cooling schedule affects energy as expected."""
+        ocn = po.OCN.from_net_type(
+            net_type="V",
+            dims=(64, 64),
+            random_state=143798,
+        )
+        
+        # Fit with a custom cooling schedule
+        energy = ocn.energy
+        def custom_schedule(iter):
+            return energy / (iter + 1)
+        
+        ocn_copy = ocn.copy()
+
+        ocn_copy.fit_custom_cooling(custom_schedule, max_iterations_per_loop=100, n_iterations=50_000, array_reports=0, iteration_start=0)
+        ocn.fit_custom_cooling(custom_schedule, max_iterations_per_loop=100, n_iterations=5_000, array_reports=0, iteration_start=0)
+        ocn.fit_custom_cooling(custom_schedule, max_iterations_per_loop=100, n_iterations=45_000, array_reports=0, iteration_start=5_000)
+
+        self.assertAlmostEqual(ocn.energy, ocn_copy.energy, places=6)
 
 
     
