@@ -1,3 +1,22 @@
+import warnings
+import ctypes
+from typing import Any, Callable, TYPE_CHECKING, Union
+from os import PathLike
+from numbers import Number
+from pathlib import Path
+
+import networkx as nx 
+import numpy as np
+from tqdm import tqdm
+
+from ._statushandler import check_status
+from .utils import simulated_annealing_schedule, net_type_to_dag, unwrap_digraph, assign_subwatersheds
+from . import _libocn_bindings as _bindings
+from . import _flowgrid_convert as fgconv
+
+if TYPE_CHECKING:
+    import xarray as xr
+
 """
 High-level Optimized Channel Network (OCN) interface.
 
@@ -6,8 +25,8 @@ This module provides a high-level interface to the underlying
 constructing and optimizing river network models using 
 simulated annealing.
 
-Notes
------
+Note
+----
 - The underlying data structure managed by :class:`OCN` is a FlowGrid owned by
     ``libocn``. Pointer lifetime and destruction are handled safely within this
     class.
@@ -23,27 +42,12 @@ PyOCN.plotting
         Helper functions for visualization and plotting
 """
 
-"""
-TODO: relax the even dims requirement
-TODO: have to_rasterio use the option to set the root node to 0,0 by using to_xarray as the backend instead of numpy?
-"""
 
-import warnings
-import ctypes
-from typing import Any, Callable
-from os import PathLike
-from numbers import Number
-from pathlib import Path
-from dataclasses import dataclass
+# TODO: relax the even dims requirement
+# TODO: have to_rasterio use the option to set the root node to 0,0 by using to_xarray as the backend instead of numpy?
 
-import networkx as nx 
-import numpy as np
-from tqdm import tqdm
 
-from ._statushandler import check_status
-from .utils import simulated_annealing_schedule, net_type_to_dag, unwrap_digraph, assign_subwatersheds
-from . import _libocn_bindings as _bindings
-from . import _flowgrid_convert as fgconv
+
 
 class OCN:
     """
@@ -52,39 +56,32 @@ class OCN:
     Use :meth:`OCN.from_net_type` or :meth:`OCN.from_digraph` to construct an
     instance. 
     
-    Constructor Methods
+    Methods
     -------------------
-    :meth:`from_net_type`
+    from_net_type
         Create an OCN from a predefined network type and dimensions.
-    :meth:`from_digraph`
+    from_digraph
         Create an OCN from an existing NetworkX DiGraph.
-
-    Export Methods
-    --------------
-    :meth:`to_digraph`
+    to_digraph
         Export the current grid to a NetworkX DiGraph.
-    :meth:`to_numpy`
+    to_numpy
         Export raster arrays (energy, drained area, watershed_id) as numpy arrays.
-    :meth:`to_xarray`
+    to_xarray
         Export raster arrays as an xarray Dataset (requires xarray).
-    :meth:`to_gtiff`
+    to_gtiff
         Export raster arrays to a GeoTIFF file (requires rasterio).
-    :meth:`copy`
+    copy
         Create a deep copy of the OCN.
-
-    Optimization Methods
-    --------------------
-    :meth:`single_erosion_event`
+    single_erosion_event
         Perform a single erosion event at a given temperature.
-    :meth:`fit`
+    fit
         Optimize the network using the simulated annealing method from Carraro et al (2020).
-    :meth:`fit_custom_cooling`
+    fit_custom_cooling
         Optimize the network using a custom cooling function.
-
-    Other methods
-    -------------
-    :meth:`compute_energy`
+    compute_energy
         Compute the current energy of the network.
+    copy
+        Create a deep copy of the OCN.
 
     Attributes
     ----------
@@ -98,8 +95,6 @@ class OCN:
         Number of root nodes in the current OCN grid (read-only property).
     gamma : float
         Exponent in the energy model.
-    master_seed : int
-        The seed used to initialize the internal RNG.
     verbosity : int
         Verbosity level for underlying library output (0-2).
     wrap : bool
@@ -107,6 +102,9 @@ class OCN:
     history : np.ndarray
         numpy array of shape (n_iterations, 3) recording the iteration index, energy, and temperature at each iteration during optimization.
         Updated each time an optimization method is called.
+    rng : int
+        the current random state of the internal RNG
+    
 
     Examples
     --------
@@ -128,8 +126,8 @@ class OCN:
         """
         Construct an :class:`OCN` from a valid NetworkX ``DiGraph``.
 
-        Notes
-        -----
+        Attention
+        ---------
         Please use the classmethods :meth:`OCN.from_net_type` or
         :meth:`OCN.from_digraph` to instantiate an OCN.
         """
@@ -157,7 +155,7 @@ class OCN:
         self.__history = np.empty((0, 3), dtype=np.float64)
 
     @classmethod
-    def from_net_type(cls, net_type:str, dims:tuple, resolution:float=1, gamma : float = 0.5, random_state=None, verbosity:int=0, wrap : bool = False):
+    def from_net_type(cls, net_type:str, dims:tuple[int, int], resolution:float=1, gamma : float = 0.5, random_state=None, verbosity:int=0, wrap : bool = False):
         """
         Create an :class:`OCN` from a predefined network type and dimensions.
 
@@ -227,8 +225,8 @@ class OCN:
         OCN
             A newly constructed instance encapsulating the provided graph.
 
-        Notes
-        -----
+        Important
+        ---------
         The input graph must satisfy all of the following:
 
         - It is a directed acyclic graph (DAG).
@@ -331,96 +329,35 @@ class OCN:
         -------
         float
             The computed energy value.
-
-        Notes
-        -----
-        This constructs a temporary ``DiGraph`` view to aggregate node
-        energies from drained areas using the exponent ``gamma``.
         """
         return _bindings.libocn.ocn_compute_energy(self.__p_c_graph, self.gamma)
     
     @property
     def energy(self) -> float:
-        """
-        Energy of the current OCN.
-
-        Returns
-        -------
-        float
-            Current energy.
-        """
         return self.__p_c_graph.contents.energy
     @property
     def resolution(self) -> float:
-        """
-        Resolution of the current OCN grid in m (read-only).
-
-        Returns
-        -------
-        float
-            Current resolution.
-        """
         return self.__p_c_graph.contents.resolution
     @property
     def nroots(self) -> int:
-        """
-        Number of root nodes in the current OCN grid (read-only).
-
-        Returns
-        -------
-        int
-            Current number of root nodes.
-        """
         return int(self.__p_c_graph.contents.nroots)
     @property
     def dims(self) -> tuple[int, int]:
-        """
-        Grid dimensions of the FlowGrid (read-only).
-
-        Returns
-        -------
-        tuple[int, int]
-            ``(rows, cols)``.
-        """
         return (
             int(self.__p_c_graph.contents.dims.row),
             int(self.__p_c_graph.contents.dims.col)
         )
     @property
     def wrap(self) -> bool:
-        """
-        Whether the grid allows wrapping around the edges (toroidal).
-
-        Returns
-        -------
-        bool
-            Current wrap setting.
-        """
         return self.__p_c_graph.contents.wrap
     @property
-    def rng(self) -> tuple[int, int, int, int]:
-        """
-        Returns
-        -------
-        tuple[int, int, int, int]
-            the current random state of the internal RNG as four 32-bit unsigned integers.
-        """
-        
-        s = tuple(self.__p_c_graph.contents.rng.s)
+    def rng(self) -> int:
+        s0, s1, s2, s3 = self.__p_c_graph.contents.rng.s
+        s = (s0 << 96) | (s1 << 64) | (s2 << 32) | s3
         return s
     
     @rng.setter
     def rng(self, random_state:int|None|np.random.Generator=None):
-        """
-        Seed the internal RNG.
-
-        Parameters
-        ----------
-        random_state : int | numpy.random.Generator | None, optional
-            Seed or generator for RNG. If None, system entropy is used.
-            If an integer or Generator is provided, the
-            new seed is drawn from it directly.
-        """
         if not isinstance(random_state, (int, np.integer, type(None), np.random.Generator)):
             raise ValueError("RNG must be initialized with an integer/Generator/None.")
         seed = np.random.default_rng(random_state).integers(0, int(2**32 - 1))
@@ -430,15 +367,6 @@ class OCN:
 
     @property
     def history(self) -> np.ndarray:
-        """
-        numpy array of shape (n_iterations, 3) recording the iteration index, energy, and temperature at each iteration during optimization.
-        If multiple fit calls are made, history is appended to this array.
-
-        Returns
-        -------
-        np.ndarray
-            The optimization history.
-        """
         return self.__history
 
     def to_digraph(self) -> nx.DiGraph:
@@ -665,7 +593,7 @@ class OCN:
                 "description": "OCN fit result arrays",
                 "resolution": self.resolution,
                 "gamma": self.gamma,
-                "master_seed": int(self.rng),
+                "rng": self.rng,
                 "wrap": self.wrap,
             }
         )
@@ -726,8 +654,7 @@ class OCN:
         array_reports:int=0,
         tol:float=None,
         max_iterations_per_loop=10_000,
-        unwrap:bool=True,
-    ) -> "xr.Dataset | None":
+        unwrap:bool=True,) -> "xr.Dataset | None":
         """
         Convenience function to optimize the OCN using the simulated annealing algorithm from Carraro et al (2020).
         For finer control over the optimization process, use :meth:`fit_custom_cooling` or use :meth:`single_erosion_event` in a loop.
@@ -742,8 +669,6 @@ class OCN:
 
         Parameters
         ----------
-        ocn : OCN
-            The OCN instance to optimize.
         cooling_rate : float, default 1.0
             Cooling rate parameter in the annealing algorithm. Typical range is 0.5-1.5.
             Higher values result in faster cooling and a greedier search.
@@ -764,26 +689,7 @@ class OCN:
             Number of timepoints (approximately) at which to save the state of the FlowGrid.
             If 0 (default), returns None. If >0, returns an xarray.Dataset
             containing the state of the FlowGrid at approximately evenly spaced intervals
-            throughout the optimization, including the initial and final states. Requires xarray to be installed.
-            
-            The returned xarray.Dataset will have coordinates:
-                - `y` (float) representing the northing coordinate of each row
-                - `x` (float) representing the easting coordinate of each column
-                - `iteration` (int) representing the iteration index at which the data was recorded
-            data variables:
-                - `energy_rasters` (np.float64) representing energy at each grid cell
-                - `area_rasters` (np.float64) representing drained area at each grid cell
-                - `watershed_id` (np.int32). NA value is -9999. Roots have value -1. Represents the watershed membership ID for each grid cell.
-            The coordiante (0, 0) is the top-left corner of the grid.
-
-            If the OCN has a periodic boundary condition, the following changes apply: 
-                - The (0,0) coordinate will be set to the position of the "main" root node, defined as
-                the root node with the smallest row*cols + col value
-                - The rasters will be unwrapped to a non-periodic representation, which may result in larger rasters.
-                - The size of the final rasters are the maximum extent of the unwrapped grid, taken across all iterations.
-
-            Generating reports requires additional memory and computation time.
-            
+            throughout the optimization, including the initial and final states. Requires xarray to be installed. See notes on xarray output for details.
         tol : float, optional
             If provided, optimization will stop early if the relative change
             in energy between reports is less than `tol`. Must be positive.
@@ -803,23 +709,43 @@ class OCN:
 
         Returns
         -------
-        xr.Dataset | None
+        ds : xr.Dataset | None
+            If ``array_reports > 0``, an xarray.Dataset containing the state of the FlowGrid
+            at approximately evenly spaced intervals throughout the optimization, including
+            the initial and final states. See notes on xarray output for details.
+            If ``array_reports == 0``, returns None.
 
-        Raises
-        ------
-        ValueError
+        
 
-        Warns
-        -----
-        UserWarning
+        Note
+        ----
+        The returned xarray.Dataset will have coordinates:
 
-        Optimization Algorithm
-        ----------------------
+        - `y` (float) representing the northing coordinate of each row
+        - `x` (float) representing the easting coordinate of each column
+        - `iteration` (int) representing the iteration index at which the data was recorded
+
+        and data variables:
+
+        - `energy_rasters` (np.float64) representing energy at each grid cell
+        - `area_rasters` (np.float64) representing drained area at each grid cell
+        - `watershed_id` (np.int32). NA value is -9999. Roots have value -1. Represents the watershed membership ID for each grid cell. The coordinate (0, 0) is the top-left corner of the grid.
+
+        If the OCN has a periodic boundary condition, the following changes apply: 
+
+        - The (0,0) coordinate will be set to the position of the "main" root node, defined as the root node with the smallest row*cols + col value
+        - The rasters will be unwrapped to a non-periodic representation, which may result in larger rasters.
+        - The size of the final rasters are the maximum extent of the unwrapped grid, taken across all iterations.
+
+        Generating reports requires additional memory and computation time.
+        
+        Note
+        ----
         At iteration ``i``, the outflow of a random grid cell if proposed to be rerouted.
         The proposal is accepted with the probability
+        
         .. math::
-
-            P(\text{accept}) = e^{-\Delta E / T},
+            P(\\text{accept}) = e^{-\Delta E / T},
 
         where :math:`\Delta E` is the change in energy the change would cause 
         and :math:`T` is the temperature of the network.
@@ -833,12 +759,10 @@ class OCN:
         
         Note that when :math:`\Delta E < 0`, the move is always accepted.
 
-        Simulated Annealing Schedule
-        ----------------------------
         The cooling schedule used by this method is a piecewise function of iteration index:
+        
         .. math::
-
-            T(i) = \begin{cases}
+            T(i) = \\begin{cases}
                 E_0 & i < C N \\
                 E_0 \cdot e^{\;i - C N} & i \ge C N
             \end{cases}
@@ -898,8 +822,6 @@ class OCN:
 
         Parameters
         ----------
-        ocn : OCN
-            The OCN instance to optimize.
         cooling_func : Callable[[np.ndarray], np.ndarray]
             A function that takes an array of iteration indices and returns an array of temperatures.
             This function defines the cooling schedule for the optimization. Note that the function
@@ -920,14 +842,6 @@ class OCN:
         Returns
         -------
         xr.Dataset | None
-
-        Raises
-        ------
-        ValueError
-
-        Warns
-        -----
-        UserWarning
         """
         # validate inputs
         if n_iterations is None:
@@ -1064,8 +978,8 @@ class OCN:
                 and (e_new <= e_old) 
                 and (abs((e_old - e_new)/e_old) if e_old > 0 else np.inf < tol)
             ):
-                print("Convergence reached, stopping optimization.")
-                # if self.verbosity >= 0:
+                if self.verbosity > 1:
+                    print("Convergence reached, stopping optimization.")
                 break
         
         pbar.close()
@@ -1127,7 +1041,7 @@ class OCN:
                 "description": "OCN fit result arrays",
                 "resolution": self.resolution,
                 "gamma": self.gamma,
-                "master_seed": int(self.rng),
+                "rng": self.rng,
                 "wrap": self.wrap,
             }
         )

@@ -18,12 +18,13 @@ release = '1.2.20251010'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
+# autodoc_mock_imports = ["matplotlib", "networkx", "numpy", "xarray", "rasterio", "tqdm"]
 
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.viewcode', 
     'sphinx.ext.napoleon',
-    'sphinx_autodoc_typehints',  # pip install sphinx-autodoc-typehints
+    # 'sphinx_autodoc_typehints',  # pip install sphinx-autodoc-typehints
     'myst_parser',              # pip install myst-parser
 ]
 # MyST settings

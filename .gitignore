@@ -15,6 +15,7 @@ venv/
 *.egg-info/
 *.egg
 PyOCN.egg-info/
+docs/_build/
 
 # compiled markdown
 /readme_files/
@@ -34,6 +35,8 @@ sandbox.ipynb
 */__pycache__/
 *.py[cod]
 *.pyo
+*.pyc
+*.cpython-*.pyc
 
 # C build files/libraries
 PyOCN/c_src/*.o
