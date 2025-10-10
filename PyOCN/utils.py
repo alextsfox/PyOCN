@@ -4,7 +4,7 @@ Utility functions for working with OCNs.
 
 from __future__ import annotations
 from itertools import product
-from typing import Any, Literal, Callable, TYPE_CHECKING
+from typing import Any, Literal, Callable, TYPE_CHECKING, Union
 from numbers import Number
 import networkx as nx
 import numpy as np
@@ -13,15 +13,15 @@ from tqdm import tqdm
 if TYPE_CHECKING:
     from .ocn import OCN
 
-_allowed_net_types = {"I", "H", "V", "T", "E"}
+_allowed_net_types = {"I", "H", "V", "E"}
 
 #TODO: add ability to move root?
-def net_type_to_dag(net_type:Literal["I", "H", "V", "T", "E"], dims:tuple, pbar: bool = False) -> nx.DiGraph:
+def net_type_to_dag(net_type:Literal["I", "H", "V", "E"], dims:tuple, pbar: bool = False) -> nx.DiGraph:
     """Create a predefined OCN initialization network as a NetworkX DiGraph.
 
     Parameters
     ----------
-    net_type : {"I", "H", "V", "T", "E"}
+    net_type : {"I", "H", "V", "E"}
         The type of network to create.
         Descriptions of allowed types:
 
@@ -61,31 +61,12 @@ def net_type_to_dag(net_type:Literal["I", "H", "V", "T", "E"], dims:tuple, pbar:
               | /
               X--O--O--O
 
-        - "E": A network where every node on the edge of the grid is a root.
-
-          ::
-
-              X  X  X  X  X  X
-                \  \    /  /
-              X  O  O  O  O  X
-                \  \    /  /
-              X  O  O  O  O  X
-  
-              X  O  O  O  O  X
-                /  /     \  \
-              X  O  O  O  O  X
-                /  /     \  \  
-              X  X  X  X  X  X
-
-
-        - "T": Not implemented yet.
+        - "E": A network where every node on the edge of the grid is a root. Initial flow moves away from center towards edges.
 
     dims : tuple
         The network dimensions as ``(rows, cols)``. Both must be positive even integers.
     pbar : bool, default False
         If True, display a progress bar while constructing the graph.
-    wrap : bool, default False
-        If True, create the graph with periodic boundary conditions (toroidal).
 
     Returns
     -------
@@ -97,8 +78,8 @@ def net_type_to_dag(net_type:Literal["I", "H", "V", "T", "E"], dims:tuple, pbar:
     ValueError
         If ``net_type`` is invalid or ``dims`` are not two positive even integers.
 
-    Notes
-    -----
+    Note
+    ----
     The returned graph assigns each grid cell exactly one node with a ``pos``
     attribute equal to ``(row, col)``.
     """
@@ -168,14 +149,9 @@ def net_type_to_dag(net_type:Literal["I", "H", "V", "T", "E"], dims:tuple, pbar:
         
     return G
 
-def simulated_annealing_schedule(
-    dims: tuple[int, int],
-    E0: float,
-    constant_phase: float,
-    n_iterations: int,
-    cooling_rate: float,
-) -> Callable[[int], float | np.ndarray]:
-    """Create a simulated-annealing cooling schedule for OCN optimization.
+def simulated_annealing_schedule(dims: tuple[int, int],E0: float,constant_phase: float,n_iterations: int,cooling_rate: float,) -> Callable[[int], Union[float, np.ndarray]]:
+    """
+    Create a simulated-annealing cooling schedule for OCN optimization.
 
     This returns a callable ``schedule(i)`` that returns the temperature at
     iteration ``i``. The schedule consists of a constant-temperature phase
@@ -198,20 +174,20 @@ def simulated_annealing_schedule(
 
     Returns
     -------
-    Callable[[int], float] | numpy.ndarray
+    Callable[[int], Union[float, np.ndarray]]
         A function mapping an iteration index ``i`` to a temperature value. If
         vectorized evaluation is used, may return a NumPy array of temperatures.
 
-    Notes
-    -----
+    Note
+    ----
     The exponential phase follows the form
 
     .. math::
 
-        T_i = E_0 \exp\left(-\frac{\text{cooling\_rate}\,(i - n_0)}{N}\right),
+        T_i = E_0 \exp\left(-\\frac{r\cdot(i - n_0)}{N}\\right),
 
     where ``E0`` is the initial energy, ``n0`` is the number of iterations in
-    the constant phase, and ``N = rows * cols``.
+    the constant phase, ``r`` is the cooling rate,and ``N = rows * cols``.
     """
     if (not isinstance(constant_phase, Number) or constant_phase < 0 or constant_phase > 1):
         raise ValueError(f"constant_phase must be a number between 0 and 1. Got {constant_phase}")
@@ -260,8 +236,8 @@ def unwrap_digraph(dag: nx.DiGraph, dims: tuple[int, int]) -> nx.DiGraph:
         If any node in the input graph lacks a 'pos' attribute or if the
         dimensions are not positive integers.
 
-    Notes
-    -----
+    Important
+    ---------
     The function assumes that the input graph is a valid DAG and that the
     'pos' attributes are correctly assigned. The output graph will no longer
     span a toroidal topology and will no longer cover a dense grid of nodes.
@@ -340,8 +316,8 @@ def assign_subwatersheds(dag: nx.DiGraph) -> None:
     ValueError
         If any node in the input graph lacks a 'pos' attribute.
 
-    Notes
-    -----
+    Note
+    ----
     A subwatershed is defined as the set of nodes that drain to a common outlet,
     where an outlet is a node with out-degree zero. Each subwatershed is assigned
     a unique integer ID, starting from 0. Nodes that are outlets themselves are
@@ -373,8 +349,8 @@ def get_subwatersheds(dag : nx.DiGraph, node : Any) -> set[nx.DiGraph]:
     set of nx.DiGraph
         A set of directed acyclic graphs, each representing a subwatershed.
 
-    Note
-    ----
+    Danger
+    ------
     The returned subwatersheds are subgraph views of the input graph and share node
     and edge data with the original graph. Unless copied, any changes to node or edge attributes
     in the subwatersheds will affect the original graph.

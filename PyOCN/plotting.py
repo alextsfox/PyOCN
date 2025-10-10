@@ -4,8 +4,8 @@ Plotting utilities for PyOCN.
 This module provides convenience functions to visualize OCNs using Matplotlib
 and NetworkX.
 
-Notes
------
+Note
+----
 - Node positions are stored as ``pos=(row, col)`` in the data model. For
     visualization, these are converted to cartesian coordinates so that 
     (row, col) = (0, 0) is at the bottom-left corner.
@@ -39,8 +39,8 @@ def _pos_to_xy(dag: nx.DiGraph) -> dict[Any, tuple[float, float]]:
         Mapping from node to ``(x, y)`` where ``x=col`` and ``y`` is flipped
         to plot with origin at the bottom.
 
-    Notes
-    -----
+    Note
+    ----
     The vertical coordinate is transformed as ``y = nrows - row - 1`` to
     match typical plotting conventions.
     """

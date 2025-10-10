@@ -9,15 +9,6 @@ PyOCN Documentation
 This is a package to generate optimal channel networks (OCNs), based on the algorithm described in Carraro et al. (2020). *Generation and application of river network analogues for use in ecology and evolution. Ecology and Evolution.* doi:10.1002/ece3.6479 
 and mirrors some of the functionality of the OCNet R package (https://lucarraro.github.io/OCNet/).
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-
-   installation
-   quickstart
-   api
-   examples
-
 Installation
 ============
 
@@ -50,28 +41,17 @@ Quick Start
    po.plot_ocn_raster(ocn)
    plt.show()
 
-API Reference
-=============
+.. toctree::
+   :maxdepth: 2
+   :caption: API Reference:
 
-.. automodule:: PyOCN
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   ocn_class
+   plotting
+   utilities
 
-OCN Class
----------
-
-.. autoclass:: PyOCN.OCN
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Plotting Functions
-------------------
-
-.. autofunction:: PyOCN.plot_ocn_raster
-.. autofunction:: PyOCN.plot_ocn_as_dag
-.. autofunction:: PyOCN.plot_positional_digraph
+.. toctree::
+   :maxdepth: 1
+   :caption: Additional:
 
 Indices and tables
 ==================

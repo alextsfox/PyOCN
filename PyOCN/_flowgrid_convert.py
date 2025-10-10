@@ -59,8 +59,10 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
         Whether to check the input graph for validity before conversion. 
         Default True. If false, the user is responsible for ensuring the graph is valid.
         For internal use only. 
-    Returns:
-        p_c_graph: pointer to the created C FlowGrid structure.
+    Returns
+    -------
+    p_c_graph : POINTER
+        pointer to the created C FlowGrid structure.
     """
 
     if verbose:
@@ -259,11 +261,10 @@ def validate_digraph(dag:nx.DiGraph, verbose:bool=False) -> bool|str:
     """
     Validate the integrity of a FlowGrid.
 
-    Parameters:
-        dag (nx.DiGraph): The directed acyclic graph to validate.
-
-    Returns:
-        either True if valid, or an error message string if invalid.
+    Parameters
+    ----------
+    dag : nx.DiGraph
+        The directed acyclic graph to validate.
     """
     try:
         p_c_graph = from_digraph(dag, verbose=verbose)
@@ -277,11 +278,10 @@ def validate_flowgrid(c_graph:_bindings.FlowGrid_C, verbose:bool=False) -> bool|
     """
     Validate the integrity of a FlowGrid_C structure.
 
-    Parameters:
-        c_graph (FlowGrid_C): The FlowGrid_C structure to validate.
-
-    Returns:
-        either True if valid, or an error message string if invalid.
+    Parameters
+    ----------
+    c_graph : _bindings.FlowGrid_C
+        The FlowGrid_C structure to validate.
     """
     try:
         dag = to_digraph(c_graph, verbose=verbose)
