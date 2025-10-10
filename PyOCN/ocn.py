@@ -186,12 +186,12 @@ class OCN:
             network type and dimensions.
         """
         if not isinstance(dims, tuple):
-            raise TypeError(f"dims must be a tuple of two positive even integers, got {type(dims)}")
+            raise TypeError(f"dims must be a tuple of two positive integers, got {type(dims)}")
         if not (
             len(dims) == 2 
-            and all(isinstance(d, int) and d > 0 and d % 2 == 0 for d in dims)
+            and all(isinstance(d, int) and d > 0 for d in dims)
         ):
-            raise ValueError(f"dims must be a tuple of two positive even integers, got {dims}")
+            raise ValueError(f"dims must be a tuple of two positive integers, got {dims}")
         
         if verbosity == 1:
             print(f"Creating {net_type} network DiGraph with dimensions {dims}...", end="")
@@ -243,7 +243,7 @@ class OCN:
           i.e., no jumps over rows or columns. If ``wrap=True``, edges may
           connect across the grid boundaries (i.e. row 0 can connect to row m-1 and col 0 can connect to col n-1).
         - Edges do not cross in the row-column plane.
-        - Both ``m`` and ``n`` are even integers, and there are at least four
+        - Both ``m`` and ``n`` are positive integers, and there are at least four
           vertices.
 
         Examples
@@ -1059,7 +1059,13 @@ class OCN:
                 pbar.update(iterations_this_loop)
 
             # check for convergence if requested
-            if tol is not None and e_new < e_old and abs((e_old - e_new)/e_old) < tol:
+            if (
+                (tol is not None) 
+                and (e_new <= e_old) 
+                and (abs((e_old - e_new)/e_old) if e_old > 0 else np.inf < tol)
+            ):
+                print("Convergence reached, stopping optimization.")
+                # if self.verbosity >= 0:
                 break
         
         pbar.close()

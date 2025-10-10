@@ -128,10 +128,129 @@ class TestBasicOCN(unittest.TestCase):
             f"After iteration, RNG state should differ from {expected_rng}. Got {ocn.rng}"
         )
 
+    def test_from_digraph(self):
+        """Test creating OCN from custom NetworkX digraph."""
+        # Create a simple 3x3 cross pattern like in demo
+        dag = nx.DiGraph()
+        for i in range(9):
+            row, col = divmod(i, 3)
+            dag.add_node(i, pos=(row, col))
+        
+        # Simple flow pattern: all flow to center (node 4)
+        for i in [0, 1, 2, 3, 5, 6, 7, 8]:
+            dag.add_edge(i, 4)
+        
+        ocn = po.OCN.from_digraph(dag, random_state=1234)
+        
+        self.assertEqual(ocn.dims, (3, 3))
+        self.assertEqual(ocn.nroots, 1)  # Only center node should be root
+        self.assertAlmostEqual(ocn.energy, 11.0, places=6)
+        
+        ocn = po.OCN.from_digraph(dag, random_state=1234, gamma=1)
+        self.assertAlmostEqual(ocn.energy, 17.0, places=6)
 
+    def test_export_formats(self):
+        """Test different export formats produce consistent data."""
+        ocn = po.OCN.from_net_type("V", dims=(10, 10), random_state=9999)
+        
+        # Test numpy export
+        numpy_array = ocn.to_numpy(unwrap=False)
+        self.assertEqual(numpy_array.shape, (3, 10, 10))  # 3 channels: energy, area, watershed
+        
+        # Test digraph export  
+        dag = ocn.to_digraph()
+        self.assertEqual(len(dag.nodes), 100)  # 10x10 = 100 nodes
+        self.assertTrue(nx.is_directed_acyclic_graph(dag))
+        
+        # Check that node attributes exist
+        for node in dag.nodes:
+            attrs = dag.nodes[node]
+            self.assertIn('pos', attrs)
+            self.assertIn('drained_area', attrs)
+            self.assertIn('energy', attrs)
+            self.assertIn('watershed_id', attrs)
 
+    def test_periodic_boundaries(self):
+        """Test OCN with periodic boundary conditions."""
+        ocn_wrap = po.OCN.from_net_type("H", dims=(10, 10), wrap=True, random_state=5555)
+        ocn_no_wrap = po.OCN.from_net_type("H", dims=(10, 10), wrap=False, random_state=5555)
+        ocn_wrap.fit(n_iterations=500, pbar=False)
+        ocn_no_wrap.fit(n_iterations=500, pbar=False)
+        
+        self.assertTrue(ocn_wrap.wrap)
+        self.assertFalse(ocn_no_wrap.wrap)
+        
+        # Both should have same dimensions but potentially different energies
+        self.assertEqual(ocn_wrap.dims, ocn_no_wrap.dims)
+        # Wrapped version typically has different energy due to edge connections
+        self.assertNotEqual(ocn_wrap.energy, ocn_no_wrap.energy)
 
-    
+    def test_fit_convergence(self):
+        """Test that early exit works as intended."""
+        ocn = po.OCN.from_net_type("E", dims=(20, 20), random_state=7777)
+        
+        ocn.fit(n_iterations=20*20*500, pbar=False, tol=1e-4)
+        final_energy = ocn.energy
+
+        self.assertIsInstance(final_energy, float)
+        self.assertGreater(len(ocn.history), 0)
+        
+        # History should have correct structure: [iteration, energy, temperature]
+        self.assertEqual(ocn.history.shape[1], 3)
+        self.assertTrue(np.all(ocn.history[:, 0] >= 0))  # iterations >= 0
+        self.assertTrue(np.all(ocn.history[:, 1] > 0))   # energy > 0
+        self.assertTrue(np.all(ocn.history[:, 2] >= 0))  # temperature >= 0
+        
+        # final energy should match last history entry
+        self.assertEqual(ocn.energy, ocn.history[-1, 1])
+
+        # iteration should have stopped before max iterations and should be less than tol
+        self.assertLess(ocn.history[-1, 0], 20*20*500)
+        self.assertLessEqual((ocn.history[-1, 1] - ocn.history[-2, 1])/ocn.history[-1, 1], 1e-4)
+
+    def test_single_iteration(self):
+        """Test single iteration method."""
+        ocn = po.OCN.from_net_type("V", dims=(16, 16), random_state=3333)
+        initial_history_len = len(ocn.history)
+        
+        result = ocn.single_iteration(temperature=100.0, array_report=False)
+        
+        # Should return None when array_report=False
+        self.assertIsNone(result)
+        
+        # History should have one more entry
+        self.assertEqual(len(ocn.history), initial_history_len + 1)
+        
+        # Energy might have changed
+        self.assertIsInstance(ocn.energy, float)
+
+    def test_gamma_parameter(self):
+        """Test that gamma parameter affects energy calculation."""
+        dag = nx.DiGraph()
+        dag.add_node(0, pos=(0, 0))
+        dag.add_node(1, pos=(0, 1))
+        dag.add_edge(1, 0)  # Simple 2-node network
+        
+        ocn_low_gamma = po.OCN.from_digraph(dag, gamma=0.1, random_state=1111)
+        ocn_high_gamma = po.OCN.from_digraph(dag, gamma=0.9, random_state=1111)
+        
+        self.assertNotEqual(ocn_low_gamma.energy, ocn_high_gamma.energy)
+        self.assertEqual(ocn_low_gamma.gamma, 0.1)
+        self.assertEqual(ocn_high_gamma.gamma, 0.9)
+
+    def test_error_handling(self):
+        """Test error handling for invalid inputs."""
+        # Invalid gamma
+        with self.assertRaises(TypeError):
+            po.OCN.from_net_type("V", dims=(10, 10), gamma="invalid")
+        
+        # Invalid net_type
+        with self.assertRaises(ValueError):
+            po.OCN.from_net_type("INVALID", dims=(10, 10))
+        
+        # Invalid dimensions
+        with self.assertRaises((ValueError, TypeError)):
+            po.OCN.from_net_type("V", dims=(5,))  # Should need 2D dims
 
 
 if __name__ == "__main__":

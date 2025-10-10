@@ -162,7 +162,7 @@ Status fg_set_lin(FlowGrid *G, Vertex vert, linidx_t a){
 // # Create/destroy flowgrid #
 // ##############################
 FlowGrid *fg_create_empty(CartPair dims){
-    if (dims.row % 2 != 0 || dims.col % 2 != 0) return NULL;  // dimensions must be even
+    if (dims.row <= 0 || dims.col <= 0) return NULL;
 
     FlowGrid *G = malloc(sizeof(FlowGrid));
     if (G == NULL) return NULL;
