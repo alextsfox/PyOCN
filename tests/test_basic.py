@@ -11,6 +11,23 @@ import PyOCN as po
 class TestBasicOCN(unittest.TestCase):
     """Basic tests for OCN creation and energy computation."""
     
+    def test_ocn_to_xarray(self):
+        """Test that OCN can be converted to xarray and back."""
+        ocn = po.OCN.from_net_type(
+            net_type="V",
+            dims=(32, 32),
+            random_state=1234,
+        )
+        ocn.to_xarray()
+        
+        ocn = po.OCN.from_net_type(
+            net_type="V",
+            dims=(32, 32),
+            random_state=1234,
+            wrap=True,
+        )
+        ocn.to_xarray()
+        
     def test_ocn_energy(self):
         """Test that OCN creation produces expected energy value."""
         ocn = po.OCN.from_net_type(
