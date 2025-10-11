@@ -204,7 +204,10 @@ FlowGrid *fg_copy(FlowGrid *G){
 
 Status fg_destroy(FlowGrid *G){
     if (G != NULL){
-        if (G->vertices != NULL) free(G->vertices); G->vertices = NULL;
+        if (G->vertices != NULL){
+            free(G->vertices); 
+            G->vertices = NULL;
+        }
         free(G); 
     }
     return SUCCESS;
