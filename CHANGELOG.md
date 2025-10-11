@@ -14,3 +14,6 @@
 - fixed a bug in the rng algorithm that impacted reproducibility in some cases
 - odd-sized grids are now supported
 - fixed a bug preventing early exit in some situations during optimization when the convergence criterion is met
+
+# 1.3.20251010
+- fixed critical bug preventing export to xarray datasets

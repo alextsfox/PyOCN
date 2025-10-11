@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "PyOCN"
-version = "1.2.20251010"
+version = "1.3.20251010"
 description = "Optimal Channel Networks (OCN) in Python with a C core"
 readme = "readme.md"
 requires-python = ">=3.10"
