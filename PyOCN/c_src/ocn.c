@@ -22,11 +22,11 @@
  * @param temperature The current temperature.
  * @return true if the new state is accepted, false otherwise.
  */
-bool simulate_annealing(double energy_new, double energy_old, double temperature, rng_state_t *rng){
-    double accpt_prob = rng_uniformdouble(rng);
-    double delta_energy = energy_new - energy_old;
+static inline bool simulate_annealing(double energy_new, double energy_old, double temperature, rng_state_t *rng){
+    const double accpt_prob = rng_uniformdouble(rng);
+    const double delta_energy = energy_new - energy_old;
     if (delta_energy <= 0.0) return true;  // Always accept improvements
-    double p = exp(-delta_energy / temperature);
+    const double p = exp(-delta_energy / temperature);
     return accpt_prob < p;
 }
 
