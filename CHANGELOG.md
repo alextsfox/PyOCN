@@ -17,3 +17,6 @@
 
 # 1.3.20251010
 - fixed critical bug preventing export to xarray datasets
+
+# 1.3.20251011
+- fixed a bug where optimization did not work for single-outlet networks

@@ -22,11 +22,12 @@
  * @param temperature The current temperature.
  * @return true if the new state is accepted, false otherwise.
  */
-static inline bool simulate_annealing(double energy_new, double energy_old, double inv_temperature, rng_state_t *rng){
+static inline bool simulate_annealing(double energy_new, double energy_old, double temperature, rng_state_t *rng){
+    const double accpt_prob = rng_uniformdouble(rng);
     const double delta_energy = energy_new - energy_old;
     if (delta_energy <= 0.0) return true;  // Always accept improvements
-    const double p = exp(-delta_energy * inv_temperature);
-    return rng_uniformdouble(rng) < p;
+    const double p = exp(-delta_energy / temperature);
+    return accpt_prob < p;
 }
 
 /**
@@ -96,8 +97,6 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     drainedarea_t da_inc;
     CartPair dims = G->dims;
     linidx_t nverts = (linidx_t)dims.row * (linidx_t)dims.col;
-
-    double inv_temperature = 1.0 / temperature;
 
     double energy_old, energy_new;
     energy_old = G->energy;
@@ -172,7 +171,7 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
         update_drained_area(G, -da_inc, a_down_old);  // remove drainage from old path
         update_drained_area(G, da_inc, a_down_new);  // add drainage to new path
         energy_new = ocn_compute_energy(G, gamma);  // recompute energy from scratch
-        if (simulate_annealing(energy_new, energy_old, inv_temperature, &G->rng)){
+        if (simulate_annealing(energy_new, energy_old, temperature, &G->rng)){
             G->energy = energy_new;
             return SUCCESS;
         }
