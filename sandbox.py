@@ -1,10 +1,15 @@
-from timeit import timeit
 
+import matplotlib.pyplot as plt
 import PyOCN as po
 
 ocn = po.OCN.from_net_type(
     net_type="V",
-    dims=(74, 74),
+    dims=(100, 100),
+    wrap=True,
     random_state=8472,
 )
-print(timeit(ocn.fit, number=10)/10)
+ocn.fit(pbar=True, n_iterations=100**2*100, constant_phase=0.25, cooling_rate=1)
+
+plt.plot(ocn.history[:, 0], ocn.history[:, 1])
+plt.plot(ocn.history[:, 0], ocn.history[:, 2])
+plt.show()
