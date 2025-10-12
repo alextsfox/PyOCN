@@ -252,6 +252,27 @@ class TestBasicOCN(unittest.TestCase):
         with self.assertRaises((ValueError, TypeError)):
             po.OCN.from_net_type("V", dims=(5,))  # Should need 2D dims
 
+    def test_greedy_optimization(self):
+        ocn = po.OCN.from_net_type(
+            net_type="V",
+            dims=(16, 16),
+            wrap=True,
+            random_state=8472,
+        )
+        # use a temperature of 1e-7 since we were bitten before by accidentally using 1/temperature. 
+        # Using temperature=0 could lead to infinities, which might behave unexpectedly.
+        # this way, if our mass is wrong and blows up somewhere, we know that we will catch it.
+        ocn.fit_custom_cooling(lambda t: np.ones_like(t)*1e-7, pbar=False, n_iterations=16**2*100, max_iterations_per_loop=1)
+        self.assertLessEqual(np.quantile(np.diff(ocn.history[:, 1]), 0.999) - 1e-7, 0, "Energy did not decrease monotonically.")
+        
+        ocn = po.OCN.from_net_type(
+            net_type="E",
+            dims=(16, 16),
+            wrap=True,
+            random_state=8472,
+        )
+        ocn.fit_custom_cooling(lambda t: np.ones_like(t)*1e-7, pbar=False, n_iterations=16**2*100, max_iterations_per_loop=1)
+        self.assertLessEqual(np.quantile(np.diff(ocn.history[:, 1]), 0.999) - 1e-7, 0, "Energy did not decrease monotonically.")
 
 if __name__ == "__main__":
     unittest.main()
