@@ -65,4 +65,3 @@ print("Final energy:", ocn.energy)
 # plt.hist(np.diff(ocn.history[:, 1]), bins=np.linspace(-1000, 0))
 
 plt.show()
-

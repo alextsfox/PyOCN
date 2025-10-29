@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.abspath('..'))
 project = 'PyOCN'
 copyright = '2025, Alexander S. Fox'
 author = 'Alexander S. Fox'
-release = '1.3.20251011'
+version = "1.4.20251029"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
