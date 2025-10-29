@@ -4,8 +4,6 @@
  * @brief Header file for OCN optimization.
  */
 
-//#TODO I'm worried that our method of choosing a new vertex if the last one is invalid introduces bias. Either choose a random direction to walk, or just try every vertex in random order.
-
 #ifndef OCN_H
 #define OCN_H
 
