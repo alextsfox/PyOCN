@@ -340,9 +340,7 @@ class TestBasicOCN(unittest.TestCase):
         ocn.fit(pbar=True, max_iterations_per_loop=10_000, calculate_full_energy=False)
         energy_2 = ocn.energy
 
-        self.assertAlmostEqual(energy, energy_2, places=5, msg="Energies do not match between full_energy_calc and incremental update methods.")
-
-    def 
+        self.assertAlmostEqual(energy, energy_2, places=5, msg="Energies do not match between full_energy_calc and incremental update methods.") 
 
 if __name__ == "__main__":
     unittest.main()
