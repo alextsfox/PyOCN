@@ -51,10 +51,6 @@ static inline Status update_drained_area(FlowGrid *G, drainedarea_t da_inc, lini
     return SUCCESS;  
 }
 
-double ocn_compute_energy(FlowGrid *G, double gamma){
-    return compute_energy(G, gamma);
-}
-
 static inline double compute_energy(FlowGrid *G, double gamma){
     double energy = 0.0;
     for (linidx_t i = 0; i < (linidx_t)G->dims.row * (linidx_t)G->dims.col; i++){
@@ -62,6 +58,11 @@ static inline double compute_energy(FlowGrid *G, double gamma){
     }
     return energy;
 }
+
+double ocn_compute_energy(FlowGrid *G, double gamma){
+    return compute_energy(G, gamma);
+}
+
 
 /**
  * @brief Update the energy of the flowgrid along a single downstream path from a given vertex. Unsafe.
