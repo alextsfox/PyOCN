@@ -3,12 +3,15 @@ Utility functions for working with OCNs.
 """
 
 from __future__ import annotations
+from concurrent.futures import ThreadPoolExecutor
 from itertools import product
+import os
 from typing import Any, Literal, Callable, TYPE_CHECKING, Union
 from numbers import Number
 import networkx as nx
 import numpy as np
 from tqdm import tqdm
+from functools import partial
 
 if TYPE_CHECKING:
     from .ocn import OCN
@@ -359,4 +362,79 @@ def get_subwatersheds(dag : nx.DiGraph, node : Any) -> set[nx.DiGraph]:
     subwatersheds = set(set(nx.ancestors(dag, outlet)) | {outlet} for outlet in subwatershed_outlets)
     subwatersheds = set(dag.subgraph(wshd) for wshd in subwatersheds)
     return subwatersheds
+
+
+def multi_fit(ocn:OCN|list[OCN], n_runs=5, n_threads=None, fit_method:Literal["fit", "fit_custom_cooling"]|None=None, increment_rng:bool=True, pbar:bool=False, fit_kwargs:dict|list[dict]=None) -> tuple[list[Any], list[OCN]]:
+    """Perform multiple OCN fitting operations in parallel using multithreading.
+    Each fit uses the same set of parameters, but different random seeds.
+    Each fit's random seed is set to `ocn.rng + i`, where `i` is the thread index.
+
+    Useful for doing sensitivity analysis or ensemble fitting.
+
+    Parameters
+    ----------
+    ocn : OCN | list[OCN]
+        The OCN instance(s) to fit. If a list of OCNs is provided, each OCN will be fitted independently.
+    n_runs : int, default 5
+        The number of fitting runs to perform. Must be equal to the length of `ocn` if `ocn` is a list.
+    n_threads : int, default None
+        The number of worker threads to use for parallel execution. If None, defaults to the number of CPU cores, times 2.
+    fit_method : {"fit", "fit_custom_cooling"} | None, default None
+        The fitting method to use. If None, defaults to "fit".
+    increment_rng : bool, default True
+        If True, each fit's random seed is set to `ocn.rng + i`, where `i` is the thread index.
+    pbar : bool, default False
+        If True, display a master progress bar that tracks the completion of each thread.
+    fit_kwargs : dict | list[dict], optional
+        Additional keyword arguments to pass to the `OCN.fit` method. If a list of dicts is provided,
+        it must be of length `n_runs`, and each dict will be used for the corresponding fit.
+
+    Returns
+    -------
+    tuple[list[Any], list[OCN]]
+        A tuple containing two lists:
+        - A list of results from each fitting operation.
+        - A list of fitted OCN instances corresponding to each fitting operation.
+    """
+
+    if isinstance(ocn, list):
+        if len(ocn) != n_runs:
+            raise ValueError(f"When ocn is a list, its length must equal n_runs. Got len(ocn)={len(ocn)} and n_runs={n_runs}.")
+    else:
+        ocn = [ocn.copy() for _ in range(n_runs)]
+
+    if isinstance(fit_kwargs, list):
+        if len(fit_kwargs) != n_runs:
+            raise ValueError(f"When fit_kwargs is a list, its length must equal n_runs. Got len(fit_kwargs)={len(fit_kwargs)} and n_runs={n_runs}.")
+        if not all(isinstance(k, dict) for k in fit_kwargs):
+            raise ValueError("All elements of fit_kwargs list must be dictionaries.")
+    elif not isinstance(fit_kwargs, dict) and fit_kwargs is not None:
+        raise ValueError(f"fit_kwargs must be a dict or a list of dicts. Got {type(fit_kwargs)}.")
+    else: 
+        fit_kwargs = [fit_kwargs or dict() for _ in range(n_runs)]
+
+    def fit(ocn, i, fit_kwargs):
+        if increment_rng:
+            ocn.rng  = ocn.rng + i
+        if fit_method is None or fit_method == "fit":
+            res = ocn.fit(**fit_kwargs)
+        elif fit_method == "fit_custom_cooling":
+            res = ocn.fit_custom_cooling(**fit_kwargs)
+        else:
+            raise ValueError(f"Invalid fit_method {fit_method}. Must be one of 'fit', 'fit_custom_cooling', or None.")
+        return res
     
+    if n_threads is None:
+        n_threads = os.cpu_count()
+    n_threads = min(os.cpu_count()*2, n_threads)
+
+    with ThreadPoolExecutor(max_workers=n_threads) as executor:
+        futures = []
+        for i in range(n_runs):
+            futures.append(executor.submit(fit, ocn[i], i, fit_kwargs[i]))
+        results = []
+        pbar = tqdm(futures, disable=not pbar, desc="Fitting OCNs")
+        for i, future in enumerate(futures):
+            results.append(future.result())
+            pbar.update(1)
+    return results, ocn
