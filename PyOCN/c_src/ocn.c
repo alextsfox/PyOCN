@@ -90,7 +90,7 @@ static Status update_energy_single_root(FlowGrid *G, drainedarea_t da_inc, linid
     return SUCCESS;
 }
 
-Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
+Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature, bool calculate_full_energy){
     Status code;
 
     Vertex vert;
@@ -158,20 +158,9 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
 
     
     mh_eval:
-    /*
-    TODO: PERFORMANCE ISSUE:
-    This function is supposed to update the energy of the flowgrid G after a 
-    change in drained area along the path starting at vertex a.
 
-    Simple but inefficient fix (current): recompute the *entire* energy of the flowgrid from scratch
-    each time this function is called.
-
-    More complex fix: find the set of all upstream vertices that flow into a and compute
-    their summed contribution to the energy. Pass this value (sum of (da^gamma) for all
-    upstream vertices) into this function, instead of just passing da_inc.
-    */
-    if ((G->nroots > 1) && (gamma < 1.0)){
-        // energy_old = compute_energy(G, gamma);  // recompute energy from scratch
+    if (calculate_full_energy){
+        energy_old = compute_energy(G, gamma);  // recompute energy from scratch
         update_drained_area(G, -da_inc, a_down_old);  // remove drainage from old path
         update_drained_area(G, da_inc, a_down_new);  // add drainage to new path
         energy_new = compute_energy(G, gamma);  // recompute energy from scratch
@@ -179,31 +168,27 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
             G->energy = energy_new;
             return SUCCESS;
         }
-        // reject swap: undo everything and try again
-        update_drained_area(G, da_inc, a_down_old);  // add removed drainage back to old path
-        update_drained_area(G, -da_inc, a_down_new);  // remove added drainage from new path
-        fg_change_vertex_outflow(G, a, down_old);  // undo the outflow change
-    } else {  // if there's only one root, we can use a more efficient method
+    } else {
         update_energy_single_root(G, -da_inc, a_down_old, gamma);  // remove drainage from old path and update energy
         update_energy_single_root(G, da_inc, a_down_new, gamma);  // add drainage to new path and update energy
         energy_new = G->energy;
         if (simulate_annealing(energy_new, energy_old, temperature, &G->rng)){
             return SUCCESS;
         }
-        // reject swap: undo everything and try again
-        update_energy_single_root(G, da_inc, a_down_old, gamma);  // add removed drainage back to old path and update energy
-        update_energy_single_root(G, -da_inc, a_down_new, gamma);  // remove added drainage from new path and update energy
-        fg_change_vertex_outflow(G, a, down_old);  // undo the outflow change
     }
     
-    
+    // reject swap: undo everything and try again
+    update_drained_area(G, da_inc, a_down_old);  // add removed drainage back to old path and update energy
+    update_drained_area(G, -da_inc, a_down_new);  // remove added drainage from new path and update energy
+    fg_change_vertex_outflow(G, a, down_old);  // undo the outflow change
+    G->energy = energy_old;
     return EROSION_FAILURE;  // if we reach here, we failed to find a valid swap in many, many tries
 }
 
-Status ocn_outer_ocn_loop(FlowGrid *G, uint32_t niterations, double gamma, double *annealing_schedule){
+Status ocn_outer_ocn_loop(FlowGrid *G, uint32_t niterations, double gamma, double *annealing_schedule, bool calculate_full_energy){
     Status code;
     for (uint32_t i = 0; i < niterations; i++){
-        code = ocn_single_erosion_event(G, gamma, annealing_schedule[i]);
+        code = ocn_single_erosion_event(G, gamma, annealing_schedule[i], calculate_full_energy);
         if ((code != SUCCESS) && (code != EROSION_FAILURE)) return code;
     }
     return SUCCESS;

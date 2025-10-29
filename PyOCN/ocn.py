@@ -598,7 +598,7 @@ class OCN:
             }
         )
 
-    def single_iteration(self, temperature:float, array_report:bool=False, unwrap:bool=True) -> "xr.Dataset | None":
+    def single_iteration(self, temperature:float, array_report:bool=False, unwrap:bool=True, calculate_full_energy:bool=True) -> "xr.Dataset | None":
         """ 
         Perform a single iteration of the optimization algorithm at a given temperature. Updates the internal history attribute.
         See :meth:`fit` for details on the algorithm.
@@ -619,6 +619,17 @@ class OCN:
             with some nan values. If False or the current OCN does not have
             periodic boundaries, then no transformation is applied and the
             resulting raster will have the same dimensions as the current OCN grid.
+        calculate_full_energy : bool, default True
+            If True, the full energy of the graph is recalculated when considering
+            the proposed change. If False, a more efficient incremental update is used.
+            full_energy_recalc will be slower, but avoid accumulated numerical errors
+            over many iterations.
+
+        Returns
+        -------
+        xr.Dataset | None
+            If ``array_report == True``, an xarray.Dataset containing the state of the FlowGrid
+            after the iteration. See :meth:`to_xarray` for details. If ``array_report == False``, returns None.
 
         Raises
         ------
@@ -630,6 +641,7 @@ class OCN:
             self.__p_c_graph,
             self.gamma, 
             temperature,
+            calculate_full_energy
         ))
 
         # append to history
@@ -654,7 +666,8 @@ class OCN:
         array_reports:int=0,
         tol:float=None,
         max_iterations_per_loop=10_000,
-        unwrap:bool=True,) -> "xr.Dataset | None":
+        unwrap:bool=True,
+        calculate_full_energy:bool=False) -> "xr.Dataset | None":
         """
         Convenience function to optimize the OCN using the simulated annealing algorithm from Carraro et al (2020).
         For finer control over the optimization process, use :meth:`fit_custom_cooling` or use :meth:`single_erosion_event` in a loop.
@@ -706,6 +719,11 @@ class OCN:
             with some nan values. If False or the current OCN does not have
             periodic boundaries, then no transformation is applied and the
             resulting raster will have the same dimensions as the current OCN grid.
+        calculate_full_energy: bool, default False
+            If True, the full energy of the graph is recalculated when considering
+            the proposed change. If False, a more efficient incremental update is used.
+            full_energy_recalc will be slower, but avoid accumulated numerical errors
+            over many iterations.
 
         Returns
         -------
@@ -800,6 +818,7 @@ class OCN:
             tol=tol,
             max_iterations_per_loop=max_iterations_per_loop,
             unwrap=unwrap,
+            calculate_full_energy=calculate_full_energy,
         )
 
     def fit_custom_cooling(
@@ -812,6 +831,7 @@ class OCN:
         tol:float=None,
         max_iterations_per_loop=10_000,
         unwrap:bool=True,
+        calculate_full_energy:bool=False,
     ) -> "xr.Dataset | None":
         """
         Optimize the OCN using the a custom cooling schedule. This allows for
@@ -838,6 +858,7 @@ class OCN:
         tol : float, optional
         max_iterations_per_loop: int, optional
         unwrap: bool, default True
+        calculate_full_energy: bool, default False
 
         Returns
         -------
@@ -924,6 +945,7 @@ class OCN:
                 iterations_this_loop, 
                 self.gamma, 
                 anneal_ptr,
+                calculate_full_energy,
             ))
             e_new = self.energy
             completed_iterations += iterations_this_loop
