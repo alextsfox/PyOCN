@@ -42,8 +42,6 @@ PyOCN.plotting
         Helper functions for visualization and plotting
 """
 
-
-# TODO: relax the even dims requirement
 # TODO: have to_rasterio use the option to set the root node to 0,0 by using to_xarray as the backend instead of numpy?
 
 
@@ -266,8 +264,7 @@ class OCN:
         return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=True, wrap=wrap)
 
     def __repr__(self):
-        #TODO: too verbose?
-        return f"<PyOCN.OCN object at 0x{id(self):x} with FlowGrid_C at 0x{ctypes.addressof(self.__p_c_graph.contents):x} and Vertex_C array at 0x{ctypes.addressof(self.__p_c_graph.contents.vertices):x}>"
+        return f"<PyOCN.OCN object at 0x{id(self):x}>\n<FlowGrid_C struct at 0x{ctypes.addressof(self.__p_c_graph.contents):x}>\n<Vertex_C array at 0x{ctypes.addressof(self.__p_c_graph.contents.vertices):x}>"
     def __str__(self):
         return f"OCN(gamma={self.gamma}, energy={self.energy}, dims={self.dims}, resolution={self.resolution}m, verbosity={self.verbosity})"
     def __del__(self):
