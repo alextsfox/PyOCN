@@ -274,5 +274,6 @@ class TestBasicOCN(unittest.TestCase):
         ocn.fit_custom_cooling(lambda t: np.ones_like(t)*1e-7, pbar=False, n_iterations=16**2*100, max_iterations_per_loop=1)
         self.assertLessEqual(np.quantile(np.diff(ocn.history[:, 1]), 0.999) - 1e-7, 0, "Energy did not decrease monotonically.")
 
+    # TODO: write tests for the parallel fitting utility
 if __name__ == "__main__":
     unittest.main()
