@@ -364,23 +364,31 @@ def get_subwatersheds(dag : nx.DiGraph, node : Any) -> set[nx.DiGraph]:
     return subwatersheds
 
 
-def multi_fit(ocn:OCN|list[OCN], n_runs=5, n_threads=None, fit_method:Literal["fit", "fit_custom_cooling"]|None=None, increment_rng:bool=True, pbar:bool=False, fit_kwargs:dict|list[dict]=None) -> tuple[list[Any], list[OCN]]:
-    """Perform multiple OCN fitting operations in parallel using multithreading.
-    Each fit uses the same set of parameters, but different random seeds.
-    Each fit's random seed is set to `ocn.rng + i`, where `i` is the thread index.
-
+def parallel_fit(
+    ocn:OCN|list[OCN], 
+    n_runs=5, 
+    n_threads=None, 
+    fit_method:Literal["fit", "fit_custom_cooling"]|list[Literal["fit", "fit_custom_cooling"]]|None=None, 
+    increment_rng:bool=True, 
+    pbar:bool=False, 
+    fit_kwargs:dict|list[dict]=None
+) -> tuple[list[Any], list[OCN]]:
+    """Convenience function to perform multiple OCN fitting operations in parallel using multithreading. 
     Useful for doing sensitivity analysis or ensemble fitting.
 
     Parameters
     ----------
     ocn : OCN | list[OCN]
         The OCN instance(s) to fit. If a list of OCNs is provided, each OCN will be fitted independently.
+        If a single OCN is provided, it will be copied `n_runs` times.
+        Not modified during fitting.
     n_runs : int, default 5
         The number of fitting runs to perform. Must be equal to the length of `ocn` if `ocn` is a list.
     n_threads : int, default None
         The number of worker threads to use for parallel execution. If None, defaults to the number of CPU cores, times 2.
-    fit_method : {"fit", "fit_custom_cooling"} | None, default None
-        The fitting method to use. If None, defaults to "fit".
+    fit_method : {"fit", "fit_custom_cooling"} | list[{"fit", "fit_custom_cooling"} | None], default None
+        The fitting method to use. If None, defaults to "fit". If a list is provided, it must be of length `n_runs`,
+        and each element specifies the fitting method for the corresponding fit.
     increment_rng : bool, default True
         If True, each fit's random seed is set to `ocn.rng + i`, where `i` is the thread index.
     pbar : bool, default False
@@ -400,6 +408,7 @@ def multi_fit(ocn:OCN|list[OCN], n_runs=5, n_threads=None, fit_method:Literal["f
     if isinstance(ocn, list):
         if len(ocn) != n_runs:
             raise ValueError(f"When ocn is a list, its length must equal n_runs. Got len(ocn)={len(ocn)} and n_runs={n_runs}.")
+        ocn = [o.copy() for o in ocn]
     else:
         ocn = [ocn.copy() for _ in range(n_runs)]
 
@@ -413,7 +422,17 @@ def multi_fit(ocn:OCN|list[OCN], n_runs=5, n_threads=None, fit_method:Literal["f
     else: 
         fit_kwargs = [fit_kwargs or dict() for _ in range(n_runs)]
 
-    def fit(ocn, i, fit_kwargs):
+    if isinstance(fit_method, list):
+        if len(fit_method) != n_runs:
+            raise ValueError(f"When fit_method is a list, its length must equal n_runs. Got len(fit_method)={len(fit_method)} and n_runs={n_runs}.")
+        elif not all(m is None or m in {"fit", "fit_custom_cooling"} for m in fit_method):
+            raise ValueError("All elements of fit_method list must be one of 'fit', 'fit_custom_cooling', or None.")
+    else:
+        if fit_method is not None and fit_method not in {"fit", "fit_custom_cooling"}:
+            raise ValueError(f"Invalid fit_method {fit_method}. Must be one of 'fit', 'fit_custom_cooling', or None.")
+        fit_method = [fit_method for _ in range(n_runs)]
+
+    def fit(ocn, i, fit_method, fit_kwargs):
         if increment_rng:
             ocn.rng  = ocn.rng + i
         if fit_method is None or fit_method == "fit":
@@ -422,7 +441,7 @@ def multi_fit(ocn:OCN|list[OCN], n_runs=5, n_threads=None, fit_method:Literal["f
             res = ocn.fit_custom_cooling(**fit_kwargs)
         else:
             raise ValueError(f"Invalid fit_method {fit_method}. Must be one of 'fit', 'fit_custom_cooling', or None.")
-        return res
+        return res, i  # return index to place result correctly, in case of out-of-order completion.
     
     if n_threads is None:
         n_threads = os.cpu_count()
@@ -431,10 +450,11 @@ def multi_fit(ocn:OCN|list[OCN], n_runs=5, n_threads=None, fit_method:Literal["f
     with ThreadPoolExecutor(max_workers=n_threads) as executor:
         futures = []
         for i in range(n_runs):
-            futures.append(executor.submit(fit, ocn[i], i, fit_kwargs[i]))
-        results = []
+            futures.append(executor.submit(fit, ocn[i], i, fit_method[i], fit_kwargs[i]))
+        results = [None] * n_runs
         pbar = tqdm(futures, disable=not pbar, desc="Fitting OCNs")
-        for i, future in enumerate(futures):
-            results.append(future.result())
+        for future in futures:
+            res, idx = future.result()
+            results[idx] = res
             pbar.update(1)
     return results, ocn

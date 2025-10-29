@@ -24,7 +24,7 @@ fit_kwargs = {
     "pbar": False,
     "max_iterations_per_loop": 2_000,
 }
-results, fitted_ocns = po.utils.multi_fit(ocns, len(gammas), pbar=True, fit_kwargs=fit_kwargs)
+results, fitted_ocns = po.utils.parallel_fit(ocns, len(gammas), pbar=True, fit_kwargs=fit_kwargs)
 
 for fitted_ocn in fitted_ocns:
     plt.plot(fitted_ocn.history[:, 0], (fitted_ocn.history[:, 1] - fitted_ocn.history[-1, 1]) / (fitted_ocn.history[0, 1] - fitted_ocn.history[-1, 1]), alpha=0.5, color="C0")
