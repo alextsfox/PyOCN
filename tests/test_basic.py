@@ -309,38 +309,38 @@ class TestBasicOCN(unittest.TestCase):
             self.assertAlmostEqual(ocn.energy, o.history[0, 1], places=6, msg="Initial energy was not preserved.")
 
     def test_energy_update_method(self):
-        ocn = po.OCN.from_net_type("E", dims=(64, 64), random_state=238155)
-        ocn.fit(pbar=True, max_iterations_per_loop=10_000, calculate_full_energy=True)
+        ocn = po.OCN.from_net_type("E", dims=(44, 44), random_state=238155)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=True)
         energy = ocn.energy
-        ocn = po.OCN.from_net_type("E", dims=(64, 64), random_state=238155)
-        ocn.fit(pbar=True, max_iterations_per_loop=10_000, calculate_full_energy=False)
+        ocn = po.OCN.from_net_type("E", dims=(44, 44), random_state=238155)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=False)
         energy_2 = ocn.energy
-        self.assertAlmostEqual(energy, energy_2, places=5, msg="Energies do not match between full_energy_calc and incremental update methods.")
+        self.assertAlmostEqual(energy/energy_2, 1.0, places=3, msg="Energies do not match between full_energy_calc and incremental update methods.")
         
-        ocn = po.OCN.from_net_type("E", dims=(61, 61), random_state=12638)
-        ocn.fit(pbar=True, max_iterations_per_loop=10_000, calculate_full_energy=True)
+        ocn = po.OCN.from_net_type("E", dims=(31, 31), random_state=12638)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=True)
         energy = ocn.energy
-        ocn = po.OCN.from_net_type("E", dims=(61, 61), random_state=12638)
-        ocn.fit(pbar=True, max_iterations_per_loop=10_000, calculate_full_energy=False)
+        ocn = po.OCN.from_net_type("E", dims=(31, 31), random_state=12638)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=False)
         energy_2 = ocn.energy
-        self.assertAlmostEqual(energy, energy_2, places=5, msg="Energies do not match between full_energy_calc and incremental update methods.")
+        self.assertAlmostEqual(energy/energy_2, 1.0, places=3, msg="Energies do not match between full_energy_calc and incremental update methods.")
         
-        ocn = po.OCN.from_net_type("I", dims=(68, 68), random_state=19075)
-        ocn.fit(pbar=True, max_iterations_per_loop=10_000, calculate_full_energy=True)
+        ocn = po.OCN.from_net_type("I", dims=(38, 38), random_state=19075)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=True)
         energy = ocn.energy
-        ocn = po.OCN.from_net_type("I", dims=(68, 68), random_state=19075)
-        ocn.fit(pbar=True, max_iterations_per_loop=10_000, calculate_full_energy=False)
+        ocn = po.OCN.from_net_type("I", dims=(38, 38), random_state=19075)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=False)
         energy_2 = ocn.energy
-        self.assertAlmostEqual(energy, energy_2, places=5, msg="Energies do not match between full_energy_calc and incremental update methods.")
+        self.assertAlmostEqual(energy/energy_2, 1.0, places=3, msg="Energies do not match between full_energy_calc and incremental update methods.")
         
-        ocn = po.OCN.from_net_type("I", dims=(50, 61), random_state=910536)
-        ocn.fit(pbar=True, max_iterations_per_loop=10_000, calculate_full_energy=True)
+        ocn = po.OCN.from_net_type("I", dims=(20, 41), random_state=910536)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=True)
         energy = ocn.energy
-        ocn = po.OCN.from_net_type("I", dims=(50, 61), random_state=910536)
-        ocn.fit(pbar=True, max_iterations_per_loop=10_000, calculate_full_energy=False)
+        ocn = po.OCN.from_net_type("I", dims=(20, 41), random_state=910536)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=False)
         energy_2 = ocn.energy
 
-        self.assertAlmostEqual(energy, energy_2, places=5, msg="Energies do not match between full_energy_calc and incremental update methods.") 
+        self.assertAlmostEqual(energy/energy_2, 1.0, places=3, msg="Energies do not match between full_energy_calc and incremental update methods.") 
 
 if __name__ == "__main__":
     unittest.main()

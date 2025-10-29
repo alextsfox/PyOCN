@@ -622,7 +622,9 @@ class OCN:
         calculate_full_energy : bool, default False
             If True, the full energy of the graph is recalculated when considering
             the proposed change. If False, a more efficient incremental update is used.
-            Used in debugging and testing.
+            Small numerical differences may arise between the two methods due to floating point
+            precision. If precision is of the utmost importance, set this to True, but note that
+            this comes with a significant performance penalty.
 
         Returns
         -------
@@ -718,10 +720,12 @@ class OCN:
             with some nan values. If False or the current OCN does not have
             periodic boundaries, then no transformation is applied and the
             resulting raster will have the same dimensions as the current OCN grid.
-        calculate_full_energy: bool, default False
+        calculate_full_energy : bool, default False
             If True, the full energy of the graph is recalculated when considering
             the proposed change. If False, a more efficient incremental update is used.
-            Used in debugging and testing.
+            Small numerical differences may arise between the two methods due to floating point
+            precision. If precision is of the utmost importance, set this to True, but note that
+            this comes with a significant performance penalty.
 
         Returns
         -------
