@@ -52,6 +52,10 @@ static inline Status update_drained_area(FlowGrid *G, drainedarea_t da_inc, lini
 }
 
 double ocn_compute_energy(FlowGrid *G, double gamma){
+    return compute_energy(G, gamma);
+}
+
+static inline double compute_energy(FlowGrid *G, double gamma){
     double energy = 0.0;
     for (linidx_t i = 0; i < (linidx_t)G->dims.row * (linidx_t)G->dims.col; i++){
         energy += pow(G->vertices[i].drained_area, gamma);
@@ -167,10 +171,10 @@ Status ocn_single_erosion_event(FlowGrid *G, double gamma, double temperature){
     upstream vertices) into this function, instead of just passing da_inc.
     */
     if ((G->nroots > 1) && (gamma < 1.0)){
-        // energy_old = ocn_compute_energy(G, gamma);  // recompute energy from scratch
+        // energy_old = compute_energy(G, gamma);  // recompute energy from scratch
         update_drained_area(G, -da_inc, a_down_old);  // remove drainage from old path
         update_drained_area(G, da_inc, a_down_new);  // add drainage to new path
-        energy_new = ocn_compute_energy(G, gamma);  // recompute energy from scratch
+        energy_new = compute_energy(G, gamma);  // recompute energy from scratch
         if (simulate_annealing(energy_new, energy_old, temperature, &G->rng)){
             G->energy = energy_new;
             return SUCCESS;
