@@ -37,7 +37,7 @@ static inline bool simulate_annealing(double energy_new, double energy_old, doub
  * @param a The linear index of the starting vertex.
  * @return Status code indicating success or failure
  */
-static inline Status update_drained_area(FlowGrid *G, drainedarea_t da_inc, linidx_t a){
+static Status update_drained_area(FlowGrid *G, drainedarea_t da_inc, linidx_t a){
     Vertex vert;
     do {
         Status code = fg_get_lin(&vert, G, a);
@@ -63,7 +63,6 @@ double ocn_compute_energy(FlowGrid *G, double gamma){
     return compute_energy(G, gamma);
 }
 
-
 /**
  * @brief Update the energy of the flowgrid along a single downstream path from a given vertex. Unsafe.
  * This function only works correctly if there is a single root in the flowgrid.
@@ -74,7 +73,7 @@ double ocn_compute_energy(FlowGrid *G, double gamma){
  * @param gamma The exponent used in the energy calculation.
  * @return Status code indicating success or failure
  */
-Status update_energy_single_root(FlowGrid *G, drainedarea_t da_inc, linidx_t a, double gamma){
+static Status update_energy_single_root(FlowGrid *G, drainedarea_t da_inc, linidx_t a, double gamma){
     Vertex vert;
     double energy_old = 0.0;
     double energy_new = 0.0;
