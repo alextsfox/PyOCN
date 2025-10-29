@@ -317,18 +317,18 @@ class TestBasicOCN(unittest.TestCase):
         energy_2 = ocn.energy
         self.assertAlmostEqual(energy/energy_2, 1.0, places=3, msg="Energies do not match between full_energy_calc and incremental update methods.")
         
-        ocn = po.OCN.from_net_type("E", dims=(31, 31), random_state=12638)
+        ocn = po.OCN.from_net_type("E", dims=(31, 31), random_state=12638, gamma=0.21)
         ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=True)
         energy = ocn.energy
-        ocn = po.OCN.from_net_type("E", dims=(31, 31), random_state=12638)
+        ocn = po.OCN.from_net_type("E", dims=(31, 31), random_state=12638, gamma=0.21)
         ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=False)
         energy_2 = ocn.energy
         self.assertAlmostEqual(energy/energy_2, 1.0, places=3, msg="Energies do not match between full_energy_calc and incremental update methods.")
         
-        ocn = po.OCN.from_net_type("I", dims=(38, 38), random_state=19075)
+        ocn = po.OCN.from_net_type("I", dims=(38, 38), random_state=19075, gamma=0.78)
         ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=True)
         energy = ocn.energy
-        ocn = po.OCN.from_net_type("I", dims=(38, 38), random_state=19075)
+        ocn = po.OCN.from_net_type("I", dims=(38, 38), random_state=19075, gamma=0.78)
         ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=False)
         energy_2 = ocn.energy
         self.assertAlmostEqual(energy/energy_2, 1.0, places=3, msg="Energies do not match between full_energy_calc and incremental update methods.")
@@ -341,6 +341,69 @@ class TestBasicOCN(unittest.TestCase):
         energy_2 = ocn.energy
 
         self.assertAlmostEqual(energy/energy_2, 1.0, places=3, msg="Energies do not match between full_energy_calc and incremental update methods.") 
+
+    def test_gamma(self):
+        """Test that different gamma values affect energy as expected."""
+        ocn_gamma_1 = po.OCN.from_net_type(
+            net_type="V",
+            dims=(32, 32),
+            gamma=1.0,
+            random_state=1234,
+        )
+        energy_gamma_1 = ocn_gamma_1.energy
+        
+        ocn_gamma_2 = po.OCN.from_net_type(
+            net_type="V",
+            dims=(32, 32),
+            gamma=0.5,
+            random_state=1234,
+        )
+        energy_gamma_2 = ocn_gamma_2.energy
+        
+        ocn_gamma_3 = po.OCN.from_net_type(
+            net_type="V",
+            dims=(32, 32),
+            gamma=0.25,
+            random_state=1234,
+        )
+        energy_gamma_3 = ocn_gamma_3.energy
+        
+        self.assertNotAlmostEqual(energy_gamma_1, energy_gamma_2, places=1, msg="Energies for gamma=1.0 and gamma=0.5 should differ.")
+        self.assertNotAlmostEqual(energy_gamma_1, energy_gamma_3, places=1, msg="Energies for gamma=1.0 and gamma=0.25 should differ.")
+        self.assertNotAlmostEqual(energy_gamma_2, energy_gamma_3, places=1, msg="Energies for gamma=0.5 and gamma=0.25 should differ.")
+        self.assertLess(energy_gamma_3, energy_gamma_2, msg="Energy should decrease with lower gamma.")
+        self.assertLess(energy_gamma_2, energy_gamma_1, msg="Energy should decrease with lower gamma.")
+        
+        ocn_gamma_1 = po.OCN.from_net_type(
+            net_type="E",
+            dims=(32, 32),
+            gamma=1.0,
+            random_state=1234,
+        )
+        energy_gamma_1 = ocn_gamma_1.energy
+        
+        ocn_gamma_2 = po.OCN.from_net_type(
+            net_type="E",
+            dims=(32, 32),
+            gamma=0.5,
+            random_state=1234,
+        )
+        energy_gamma_2 = ocn_gamma_2.energy
+        
+        ocn_gamma_3 = po.OCN.from_net_type(
+            net_type="E",
+            dims=(32, 32),
+            gamma=0.25,
+            random_state=1234,
+        )
+        energy_gamma_3 = ocn_gamma_3.energy
+        
+        self.assertNotAlmostEqual(energy_gamma_1, energy_gamma_2, places=1, msg="Energies for gamma=1.0 and gamma=0.5 should differ.")
+        self.assertNotAlmostEqual(energy_gamma_1, energy_gamma_3, places=1, msg="Energies for gamma=1.0 and gamma=0.25 should differ.")
+        self.assertNotAlmostEqual(energy_gamma_2, energy_gamma_3, places=1, msg="Energies for gamma=0.5 and gamma=0.25 should differ.")
+        
+        self.assertLess(energy_gamma_3, energy_gamma_2, msg="Energy should decrease with lower gamma.")
+        self.assertLess(energy_gamma_2, energy_gamma_1, msg="Energy should decrease with lower gamma.")
 
 if __name__ == "__main__":
     unittest.main()
