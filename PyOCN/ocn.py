@@ -598,7 +598,7 @@ class OCN:
             }
         )
 
-    def single_iteration(self, temperature:float, array_report:bool=False, unwrap:bool=True, calculate_full_energy:bool=True) -> "xr.Dataset | None":
+    def single_iteration(self, temperature:float, array_report:bool=False, unwrap:bool=True, calculate_full_energy:bool=False) -> "xr.Dataset | None":
         """ 
         Perform a single iteration of the optimization algorithm at a given temperature. Updates the internal history attribute.
         See :meth:`fit` for details on the algorithm.
@@ -619,11 +619,10 @@ class OCN:
             with some nan values. If False or the current OCN does not have
             periodic boundaries, then no transformation is applied and the
             resulting raster will have the same dimensions as the current OCN grid.
-        calculate_full_energy : bool, default True
+        calculate_full_energy : bool, default False
             If True, the full energy of the graph is recalculated when considering
             the proposed change. If False, a more efficient incremental update is used.
-            full_energy_recalc will be slower, but avoid accumulated numerical errors
-            over many iterations.
+            Used in debugging and testing.
 
         Returns
         -------
@@ -722,8 +721,7 @@ class OCN:
         calculate_full_energy: bool, default False
             If True, the full energy of the graph is recalculated when considering
             the proposed change. If False, a more efficient incremental update is used.
-            full_energy_recalc will be slower, but avoid accumulated numerical errors
-            over many iterations.
+            Used in debugging and testing.
 
         Returns
         -------
