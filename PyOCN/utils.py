@@ -444,7 +444,7 @@ def parallel_fit(
         return res, i  # return index to place result correctly, in case of out-of-order completion.
     
     if n_threads is None:
-        n_threads = os.cpu_count()
+        n_threads = os.cpu_count()*2
     n_threads = min(os.cpu_count()*2, n_threads)
 
     with ThreadPoolExecutor(max_workers=n_threads) as executor:

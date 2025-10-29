@@ -4,6 +4,7 @@ Basic test suite for PyOCN.
 These tests verify core functionality with deterministic outputs.
 """
 import unittest
+from time import perf_counter as timer
 import numpy as np
 import networkx as nx
 import PyOCN as po
@@ -273,6 +274,39 @@ class TestBasicOCN(unittest.TestCase):
         )
         ocn.fit_custom_cooling(lambda t: np.ones_like(t)*1e-7, pbar=False, n_iterations=16**2*100, max_iterations_per_loop=1)
         self.assertLessEqual(np.quantile(np.diff(ocn.history[:, 1]), 0.999) - 1e-7, 0, "Energy did not decrease monotonically.")
+
+    def test_parallel_fit(self):
+        """Test parallel fitting utility."""
+
+        ocn= po.OCN.from_net_type(net_type="I", dims=(42, 40), random_state=542390)
+        t0 = timer()
+        ocn.fit()
+        t1 = timer()
+        single_run_time = t1 - t0
+        energy = ocn.energy
+
+        ocn = po.OCN.from_net_type(net_type="I", dims=(42, 40), random_state=542390)
+        t0 = timer()
+        _, fitted_ocns = po.utils.parallel_fit(
+            ocn=ocn,
+            n_runs=5,
+            increment_rng=False,
+        )
+        t1 = timer()
+        parallel_time = t1 - t0
+        energies = [o.energy for o in fitted_ocns]
+        
+        self.assertEqual(len(fitted_ocns), 5, "Number of fitted OCNs does not match number of runs.")
+
+        for e in energies:
+            self.assertAlmostEqual(e, energy, places=6, msg="Energies from parallel fits do not match.")
+        print()
+        print(f"\tSingle run time: {single_run_time:.2f} seconds")
+        print(f"\tParallel fit time for 5 runs: {parallel_time:.2f} seconds")
+        self.assertLess(parallel_time, single_run_time * 4, "Parallel fitting did not speed up the process as expected.")
+
+        for o in fitted_ocns:
+            self.assertAlmostEqual(ocn.energy, o.history[0, 1], places=6, msg="Initial energy was not preserved.")
 
     # TODO: write tests for the parallel fitting utility
 if __name__ == "__main__":
