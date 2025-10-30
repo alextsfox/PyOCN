@@ -364,7 +364,7 @@ def get_subwatersheds(dag : nx.DiGraph, node : Any) -> set[nx.DiGraph]:
     in the subwatersheds will affect the original graph.
     """
     subwatershed_outlets = [n for n in dag.predecessors(node)]
-    subwatersheds = set(set(nx.ancestors(dag, outlet)) | {outlet} for outlet in subwatershed_outlets)
+    subwatersheds = (nx.ancestors(dag, outlet) | {outlet} for outlet in subwatershed_outlets)
     subwatersheds = set(dag.subgraph(wshd) for wshd in subwatersheds)
     return subwatersheds
 
@@ -572,3 +572,12 @@ def parallel_fit(
 #             for idx in downstream_indices[:ndownstream.value]
 #         )
 #     )
+
+__all__ = [
+    "net_type_to_dag",
+    "simulated_annealing_schedule",
+    "unwrap_digraph",
+    "assign_subwatersheds",
+    "get_subwatersheds",
+    "parallel_fit",
+]

@@ -285,3 +285,10 @@ def validate_flowgrid(c_graph:_bindings.FlowGrid_C, verbose:bool=False) -> bool|
     except Exception as e:  # _digraph_to_flowgrid_c will destroy p_c_graph on failure
         return str(e)
     return "Graph is valid."
+
+__all__ = [
+    "to_digraph",
+    "from_digraph",
+    "validate_digraph",
+    "validate_flowgrid",
+]

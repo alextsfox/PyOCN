@@ -174,3 +174,9 @@ def plot_positional_digraph(dag: nx.DiGraph, ax=None, **kwargs):
 
     p = nx.draw_networkx(dag, pos=pos, ax=ax, **kwargs)
     return p, ax
+
+__all__ = [
+    "plot_ocn_as_dag",
+    "plot_ocn_raster",
+    "plot_positional_digraph",
+]
