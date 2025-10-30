@@ -1,6 +1,7 @@
 import warnings
 import ctypes
 from typing import Any, Callable, TYPE_CHECKING, Union
+from collections.abc import Generator
 from os import PathLike
 from numbers import Number
 from pathlib import Path
@@ -120,6 +121,9 @@ class OCN:
     >>> plt.show()
     """
 
+    ###########################
+    #    CONSTRUCTORS         #
+    ###########################
     def __init__(self, dag: nx.DiGraph, resolution: float=1.0, gamma: float = 0.5, random_state=None, verbosity: int = 0, validate:bool=True, wrap : bool = False):
         """
         Construct an :class:`OCN` from a valid NetworkX ``DiGraph``.
@@ -263,6 +267,9 @@ class OCN:
 
         return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=True, wrap=wrap)
 
+    ###########################
+    #    DUNDER METHODS       #
+    ###########################
     def __repr__(self):
         return f"<PyOCN.OCN object at 0x{id(self):x}>\n<FlowGrid_C struct at 0x{ctypes.addressof(self.__p_c_graph.contents):x}>\n<Vertex_C array at 0x{ctypes.addressof(self.__p_c_graph.contents.vertices):x}>"
     def __str__(self):
@@ -318,6 +325,9 @@ class OCN:
         """
         return self.__copy__()
 
+    ###########################
+    #    PROPERTIES           #
+    ###########################
     def compute_energy(self) -> float:
         """
         Compute the current energy of the network.
@@ -366,6 +376,121 @@ class OCN:
     def history(self) -> np.ndarray:
         return self.__history
 
+    ###########################
+    #    GRAPH TRAVERSAL      #
+    ###########################
+    def predecessors(self, pos:tuple[int, int]) -> Generator[tuple[int, int], None, None]:
+        """Returns an iterator over predecessor nodes of the node at position `pos` in the OCN.
+        A predecessor is defined as an immediate upstream neighbor.
+
+        A predecessor of a node n is a node m such that there exists a directed edge from m to n.
+
+        Mirrors the behavior of `networkx.DiGraph.predecessors`, but works directly on the OCN C graph structure.
+
+        Yields (row, col) of successors.
+
+        Parameters
+        ----------
+        ocn : OCN
+            The OCN instance.
+        pos : tuple[int, int]
+            The (row, col) position of the node whose predecessors are to be found.
+        
+        Raises
+        -------
+        TypeError
+            If `pos` is not a tuple of two integers.
+        IndexError
+            If `pos` is out of bounds for the current OCN grid.
+
+        See Also
+        --------
+        :meth:`OCN.successors`
+        """
+
+        pos = tuple(pos)
+        if len(pos) != 2 or not all(isinstance(p, int) for p in pos):
+            raise TypeError(f"Position must be a tuple of two integers. Got {pos}.")
+        if (pos[0] < 0 or pos[0] >= self.dims[0]) or (pos[1] < 0 or pos[1] >= self.dims[1]):
+            raise IndexError(f"Position {pos} is out of bounds for OCN with dimensions {self.dims}.")
+
+        # convert (row, col) to linear index
+        a = _bindings.libocn.fg_cart_to_lin(
+            _bindings.CartPair_C(row=pos[0], col=pos[1]),
+            _bindings.CartPair_C(row=self.dims[0], col=self.dims[1]),
+        )
+
+        upstream_indices = (_bindings.linidx_t * 8)()
+        nupstream = _bindings.linidx_t()
+        check_status(_bindings.libocn.fg_find_upstream_neighbors(
+            upstream_indices, 
+            ctypes.byref(nupstream),
+            self.__p_c_graph, 
+            _bindings.linidx_t(a)
+        ))
+        count = int(nupstream.value)
+
+        # convert back to cartesian (row, col)
+        for idx in upstream_indices[:count]:
+            cart = _bindings.libocn.fg_lin_to_cart(
+                idx, 
+                _bindings.CartPair_C(row=self.dims[0], col=self.dims[1])
+            )
+            yield (int(cart.row), int(cart.col))
+
+
+    def successors(self, pos: tuple[int, int]) -> Generator[tuple[int, int], None, None]:
+        """Returns an iterator over successor nodes of the node at position `pos` in the OCN.
+        A successor is the immediate downstream neighbor (at most one; none if root).
+
+        Mirrors the behavior of `networkx.DiGraph.successors`, but works directly on the OCN C graph structure.
+        Yields (row, col) of successors.
+
+        Parameters
+        ----------
+        pos : tuple[int, int]
+            The (row, col) position of the node whose successors are to be found.
+        
+        Raises
+        -------
+        TypeError
+            If `pos` is not a tuple of two integers.
+        IndexError
+            If `pos` is out of bounds for the current OCN grid.
+        """
+        pos = tuple(pos)
+        if len(pos) != 2 or not all(isinstance(p, int) for p in pos):
+            raise TypeError(f"Position must be a tuple of two integers. Got {pos}.")
+        if (pos[0] < 0 or pos[0] >= self.dims[0]) or (pos[1] < 0 or pos[1] >= self.dims[1]):
+            raise IndexError(f"Position {pos} is out of bounds for OCN with dimensions {self.dims}.")
+
+        # (row, col) -> linear index
+        a = _bindings.libocn.fg_cart_to_lin(
+            _bindings.CartPair_C(row=pos[0], col=pos[1]),
+            _bindings.CartPair_C(row=self.dims[0], col=self.dims[1]),
+        )
+
+        # Read vertex to get downstream direction
+        vert = _bindings.Vertex_C()
+        check_status(_bindings.libocn.fg_get_lin(
+            ctypes.byref(vert),
+            self.__p_c_graph,
+            _bindings.linidx_t(a),
+        ))
+
+        # If root, no successors
+        if int(vert.downstream) == _bindings.IS_ROOT:
+            return
+        
+        cart = _bindings.libocn.fg_lin_to_cart(
+            vert.adown, 
+            _bindings.CartPair_C(row=self.dims[0], col=self.dims[1])
+        )
+        yield (int(cart.row), int(cart.col))        
+
+    ###########################
+    #    EXPORT               #
+    ###########################
     def to_digraph(self) -> nx.DiGraph:
         """
         Create a NetworkX ``DiGraph`` view of the current grid.
@@ -595,6 +720,9 @@ class OCN:
             }
         )
 
+    ###########################
+    #    OPTIMIZATION         #
+    ###########################
     def single_iteration(self, temperature:float, array_report:bool=False, unwrap:bool=True, calculate_full_energy:bool=False) -> "xr.Dataset | None":
         """ 
         Perform a single iteration of the optimization algorithm at a given temperature. Updates the internal history attribute.

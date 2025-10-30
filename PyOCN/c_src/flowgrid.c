@@ -302,6 +302,82 @@ Status fg_check_for_cycles(FlowGrid *G, linidx_t a, uint8_t check_number){
     return SUCCESS;  // found root successfully, no cycles found
 }
 
+Status fg_find_upstream_neighbors(linidx_t upstream_indices[8], linidx_t *nupstream, FlowGrid *G, linidx_t a){
+    if (G == NULL || G->vertices == NULL || upstream_indices == NULL || nupstream == NULL) return NULL_POINTER_ERROR;
+
+    Status code;
+    Vertex vert;
+    code = fg_get_lin(&vert, G, a);
+    if (code != SUCCESS) return code;
+
+    // get the clockhand direction of all edges
+    *nupstream = 0;
+    for (clockhand_t dir = 0; dir < 8; dir++){
+        if ((vert.edges & (1u << dir)) && (vert.downstream != dir)){  // if there's an edge in this direction
+            linidx_t a_up;
+            code = fg_clockhand_to_lin(&a_up, a, dir, G->dims, G->wrap);  // get the upstream vertex index
+            if (code != SUCCESS) return code;
+            upstream_indices[*nupstream] = a_up;
+            (*nupstream)++;
+        }
+    }
+    return SUCCESS;
+}
+
+Status fg_dfs_iterative(linidx_t upstream_indices[], linidx_t *nupstream, linidx_t idx_stack[], FlowGrid *G, linidx_t a){
+    if (G == NULL || G->vertices == NULL || upstream_indices == NULL || nupstream == NULL || idx_stack == NULL) return NULL_POINTER_ERROR;
+    Status code;
+    
+    // Seed idx_stack with immediate upstream of a
+    *nupstream = 0;
+    linidx_t local_upstream[8];
+    linidx_t nlocal_upstream = 0;
+    code = fg_find_upstream_neighbors(local_upstream, &nlocal_upstream, G, a);
+    if (code != SUCCESS) return code;
+    if (nlocal_upstream == 0) return SUCCESS;  // no upstream vertices found
+    
+    linidx_t total = (linidx_t)G->dims.row * (linidx_t)G->dims.col;
+    if (nlocal_upstream >= total) return OOB_ERROR;
+    memcpy(idx_stack, local_upstream, nlocal_upstream * sizeof(linidx_t));
+    
+    if (*nupstream >= total || total == 0) return OOB_ERROR;
+    linidx_t max_out = total - 1;
+    linidx_t top = nlocal_upstream;
+    while (top > 0){
+        // pop from stack
+        linidx_t u = idx_stack[--top];  
+        if (u >= total) return OOB_ERROR;
+
+        // Append to output buffer
+        if (*nupstream >= max_out) return OOB_ERROR;
+        upstream_indices[(*nupstream)++] = u;
+
+        // Push u's upstream neighbors
+        nlocal_upstream = 0;
+        code = fg_find_upstream_neighbors(local_upstream, &nlocal_upstream, G, u);
+        if (code != SUCCESS) return code;
+        if (top + nlocal_upstream >= total) return OOB_ERROR;
+        memcpy(idx_stack + top, local_upstream, nlocal_upstream * sizeof(linidx_t));
+        top += nlocal_upstream;
+    }
+    return SUCCESS;
+}
+
+Status flow_downstream(linidx_t downstream_indices[], linidx_t *ndownstream, FlowGrid *G, linidx_t a){
+    Vertex vert;
+    *ndownstream = 0;
+    do {
+        Status code = fg_get_lin(&vert, G, a);
+        if (code == OOB_ERROR) return OOB_ERROR;
+        downstream_indices[(*ndownstream)++] = a;
+        
+        a = vert.adown;
+    } while (vert.downstream != IS_ROOT);
+
+    return SUCCESS;  
+}
+
+
 // vibe-coded display function
 const char E_ARROW = '-';
 const char S_ARROW = '|';

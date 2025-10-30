@@ -3,7 +3,9 @@ Utility functions for working with OCNs.
 """
 
 from __future__ import annotations
+from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
+from ctypes import byref
 from itertools import product
 import os
 from typing import Any, Literal, Callable, TYPE_CHECKING, Union
@@ -12,6 +14,9 @@ import networkx as nx
 import numpy as np
 from tqdm import tqdm
 from functools import partial
+
+import PyOCN._libocn_bindings as _bindings
+from PyOCN._statushandler import check_status
 
 if TYPE_CHECKING:
     from .ocn import OCN
@@ -363,7 +368,6 @@ def get_subwatersheds(dag : nx.DiGraph, node : Any) -> set[nx.DiGraph]:
     subwatersheds = set(dag.subgraph(wshd) for wshd in subwatersheds)
     return subwatersheds
 
-
 def parallel_fit(
     ocn:OCN|list[OCN], 
     n_runs=5, 
@@ -458,3 +462,112 @@ def parallel_fit(
             results[idx] = res
             pbar.update(1)
     return results, ocn
+
+def ancestors(ocn:OCN, pos:tuple[int, int]) -> set[tuple[int, int]]:
+    """Returns all nodes that drain into the node at position `pos` in the OCN.
+
+    Parameters
+    ----------
+    ocn : OCN
+        The OCN instance.
+    pos : tuple[int, int]
+        The (row, col) position of the node whose predecessors are to be found.
+
+    Returns
+    -------
+    set()
+        A set of (row, col) tuples representing the positions of all ancestor nodes
+        that eventually drain into the specified node, not including the node itself.
+
+    See Also
+    --------
+    :meth:`OCN.predecessors`
+    :meth:`OCN.successors`
+    :meth:`utils.descendants`
+    """
+
+    pos = tuple(pos)
+    if len(pos) != 2 or not all(isinstance(p, int) for p in pos):
+        raise TypeError(f"Position must be a tuple of two integers. Got {pos}.")
+    if (pos[0] < 0 or pos[0] >= ocn.dims[0]) or (pos[1] < 0 or pos[1] >= ocn.dims[1]):
+        raise IndexError(f"Position {pos} is out of bounds for OCN with dimensions {ocn.dims}.")
+
+    a = _bindings.libocn.fg_cart_to_lin(
+        _bindings.CartPair_C(row=pos[0], col=pos[1]),
+        _bindings.CartPair_C(row=ocn.dims[0], col=ocn.dims[1])
+    )
+    upstream_indices = (_bindings.linidx_t * (ocn.dims[0]*ocn.dims[1]))()
+    nupstream = _bindings.linidx_t(0)
+    check_status(_bindings.libocn.fg_dfs_iterative(
+        upstream_indices, 
+        byref(nupstream), 
+        (_bindings.linidx_t * (ocn.dims[0]*ocn.dims[1]))(), 
+        ocn._OCN__p_c_graph, 
+        a
+    ))
+
+    return set(
+        (int(c.row), int(c.col)) 
+        for c in (
+            _bindings.libocn.fg_lin_to_cart(
+                idx, 
+                _bindings.CartPair_C(row=ocn.dims[0], col=ocn.dims[1])
+            ) 
+            for idx in upstream_indices[:nupstream.value]
+        )
+    )
+
+
+def descendants(ocn:OCN, pos:tuple[int, int]) -> set[tuple[int, int]]:
+    """Returns all nodes that are reachable from the node at position `pos` in the OCN.
+    Mirrors the functionality of `networkx.descendants`.
+
+    Parameters
+    ----------
+    ocn : OCN
+        The OCN instance.
+    pos : tuple[int, int]
+        The (row, col) position of the node whose successors are to be found.
+
+    Returns
+    -------
+    set()
+        A set of (row, col) tuples representing the positions of all descendant nodes
+        that the specified node eventually drains into, not including the node itself.
+
+    See Also
+    --------
+    :meth:`OCN.predecessors`
+    :meth:`OCN.successors`
+    :meth:`utils.ancestors`
+    """
+
+    pos = tuple(pos)
+    if len(pos) != 2 or not all(isinstance(p, int) for p in pos):
+        raise TypeError(f"Position must be a tuple of two integers. Got {pos}.")
+    if (pos[0] < 0 or pos[0] >= ocn.dims[0]) or (pos[1] < 0 or pos[1] >= ocn.dims[1]):
+        raise IndexError(f"Position {pos} is out of bounds for OCN with dimensions {ocn.dims}.")
+
+    a = _bindings.libocn.fg_cart_to_lin(
+        _bindings.CartPair_C(row=pos[0], col=pos[1]),
+        _bindings.CartPair_C(row=ocn.dims[0], col=ocn.dims[1])
+    )
+    downstream_indices = (_bindings.linidx_t * (ocn.dims[0]*ocn.dims[1]))()
+    ndownstream = _bindings.linidx_t(0)
+    check_status(_bindings.libocn.flow_downstream(
+        downstream_indices,
+        byref(ndownstream),
+        ocn._OCN__p_c_graph,
+        a
+    ))
+
+    return set(
+        (int(c.row), int(c.col))
+        for c in (
+            _bindings.libocn.fg_lin_to_cart(
+                idx,
+                _bindings.CartPair_C(row=ocn.dims[0], col=ocn.dims[1])
+            )
+            for idx in downstream_indices[:ndownstream.value]
+        )
+    )

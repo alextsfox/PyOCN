@@ -115,6 +115,14 @@ class FlowGrid_C(Structure):
 libocn.fg_cart_to_lin.argtypes = [CartPair_C, CartPair_C]
 libocn.fg_cart_to_lin.restype = linidx_t
 
+# CartPair fg_lin_to_cart(linidx_t a, CartPair dims);
+libocn.fg_lin_to_cart.argtypes = [linidx_t, CartPair_C]
+libocn.fg_lin_to_cart.restype = CartPair_C
+
+# Status fg_clockhand_to_lin(linidx_t *a_down, linidx_t a, clockhand_t down, CartPair dims, bool wrap)
+libocn.fg_clockhand_to_lin.argtypes = [POINTER(linidx_t), linidx_t, clockhand_t, CartPair_C, c_bool]
+libocn.fg_clockhand_to_lin.restype = Status
+
 # Status fg_get_lin(Vertex *out, FlowGrid *G, linidx_t a);
 libocn.fg_get_lin.argtypes = [POINTER(Vertex_C), POINTER(FlowGrid_C), linidx_t]
 libocn.fg_get_lin.restype = Status
@@ -134,6 +142,18 @@ libocn.fg_copy.restype = POINTER(FlowGrid_C)
 # Status fg_destroy(FlowGrid *G);
 libocn.fg_destroy.argtypes = [POINTER(FlowGrid_C)]
 libocn.fg_destroy.restype = Status
+
+# Status fg_find_upstream_neighbors(linidx_t upstream_indices[8], linidx_t *nupstream, FlowGrid *G, linidx_t a);
+libocn.fg_find_upstream_neighbors.argtypes = [linidx_t * 8, POINTER(linidx_t), POINTER(FlowGrid_C), linidx_t]
+libocn.fg_find_upstream_neighbors.restype = Status
+
+# Status fg_dfs_iterative(linidx_t upstream_indices[], linidx_t *nupstream, linidx_t idx_stack[], FlowGrid *G, linidx_t a);
+libocn.fg_dfs_iterative.argtypes = [POINTER(linidx_t), POINTER(linidx_t), POINTER(linidx_t), POINTER(FlowGrid_C), linidx_t]
+libocn.fg_dfs_iterative.restype = Status
+
+# Status flow_downstream(linidx_t downstream_indices[], linidx_t *ndownstream, FlowGrid *G, linidx_t a)
+libocn.flow_downstream.argtypes = [POINTER(linidx_t), POINTER(linidx_t), POINTER(FlowGrid_C), linidx_t]
+libocn.flow_downstream.restype = Status
 
 ##############################
 #     OCN.H EQUIVALENTS      #
