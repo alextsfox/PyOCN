@@ -98,6 +98,7 @@ def plot_ocn_as_dag(ocn: OCN, attribute: str | None = None, ax=None, norm=None, 
         kwargs["vmax"] = 1
         node_color = norm(node_color)
 
+    
     p = nx.draw_networkx(dag, node_color=node_color, pos=pos, ax=ax, **kwargs)
     return p, ax
 

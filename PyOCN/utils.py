@@ -517,7 +517,7 @@ def ancestors(ocn:OCN, pos:tuple[int, int]) -> set[tuple[int, int]]:
         )
     )
 
-
+# TODO write tests for the traversal functions
 def descendants(ocn:OCN, pos:tuple[int, int]) -> set[tuple[int, int]]:
     """Returns all nodes that are reachable from the node at position `pos` in the OCN.
     Mirrors the functionality of `networkx.descendants`.
