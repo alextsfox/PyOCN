@@ -3,12 +3,20 @@ Utility functions for working with OCNs.
 """
 
 from __future__ import annotations
+from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
+from ctypes import byref
 from itertools import product
+import os
 from typing import Any, Literal, Callable, TYPE_CHECKING, Union
 from numbers import Number
 import networkx as nx
 import numpy as np
 from tqdm import tqdm
+from functools import partial
+
+import PyOCN._libocn_bindings as _bindings
+from PyOCN._statushandler import check_status
 
 if TYPE_CHECKING:
     from .ocn import OCN
@@ -356,7 +364,272 @@ def get_subwatersheds(dag : nx.DiGraph, node : Any) -> set[nx.DiGraph]:
     in the subwatersheds will affect the original graph.
     """
     subwatershed_outlets = [n for n in dag.predecessors(node)]
-    subwatersheds = set(set(nx.ancestors(dag, outlet)) | {outlet} for outlet in subwatershed_outlets)
+    subwatersheds = (nx.ancestors(dag, outlet) | {outlet} for outlet in subwatershed_outlets)
     subwatersheds = set(dag.subgraph(wshd) for wshd in subwatersheds)
     return subwatersheds
+
+# # deferring stream order calculations for now.
+# def assign_strahler_orders(dag: nx.DiGraph) -> None:
+#     """Assign Strahler order to each node in the DAG as a 'strahler_order' attribute.
+#     Modifies the input graph in place.
+
+#     Parameters
+#     ----------
+#     dag : nx.DiGraph
+#         The input directed acyclic graph.
+#     """
+#     # Initialize Strahler order for leaf nodes
+#     leaf_nodes = [n for n, d in dag.in_degree() if d == 0]
+#     nx.set_node_attributes(dag, {n: 1 for n in leaf_nodes}, 'strahler_order')
+
+#     # Compute Strahler order for other nodes
+#     strahler_orders = dict(nx.get_node_attributes(dag, 'strahler_order'))
+#     for n in nx.topological_sort(dag):
+#         if dag.in_degree(n):
+#             in_orders = [strahler_orders[p] for p in dag.predecessors(n)]
+#             max_order = max(in_orders)
+#             if sum(o == max_order for o in in_orders) > 1:
+#                 order = max_order + 1
+#             else:
+#                 order = max_order
+#             strahler_orders[n] = order
+#     nx.set_node_attributes(dag, strahler_orders, 'strahler_order')
+
+# def assign_shreve_orders(dag: nx.DiGraph) -> None:
+#     """Assign Shreve order to each node in the DAG as a 'shreve_order' attribute.
+#     Shreve order is defined as the total number of upstream sources that contribute to a node.
+
+#     Parameters
+#     ----------
+#     dag : nx.DiGraph
+#         The input directed acyclic graph.
+#     """
+#     # Initialize Shreve order for leaf nodes
+#     leaf_nodes = [n for n, d in dag.in_degree() if d == 0]
+#     nx.set_node_attributes(dag, {n: 1 for n in leaf_nodes}, 'shreve_order')
+
+#     # Compute Shreve order for other nodes
+#     shreve_orders = dict(nx.get_node_attributes(dag, 'shreve_order'))
+#     for n in nx.topological_sort(dag):
+#         if dag.in_degree(n):
+#             in_orders = [shreve_orders[p] for p in dag.predecessors(n)]
+#             order = sum(in_orders)
+#             shreve_orders[n] = order
+#     nx.set_node_attributes(dag, shreve_orders, 'shreve_order')
     
+
+def parallel_fit(
+    ocn:OCN|list[OCN], 
+    n_runs=5, 
+    n_threads=None, 
+    fit_method:Literal["fit", "fit_custom_cooling"]|list[Literal["fit", "fit_custom_cooling"]]|None=None, 
+    increment_rng:bool=True, 
+    pbar:bool=False, 
+    fit_kwargs:dict|list[dict]=None
+) -> tuple[list[Any], list[OCN]]:
+    """Convenience function to perform multiple OCN fitting operations in parallel using multithreading. 
+    Useful for doing sensitivity analysis or ensemble fitting.
+
+    Parameters
+    ----------
+    ocn : OCN | list[OCN]
+        The OCN instance(s) to fit. If a list of OCNs is provided, each OCN will be fitted independently.
+        If a single OCN is provided, it will be copied `n_runs` times.
+        Not modified during fitting.
+    n_runs : int, default 5
+        The number of fitting runs to perform. Must be equal to the length of `ocn` if `ocn` is a list.
+    n_threads : int, default None
+        The number of worker threads to use for parallel execution. If None, defaults to the number of CPU cores, times 2.
+    fit_method : {"fit", "fit_custom_cooling"} | list[{"fit", "fit_custom_cooling"} | None], default None
+        The fitting method to use. If None, defaults to "fit". If a list is provided, it must be of length `n_runs`,
+        and each element specifies the fitting method for the corresponding fit.
+    increment_rng : bool, default True
+        If True, each fit's random seed is set to `ocn.rng + i`, where `i` is the thread index.
+    pbar : bool, default False
+        If True, display a master progress bar that tracks the completion of each thread.
+    fit_kwargs : dict | list[dict], optional
+        Additional keyword arguments to pass to the `OCN.fit` method. If a list of dicts is provided,
+        it must be of length `n_runs`, and each dict will be used for the corresponding fit.
+
+    Returns
+    -------
+    tuple[list[Any], list[OCN]]
+        A tuple containing two lists:
+        - A list of results from each fitting operation.
+        - A list of fitted OCN instances corresponding to each fitting operation.
+    """
+
+    if isinstance(ocn, list):
+        if len(ocn) != n_runs:
+            raise ValueError(f"When ocn is a list, its length must equal n_runs. Got len(ocn)={len(ocn)} and n_runs={n_runs}.")
+        ocn = [o.copy() for o in ocn]
+    else:
+        ocn = [ocn.copy() for _ in range(n_runs)]
+
+    if isinstance(fit_kwargs, list):
+        if len(fit_kwargs) != n_runs:
+            raise ValueError(f"When fit_kwargs is a list, its length must equal n_runs. Got len(fit_kwargs)={len(fit_kwargs)} and n_runs={n_runs}.")
+        if not all(isinstance(k, dict) for k in fit_kwargs):
+            raise ValueError("All elements of fit_kwargs list must be dictionaries.")
+    elif not isinstance(fit_kwargs, dict) and fit_kwargs is not None:
+        raise ValueError(f"fit_kwargs must be a dict or a list of dicts. Got {type(fit_kwargs)}.")
+    else: 
+        fit_kwargs = [fit_kwargs or dict() for _ in range(n_runs)]
+
+    if isinstance(fit_method, list):
+        if len(fit_method) != n_runs:
+            raise ValueError(f"When fit_method is a list, its length must equal n_runs. Got len(fit_method)={len(fit_method)} and n_runs={n_runs}.")
+        elif not all(m is None or m in {"fit", "fit_custom_cooling"} for m in fit_method):
+            raise ValueError("All elements of fit_method list must be one of 'fit', 'fit_custom_cooling', or None.")
+    else:
+        if fit_method is not None and fit_method not in {"fit", "fit_custom_cooling"}:
+            raise ValueError(f"Invalid fit_method {fit_method}. Must be one of 'fit', 'fit_custom_cooling', or None.")
+        fit_method = [fit_method for _ in range(n_runs)]
+
+    def fit(ocn, i, fit_method, fit_kwargs):
+        if increment_rng:
+            ocn.rng  = ocn.rng + i
+        if fit_method is None or fit_method == "fit":
+            res = ocn.fit(**fit_kwargs)
+        elif fit_method == "fit_custom_cooling":
+            res = ocn.fit_custom_cooling(**fit_kwargs)
+        else:
+            raise ValueError(f"Invalid fit_method {fit_method}. Must be one of 'fit', 'fit_custom_cooling', or None.")
+        return res, i  # return index to place result correctly, in case of out-of-order completion.
+    
+    if n_threads is None:
+        n_threads = os.cpu_count()*2
+    n_threads = min(os.cpu_count()*2, n_threads)
+
+    with ThreadPoolExecutor(max_workers=n_threads) as executor:
+        futures = []
+        for i in range(n_runs):
+            futures.append(executor.submit(fit, ocn[i], i, fit_method[i], fit_kwargs[i]))
+        results = [None] * n_runs
+        pbar = tqdm(futures, disable=not pbar, desc="Fitting OCNs")
+        for future in futures:
+            res, idx = future.result()
+            results[idx] = res
+            pbar.update(1)
+    return results, ocn
+
+# # Commenting out for now. May decide to re-introduce later
+# def ancestors(ocn:OCN, pos:tuple[int, int]) -> set[tuple[int, int]]:
+#     """Returns all nodes that drain into the node at position `pos` in the OCN.
+
+#     Parameters
+#     ----------
+#     ocn : OCN
+#         The OCN instance.
+#     pos : tuple[int, int]
+#         The (row, col) position of the node whose predecessors are to be found.
+
+#     Returns
+#     -------
+#     set()
+#         A set of (row, col) tuples representing the positions of all ancestor nodes
+#         that eventually drain into the specified node, not including the node itself.
+
+#     See Also
+#     --------
+#     :meth:`OCN.predecessors`
+#     :meth:`OCN.successors`
+#     :meth:`utils.descendants`
+#     """
+
+#     pos = tuple(pos)
+#     if len(pos) != 2 or not all(isinstance(p, int) for p in pos):
+#         raise TypeError(f"Position must be a tuple of two integers. Got {pos}.")
+#     if (pos[0] < 0 or pos[0] >= ocn.dims[0]) or (pos[1] < 0 or pos[1] >= ocn.dims[1]):
+#         raise IndexError(f"Position {pos} is out of bounds for OCN with dimensions {ocn.dims}.")
+
+#     a = _bindings.libocn.fg_cart_to_lin(
+#         _bindings.CartPair_C(row=pos[0], col=pos[1]),
+#         _bindings.CartPair_C(row=ocn.dims[0], col=ocn.dims[1])
+#     )
+#     upstream_indices = (_bindings.linidx_t * (ocn.dims[0]*ocn.dims[1]))()
+#     nupstream = _bindings.linidx_t(0)
+#     check_status(_bindings.libocn.fg_dfs_iterative(
+#         upstream_indices, 
+#         byref(nupstream), 
+#         (_bindings.linidx_t * (ocn.dims[0]*ocn.dims[1]))(), 
+#         ocn._OCN__p_c_graph, 
+#         a
+#     ))
+
+#     return set(
+#         (int(c.row), int(c.col)) 
+#         for c in (
+#             _bindings.libocn.fg_lin_to_cart(
+#                 idx, 
+#                 _bindings.CartPair_C(row=ocn.dims[0], col=ocn.dims[1])
+#             ) 
+#             for idx in upstream_indices[:nupstream.value]
+#         )
+#     )
+
+# # TODO write tests for the traversal functions
+# def descendants(ocn:OCN, pos:tuple[int, int]) -> set[tuple[int, int]]:
+#     """Returns all nodes that are reachable from the node at position `pos` in the OCN.
+#     Mirrors the functionality of `networkx.descendants`.
+
+#     Parameters
+#     ----------
+#     ocn : OCN
+#         The OCN instance.
+#     pos : tuple[int, int]
+#         The (row, col) position of the node whose successors are to be found.
+
+#     Returns
+#     -------
+#     set()
+#         A set of (row, col) tuples representing the positions of all descendant nodes
+#         that the specified node eventually drains into, not including the node itself.
+
+#     See Also
+#     --------
+#     :meth:`OCN.predecessors`
+#     :meth:`OCN.successors`
+#     :meth:`utils.ancestors`
+#     """
+
+#     pos = tuple(pos)
+#     if len(pos) != 2 or not all(isinstance(p, int) for p in pos):
+#         raise TypeError(f"Position must be a tuple of two integers. Got {pos}.")
+#     if (pos[0] < 0 or pos[0] >= ocn.dims[0]) or (pos[1] < 0 or pos[1] >= ocn.dims[1]):
+#         raise IndexError(f"Position {pos} is out of bounds for OCN with dimensions {ocn.dims}.")
+
+#     a = _bindings.libocn.fg_cart_to_lin(
+#         _bindings.CartPair_C(row=pos[0], col=pos[1]),
+#         _bindings.CartPair_C(row=ocn.dims[0], col=ocn.dims[1])
+#     )
+#     downstream_indices = (_bindings.linidx_t * (ocn.dims[0]*ocn.dims[1]))()
+#     ndownstream = _bindings.linidx_t(0)
+#     check_status(_bindings.libocn.flow_downstream(
+#         downstream_indices,
+#         byref(ndownstream),
+#         ocn._OCN__p_c_graph,
+#         a
+#     ))
+
+#     return set(
+#         (int(c.row), int(c.col))
+#         for c in (
+#             _bindings.libocn.fg_lin_to_cart(
+#                 idx,
+#                 _bindings.CartPair_C(row=ocn.dims[0], col=ocn.dims[1])
+#             )
+#             for idx in downstream_indices[:ndownstream.value]
+#         )
+#     )
+
+__all__ = [
+    "net_type_to_dag",
+    "simulated_annealing_schedule",
+    "unwrap_digraph",
+    "assign_subwatersheds",
+    "get_subwatersheds",
+    "parallel_fit",
+    "assign_strahler_orders",
+    "assign_shreve_orders",
+]

@@ -4,6 +4,8 @@
         "neighbormatrix.c": "cpp",
         "stdbool.h": "c",
         "returncodes.h": "c",
-        "string.h": "c"
+        "string.h": "c",
+        "__locale": "c",
+        "bitset": "c"
     }
 }

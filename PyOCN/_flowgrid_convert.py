@@ -1,6 +1,3 @@
-#TODO: allow users to provide multiple DAGs that partition a space.
-#TODO: allow edge-wrapping (toroidal grids).
-#TODO: implement "every edge vertex is a root" option
 """
 Functions for converting between NetworkX graphs and FlowGrid_C structures.
 """
@@ -246,9 +243,6 @@ def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate
     p_c_graph.contents.resolution = float(resolution)
     p_c_graph.contents.nroots = len([n for n in G.nodes if G.out_degree(n) == 0])
     p_c_graph.contents.wrap = wrap
-
-    if p_c_graph.contents.nroots > 1:
-        warnings.warn(f"FlowGrid has {p_c_graph.contents.nroots} root nodes (nodes with no downstream). This will slow down certain operations.")
     
     # do not set energy
 
@@ -291,3 +285,10 @@ def validate_flowgrid(c_graph:_bindings.FlowGrid_C, verbose:bool=False) -> bool|
     except Exception as e:  # _digraph_to_flowgrid_c will destroy p_c_graph on failure
         return str(e)
     return "Graph is valid."
+
+__all__ = [
+    "to_digraph",
+    "from_digraph",
+    "validate_digraph",
+    "validate_flowgrid",
+]

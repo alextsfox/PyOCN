@@ -162,6 +162,36 @@ Status fg_change_vertex_outflow(FlowGrid *G, linidx_t a, clockhand_t down_new);
 Status fg_check_for_cycles(FlowGrid *G, linidx_t a, uint8_t check_number);
 
 /**
+ * @brief Find all upstream neighbors of a given vertex.
+ * @param upstream_indices Array to store the linear indices of upstream neighbors.
+ * @param nupstream Pointer to store the number of upstream neighbors found.
+ * @param G Pointer to the FlowGrid.
+ * @param a The linear index of the vertex to find upstream neighbors for.
+ * @return Status code indicating success or failure
+ */
+Status fg_find_upstream_neighbors(linidx_t upstream_indices[8], linidx_t *nupstream, FlowGrid *G, linidx_t a);
+
+/**
+ * @brief Perform an iterative depth-first search to find all upstream vertices from a given starting vertex.
+ * @param upstream_indices Array to store the linear indices of all upstream vertices found. Must be preallocated to hold enough indices (ie G.dims.row * G.dims.col).
+ * @param nupstream Pointer to store the total number of upstream vertices found.
+ * @param idx_stack Preallocated stack array for DFS traversal. Must be large enough to hold all potential upstream vertices (ie G.dims.row * G.dims.col).
+ * @param G Pointer to the FlowGrid.
+ * @param a The linear index of the starting vertex.
+ * @return Status code indicating success or failure
+ */
+Status fg_dfs_iterative(linidx_t upstream_indices[], linidx_t *nupstream, linidx_t idx_stack[], FlowGrid *G, linidx_t a);
+
+/**
+ * @brief Follow the downstream path from a given vertex, recording each vertex along the path. Stops when a root node is reached. Includes root node. Does not include starting node.
+ * @param downstream_indices Array to store the linear indices of downstream vertices. Must be preallocated to hold enough indices (ie G.dims.row * G.dims.col).
+ * @param ndownstream Pointer to store the number of downstream vertices found.
+ * @param G Pointer to the FlowGrid.
+ * @param a The linear index of the starting vertex.
+ * @return Status code indicating success or failure
+ */
+Status flow_downstream(linidx_t downstream_indices[], linidx_t *ndownstream, FlowGrid *G, linidx_t a);
+/**
  * @brief Display the flowgrid in the terminal using ASCII or UTF-8 characters.
  * @param G Pointer to the FlowGrid to display.
  * @param use_utf8 If true, use UTF-8 characters for better visuals; otherwise, use ASCII.

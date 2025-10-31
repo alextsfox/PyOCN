@@ -1,16 +1,14 @@
 from .ocn import OCN
-from .plotting import plot_ocn_as_dag, plot_positional_digraph, plot_ocn_raster
-from .utils import net_type_to_dag, simulated_annealing_schedule, unwrap_digraph, get_subwatersheds, assign_subwatersheds
+from ._version import __version__
+
+from . import utils
+from . import plotting
+
 
 __all__ = [
     "OCN", 
-    "flowgrid", 
-    "plot_ocn_as_dag", 
-    "plot_positional_digraph", 
-    "plot_ocn_raster",
-    "net_type_to_dag",
-    "simulated_annealing_schedule",
-    "unwrap_digraph",
-    "get_subwatersheds",
-    "assign_subwatersheds",
+    "utils",
+    "plotting",
+    "__version__",
 ]
+

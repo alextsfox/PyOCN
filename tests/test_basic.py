@@ -4,6 +4,7 @@ Basic test suite for PyOCN.
 These tests verify core functionality with deterministic outputs.
 """
 import unittest
+from time import perf_counter as timer
 import numpy as np
 import networkx as nx
 import PyOCN as po
@@ -273,6 +274,151 @@ class TestBasicOCN(unittest.TestCase):
         )
         ocn.fit_custom_cooling(lambda t: np.ones_like(t)*1e-7, pbar=False, n_iterations=16**2*100, max_iterations_per_loop=1)
         self.assertLessEqual(np.quantile(np.diff(ocn.history[:, 1]), 0.999) - 1e-7, 0, "Energy did not decrease monotonically.")
+
+    def test_parallel_fit(self):
+        """Test parallel fitting utility."""
+
+        ocn= po.OCN.from_net_type(net_type="I", dims=(42, 40), random_state=542390)
+        t0 = timer()
+        ocn.fit()
+        t1 = timer()
+        single_run_time = t1 - t0
+        energy = ocn.energy
+
+        ocn = po.OCN.from_net_type(net_type="I", dims=(42, 40), random_state=542390)
+        t0 = timer()
+        _, fitted_ocns = po.utils.parallel_fit(
+            ocn=ocn,
+            n_runs=5,
+            increment_rng=False,
+        )
+        t1 = timer()
+        parallel_time = t1 - t0
+        energies = [o.energy for o in fitted_ocns]
+        
+        self.assertEqual(len(fitted_ocns), 5, "Number of fitted OCNs does not match number of runs.")
+
+        for e in energies:
+            self.assertAlmostEqual(e, energy, places=6, msg="Energies from parallel fits do not match.")
+        print()
+        print(f"\tSingle run time: {single_run_time:.2f} seconds")
+        print(f"\tParallel fit time for 5 runs: {parallel_time:.2f} seconds")
+        self.assertLess(parallel_time, single_run_time * 4, "Parallel fitting did not speed up the process as expected.")
+
+        for o in fitted_ocns:
+            self.assertAlmostEqual(ocn.energy, o.history[0, 1], places=6, msg="Initial energy was not preserved.")
+
+    def test_energy_update_method(self):
+        ocn = po.OCN.from_net_type("E", dims=(44, 44), random_state=238155)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=True)
+        energy = ocn.energy
+        ocn = po.OCN.from_net_type("E", dims=(44, 44), random_state=238155)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=False)
+        energy_2 = ocn.energy
+        self.assertAlmostEqual(energy/energy_2, 1.0, places=3, msg="Energies do not match between full_energy_calc and incremental update methods.")
+        
+        ocn = po.OCN.from_net_type("E", dims=(31, 31), random_state=12638, gamma=0.21)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=True)
+        energy = ocn.energy
+        ocn = po.OCN.from_net_type("E", dims=(31, 31), random_state=12638, gamma=0.21)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=False)
+        energy_2 = ocn.energy
+        self.assertAlmostEqual(energy/energy_2, 1.0, places=3, msg="Energies do not match between full_energy_calc and incremental update methods.")
+        
+        ocn = po.OCN.from_net_type("I", dims=(38, 38), random_state=19075, gamma=0.78)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=True)
+        energy = ocn.energy
+        ocn = po.OCN.from_net_type("I", dims=(38, 38), random_state=19075, gamma=0.78)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=False)
+        energy_2 = ocn.energy
+        self.assertAlmostEqual(energy/energy_2, 1.0, places=3, msg="Energies do not match between full_energy_calc and incremental update methods.")
+        
+        ocn = po.OCN.from_net_type("I", dims=(20, 41), random_state=910536)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=True)
+        energy = ocn.energy
+        ocn = po.OCN.from_net_type("I", dims=(20, 41), random_state=910536)
+        ocn.fit(pbar=False, max_iterations_per_loop=10_000, calculate_full_energy=False)
+        energy_2 = ocn.energy
+
+        self.assertAlmostEqual(energy/energy_2, 1.0, places=3, msg="Energies do not match between full_energy_calc and incremental update methods.") 
+
+    def test_gamma(self):
+        """Test that different gamma values affect energy as expected."""
+        ocn_gamma_1 = po.OCN.from_net_type(
+            net_type="V",
+            dims=(32, 32),
+            gamma=1.0,
+            random_state=1234,
+        )
+        energy_gamma_1 = ocn_gamma_1.energy
+        
+        ocn_gamma_2 = po.OCN.from_net_type(
+            net_type="V",
+            dims=(32, 32),
+            gamma=0.5,
+            random_state=1234,
+        )
+        energy_gamma_2 = ocn_gamma_2.energy
+        
+        ocn_gamma_3 = po.OCN.from_net_type(
+            net_type="V",
+            dims=(32, 32),
+            gamma=0.25,
+            random_state=1234,
+        )
+        energy_gamma_3 = ocn_gamma_3.energy
+        
+        self.assertNotAlmostEqual(energy_gamma_1, energy_gamma_2, places=1, msg="Energies for gamma=1.0 and gamma=0.5 should differ.")
+        self.assertNotAlmostEqual(energy_gamma_1, energy_gamma_3, places=1, msg="Energies for gamma=1.0 and gamma=0.25 should differ.")
+        self.assertNotAlmostEqual(energy_gamma_2, energy_gamma_3, places=1, msg="Energies for gamma=0.5 and gamma=0.25 should differ.")
+        self.assertLess(energy_gamma_3, energy_gamma_2, msg="Energy should decrease with lower gamma.")
+        self.assertLess(energy_gamma_2, energy_gamma_1, msg="Energy should decrease with lower gamma.")
+        
+        ocn_gamma_1 = po.OCN.from_net_type(
+            net_type="E",
+            dims=(32, 32),
+            gamma=1.0,
+            random_state=1234,
+        )
+        energy_gamma_1 = ocn_gamma_1.energy
+        
+        ocn_gamma_2 = po.OCN.from_net_type(
+            net_type="E",
+            dims=(32, 32),
+            gamma=0.5,
+            random_state=1234,
+        )
+        energy_gamma_2 = ocn_gamma_2.energy
+        
+        ocn_gamma_3 = po.OCN.from_net_type(
+            net_type="E",
+            dims=(32, 32),
+            gamma=0.25,
+            random_state=1234,
+        )
+        energy_gamma_3 = ocn_gamma_3.energy
+        
+        self.assertNotAlmostEqual(energy_gamma_1, energy_gamma_2, places=1, msg="Energies for gamma=1.0 and gamma=0.5 should differ.")
+        self.assertNotAlmostEqual(energy_gamma_1, energy_gamma_3, places=1, msg="Energies for gamma=1.0 and gamma=0.25 should differ.")
+        self.assertNotAlmostEqual(energy_gamma_2, energy_gamma_3, places=1, msg="Energies for gamma=0.5 and gamma=0.25 should differ.")
+        
+        self.assertLess(energy_gamma_3, energy_gamma_2, msg="Energy should decrease with lower gamma.")
+        self.assertLess(energy_gamma_2, energy_gamma_1, msg="Energy should decrease with lower gamma.")
+
+    def test_watershed_partitioning(self):
+        ocn = po.OCN.from_net_type("E", dims=(32, 32), random_state=83)
+        ocn.fit(pbar=True)
+        G = ocn.to_digraph()
+        n = 997
+        subgraphs = po.utils.get_subwatersheds(G, n)
+
+        node_check = [
+            set([932, 931, 964]),
+            set([965]),
+            set([900, 901, 902, 903, 904, 933, 934, 935, 936, 837, 838, 967, 840, 839, 966, 868, 869, 870, 871, 872])
+        ]
+        for wshd in subgraphs:
+            self.assertIn(set(wshd.nodes), node_check)
 
 if __name__ == "__main__":
     unittest.main()
