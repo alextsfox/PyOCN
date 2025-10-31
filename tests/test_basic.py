@@ -420,8 +420,5 @@ class TestBasicOCN(unittest.TestCase):
         for wshd in subgraphs:
             self.assertIn(set(wshd.nodes), node_check)
 
-    def test_stream_ordering(self):
-        
-
 if __name__ == "__main__":
     unittest.main()
