@@ -405,5 +405,23 @@ class TestBasicOCN(unittest.TestCase):
         self.assertLess(energy_gamma_3, energy_gamma_2, msg="Energy should decrease with lower gamma.")
         self.assertLess(energy_gamma_2, energy_gamma_1, msg="Energy should decrease with lower gamma.")
 
+    def test_watershed_partitioning(self):
+        ocn = po.OCN.from_net_type("E", dims=(32, 32), random_state=83)
+        ocn.fit(pbar=True)
+        G = ocn.to_digraph()
+        n = 997
+        subgraphs = po.utils.get_subwatersheds(G, n)
+
+        node_check = [
+            set([932, 931, 964]),
+            set([965]),
+            set([900, 901, 902, 903, 904, 933, 934, 935, 936, 837, 838, 967, 840, 839, 966, 868, 869, 870, 871, 872])
+        ]
+        for wshd in subgraphs:
+            self.assertIn(set(wshd.nodes), node_check)
+
+    def test_stream_ordering(self):
+        
+
 if __name__ == "__main__":
     unittest.main()
