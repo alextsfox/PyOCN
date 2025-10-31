@@ -368,6 +368,55 @@ def get_subwatersheds(dag : nx.DiGraph, node : Any) -> set[nx.DiGraph]:
     subwatersheds = set(dag.subgraph(wshd) for wshd in subwatersheds)
     return subwatersheds
 
+def assign_strahler_orders(dag: nx.DiGraph) -> None:
+    """Assign Strahler order to each node in the DAG as a 'strahler_order' attribute.
+    Modifies the input graph in place.
+
+    Parameters
+    ----------
+    dag : nx.DiGraph
+        The input directed acyclic graph.
+    """
+    # Initialize Strahler order for leaf nodes
+    leaf_nodes = [n for n, d in dag.in_degree() if d == 0]
+    nx.set_node_attributes(dag, {n: 1 for n in leaf_nodes}, 'strahler_order')
+
+    # Compute Strahler order for other nodes
+    strahler_orders = dict(nx.get_node_attributes(dag, 'strahler_order'))
+    for n in nx.topological_sort(dag):
+        if dag.in_degree(n):
+            in_orders = [strahler_orders[p] for p in dag.predecessors(n)]
+            max_order = max(in_orders)
+            if sum(o == max_order for o in in_orders) > 1:
+                order = max_order + 1
+            else:
+                order = max_order
+            strahler_orders[n] = order
+    nx.set_node_attributes(dag, strahler_orders, 'strahler_order')
+
+def assign_shreve_orders(dag: nx.DiGraph) -> None:
+    """Assign Shreve order to each node in the DAG as a 'shreve_order' attribute.
+    Shreve order is defined as the total number of upstream sources that contribute to a node.
+
+    Parameters
+    ----------
+    dag : nx.DiGraph
+        The input directed acyclic graph.
+    """
+    # Initialize Shreve order for leaf nodes
+    leaf_nodes = [n for n, d in dag.in_degree() if d == 0]
+    nx.set_node_attributes(dag, {n: 1 for n in leaf_nodes}, 'shreve_order')
+
+    # Compute Shreve order for other nodes
+    shreve_orders = dict(nx.get_node_attributes(dag, 'shreve_order'))
+    for n in nx.topological_sort(dag):
+        if dag.in_degree(n):
+            in_orders = [shreve_orders[p] for p in dag.predecessors(n)]
+            order = sum(in_orders)
+            shreve_orders[n] = order
+    nx.set_node_attributes(dag, shreve_orders, 'shreve_order')
+    
+
 def parallel_fit(
     ocn:OCN|list[OCN], 
     n_runs=5, 
@@ -580,4 +629,6 @@ __all__ = [
     "assign_subwatersheds",
     "get_subwatersheds",
     "parallel_fit",
+    "assign_strahler_orders",
+    "assign_shreve_orders",
 ]

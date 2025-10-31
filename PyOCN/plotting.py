@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .ocn import OCN
 from .utils import unwrap_digraph
 
-def _pos_to_xy(dag: nx.DiGraph) -> dict[Any, tuple[float, float]]:
+def _pos_to_xy(dag: nx.DiGraph, nrows=None) -> dict[Any, tuple[float, float]]:
     """
     Convert node ``pos`` from (row, col) to plotting coordinates (x, y).
 
@@ -32,6 +32,9 @@ def _pos_to_xy(dag: nx.DiGraph) -> dict[Any, tuple[float, float]]:
     ----------
     dag : nx.DiGraph
         Graph whose nodes have ``pos=(row, col)`` attributes.
+    nrows : int, optional
+        Number of rows in the grid. If ``None``, it is inferred from the
+        maximum row index in the node positions.
 
     Returns
     -------
@@ -45,7 +48,7 @@ def _pos_to_xy(dag: nx.DiGraph) -> dict[Any, tuple[float, float]]:
     match typical plotting conventions.
     """
     pos = nx.get_node_attributes(dag, 'pos')
-    nrows = max(r for r, _ in pos.values()) + 1
+    nrows = nrows if nrows is not None else max(r for r, _ in pos.values()) + 1
     for node, (r, c) in pos.items():
         pos[node] = (c, nrows - r - 1)  
     return pos
@@ -82,7 +85,7 @@ def plot_ocn_as_dag(ocn: OCN, attribute: str | None = None, ax=None, norm=None, 
     dag = ocn.to_digraph()
     if ocn.wrap:
         dag = unwrap_digraph(dag, ocn.dims)
-    pos = _pos_to_xy(dag)
+    pos = _pos_to_xy(dag, nrows=ocn.dims[0])
 
     if ax is None:
         _, ax = plt.subplots()
@@ -97,8 +100,7 @@ def plot_ocn_as_dag(ocn: OCN, attribute: str | None = None, ax=None, norm=None, 
         kwargs["vmin"] = 0
         kwargs["vmax"] = 1
         node_color = norm(node_color)
-
-    
+        
     p = nx.draw_networkx(dag, node_color=node_color, pos=pos, ax=ax, **kwargs)
     return p, ax
 
@@ -146,7 +148,7 @@ def plot_ocn_raster(ocn: OCN, attribute:str='energy', ax=None, **kwargs):
     return ax
     
 
-def plot_positional_digraph(dag: nx.DiGraph, ax=None, **kwargs):
+def plot_positional_digraph(dag: nx.DiGraph, ax=None, nrows:int|None=None, **kwargs):
     """
     Plot a DAG with node positions taken from their ``pos`` attributes.
 
@@ -156,6 +158,9 @@ def plot_positional_digraph(dag: nx.DiGraph, ax=None, **kwargs):
         Graph whose nodes have ``pos=(row, col)``.
     ax : matplotlib.axes.Axes, optional
         Target axes. If ``None``, a new figure and axes are created.
+    nrows : int | None, default None
+        Number of rows in the grid. If ``None``, infer from the maximum row index in
+        the node positions. If ``False``, the vertical coordinates are not
     **kwargs
         Additional keyword arguments forwarded to
         :func:`networkx.draw_networkx`.
@@ -167,7 +172,7 @@ def plot_positional_digraph(dag: nx.DiGraph, ax=None, **kwargs):
         ``networkx.draw_networkx`` (often ``None``) and ``ax`` is the axes
         used for drawing.
     """
-    pos = _pos_to_xy(dag)
+    pos = _pos_to_xy(dag, nrows)
 
     if ax is None:
         _, ax = plt.subplots()
