@@ -7,6 +7,7 @@ from pathlib import Path
 
 import networkx as nx 
 import numpy as np
+import rasterio
 from tqdm import tqdm
 
 from ._statushandler import check_status
@@ -536,7 +537,7 @@ class OCN:
 
         return dag
     
-    def to_gtiff(self, west:float, north:float, crs: Any, path:str|PathLike, unwrap:bool=True):
+    def to_gtiff(self, west:float, north:float, crs: Any, path:"str|PathLike|rasterio.io.MemoryFile", unwrap:bool=True):
         """
         Export a raster of the current FlowGrid to a GeoTIFF file
         using rasterio. The resulting raster has 3 bands: `energy`, `drained_area`, and `elevation`.
@@ -559,8 +560,8 @@ class OCN:
             to row 0.
         crs : Any
             The crs for the resulting gtiff, passed to `rasterio.open`
-        path : str or Pathlike
-            The output path for the resulting gtiff file.
+        path : str or Pathlike or rasterio.io.MemoryFile
+            The output path for the resulting gtiff file. Can also be rasterio.io.MemoryFile. 
         unwrap : bool, default True
             If True and the current OCN has periodic boundaries, the
             resulting raster will be transformed so connected grid cells 
@@ -587,7 +588,7 @@ class OCN:
 
         # Write three bands: 1=energy, 2=drained_area, 3=elevation
         with rasterio.open(
-            Path(path),
+            path,
             "w",
             driver="GTiff",
             height=dims[0],
