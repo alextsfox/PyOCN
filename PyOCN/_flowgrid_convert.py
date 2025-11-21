@@ -12,35 +12,71 @@ import networkx as nx
 from ._statushandler import check_status
 from . import _libocn_bindings as _bindings
 
-def to_digraph(c_graph:_bindings.FlowGrid_C) -> nx.DiGraph:
-        """Convert the FlowGrid_C to a NetworkX directed graph."""
+def to_digraph(c_graph:_bindings.FlowGrid_C, gamma: float|None = None, vertical_exaggeration: float = 1.0) -> nx.DiGraph:
+    """Convert the FlowGrid_C to a NetworkX directed graph.
+    
+    Parameters
+    ----------
+    c_graph : _bindings.FlowGrid_C
+        The ctypes object representing the underlying flowgrid
+    gamma : float | None
+        The gamma parameter for fitting the OCN. Needed to compute elevation, slope, and stream length. Default None.
+    vertical_exaggeration : float
+        How much to exaggerate vertical elevation values. Default 1.0 (no exaggeration)
 
-        dag = nx.DiGraph()
-        vert_c = _bindings.Vertex_C()
-        pbar = product(range(c_graph.dims.row), range(c_graph.dims.col))
-        for r, c in pbar:
-            a = _bindings.libocn.fg_cart_to_lin(
-                _bindings.CartPair_C(row=r, col=c), 
-                c_graph.dims
-            )
-            check_status(_bindings.libocn.fg_get_lin(
-                byref(vert_c), 
-                byref(c_graph),
-                a,
-            ))
-            dag.add_node(
-                a, 
-                pos=(r, c), 
-                drained_area=vert_c.drained_area,
-                _adown=vert_c.adown,
-                _edges=vert_c.edges,
-                _downstream=vert_c.downstream,
-                _visited=vert_c.visited,
-            )
-            if vert_c.downstream != _bindings.IS_ROOT:
-                dag.add_edge(a, vert_c.adown)
+    Returns
+    -------
+    nx.DiGraph
         
-        return dag
+    """
+
+    dag = nx.DiGraph()
+    vert_c = _bindings.Vertex_C()
+    pbar = product(range(c_graph.dims.row), range(c_graph.dims.col))
+    for r, c in pbar:
+        a = _bindings.libocn.fg_cart_to_lin(
+            _bindings.CartPair_C(row=r, col=c), 
+            c_graph.dims
+        )
+        check_status(_bindings.libocn.fg_get_lin(
+            byref(vert_c), 
+            byref(c_graph),
+            a,
+        ))
+        dag.add_node(
+            a, 
+            pos=(r, c), 
+            drained_area=vert_c.drained_area,
+            _adown=vert_c.adown,
+            _edges=vert_c.edges,
+            _downstream=vert_c.downstream,
+            _visited=vert_c.visited,
+        )
+        if vert_c.downstream != _bindings.IS_ROOT:
+            dag.add_edge(a, vert_c.adown)
+
+    # compute slope, length, and elevation if gamma is given
+    if gamma is not None:
+        resolution = c_graph.resolution
+        for parent, child in dag.edges:
+            slope = vertical_exaggeration*dag.nodes[parent]["drained_area"]**(gamma - 1)
+            # length of diagonal vs orthogonal edges
+            if dag.nodes[parent]["_downstream"] % 2 == 0:
+                length = resolution
+            else:
+                length = (2**0.5) * resolution
+            dag.edges[parent, child]["slope"] = slope
+            dag.edges[parent, child]["length"] = length
+        for n in list(nx.topological_sort(dag))[::-1]:
+            successors = list(dag.successors(n))
+            if len(successors) == 0:
+                dag.nodes[n]["elevation"] = 0.0
+            for i, child in enumerate(successors):
+                if i > 1: 
+                    raise ValueError("Node has more than one successor, cannot compute elevation.")
+                slope, length = dag.edges[n, child]["slope"], dag.edges[n, child]["length"]
+                dag.nodes[n]["elevation"] = slope * length + dag.nodes[child]["elevation"]
+    return dag
 
 def from_digraph(G: nx.DiGraph, resolution:float=1, verbose:bool=False, validate:bool=True, wrap:bool=False) -> POINTER:
     """

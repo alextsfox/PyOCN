@@ -13,7 +13,7 @@ Note
 
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, Literal
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -104,7 +104,7 @@ def plot_ocn_as_dag(ocn: OCN, attribute: str | None = None, ax=None, norm=None, 
     p = nx.draw_networkx(dag, node_color=node_color, pos=pos, ax=ax, **kwargs)
     return p, ax
 
-def plot_ocn_raster(ocn: OCN, attribute:str='energy', ax=None, **kwargs):
+def plot_ocn_raster(ocn: OCN, attribute:Literal['energy', 'drained_area', 'elevation']='elevation', ax=None, **kwargs):
     """
     Plot a raster image of grid cell energies.
 
@@ -112,8 +112,8 @@ def plot_ocn_raster(ocn: OCN, attribute:str='energy', ax=None, **kwargs):
     ----------
     ocn : OCN
         The OCN instance to plot.
-    attribute : str, default 'energy'
-        The node attribute to visualize (e.g., 'energy', 'drained_area').
+    attribute : str, default 'elevation'
+        The node attribute to visualize ('energy', 'drained_area', 'elevation').
     ax : matplotlib.axes.Axes, optional
         Target axes. If ``None``, a new figure and axes are created.
     **kwargs
@@ -124,28 +124,29 @@ def plot_ocn_raster(ocn: OCN, attribute:str='energy', ax=None, **kwargs):
     -------
     matplotlib.axes.Axes
         The axes containing the rendered image.
+    matplotlib.image.AxesImage
+        The image artist created by ``imshow``.
     """
 
     array = ocn.to_numpy(unwrap=ocn.wrap)
-    if attribute == 'energy':
-        array = array[0]
-    elif attribute == 'drained_area':
-        array = array[1]
-    elif attribute == 'watershed_id':
-        array = array[2]
-        array = np.where(np.isnan(array), np.nan, array)
-        # array = array.astype(np.int32)
-    else:
-        raise ValueError(f"Unknown attribute '{attribute}'. Must be one of 'energy', 'drained_area', or 'watershed_id'.")
+    match attribute:
+        case 'energy':
+            array = array[0]
+        case 'drained_area':
+            array = array[1]
+        case 'elevation':
+            array = array[2]
+        case _:
+            raise ValueError(f"Unknown attribute '{attribute}'. Must be one of 'energy', 'drained_area', or 'elevation'.")
 
     if "cmap" not in kwargs:
-        kwargs["cmap"] = "terrain_r"
+        kwargs["cmap"] = "terrain"
         
     if ax is None:
         _, ax = plt.subplots()
 
-    ax.imshow(array, **kwargs)
-    return ax
+    im = ax.imshow(array, **kwargs)
+    return ax, im
     
 
 def plot_positional_digraph(dag: nx.DiGraph, ax=None, nrows:int|None=None, **kwargs):

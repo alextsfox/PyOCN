@@ -186,7 +186,7 @@ class TestBasicOCN(unittest.TestCase):
             self.assertIn('pos', attrs)
             self.assertIn('drained_area', attrs)
             self.assertIn('energy', attrs)
-            self.assertIn('watershed_id', attrs)
+            self.assertIn('elevation', attrs)
 
     def test_periodic_boundaries(self):
         """Test OCN with periodic boundary conditions."""
