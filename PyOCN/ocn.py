@@ -665,9 +665,9 @@ class OCN:
         -------
         xr.Dataset
          an xarray Dataset with data variables:
-            - `energy_rasters` (np.float64) representing energy at each grid cell
-            - `area_rasters` (np.float64) representing drained area at each grid cell
-            - `elevation_rasters` (np.float64) representing elevation at each grid cell
+            - `energy` (np.float64) representing energy at each grid cell
+            - `area` (np.float64) representing drained area at each grid cell
+            - `elevation` (np.float64) representing elevation at each grid cell
         and coordinates:
             - `y` (float) representing the northing coordinate of each row.
             - `x` (float) representing the easting coordinate of each column.
@@ -710,9 +710,9 @@ class OCN:
 
         return xr.Dataset(
             data_vars={
-                "energy_rasters": (["y", "x"], array_out[0].astype(np.float64)),
-                "area_rasters": (["y", "x"], array_out[1].astype(np.float64)),
-                "elevation_rasters": (["y", "x"], array_out[2].astype(np.float64)),
+                "energy": (["y", "x"], array_out[0].astype(np.float64)),
+                "area": (["y", "x"], array_out[1].astype(np.float64)),
+                "elevation": (["y", "x"], array_out[2].astype(np.float64)),
             },
             coords={
                 "y": ("y", np.linspace(-row_root, (-row_root + (dims[0]-1)), dims[0])*self.resolution),
@@ -879,9 +879,9 @@ class OCN:
 
         and data variables:
 
-        - `energy_rasters` (np.float64) representing energy at each grid cell
-        - `area_rasters` (np.float64) representing drained area at each grid cell
-        - `elevation_rasters` (np.float64) representing elevation at each grid cell
+        - `energy` (np.float64) representing energy at each grid cell
+        - `area` (np.float64) representing drained area at each grid cell
+        - `elevation` (np.float64) representing elevation at each grid cell
 
         If the OCN has a periodic boundary condition, the following changes apply: 
 
@@ -1175,15 +1175,15 @@ class OCN:
         # build an empty dataset
         ds = xr.Dataset(
             data_vars={
-                "energy_rasters": (
+                "energy": (
                     ["iteration", "y", "x"], 
                     np.full(data_shape, np.nan, dtype=np.float64)
                 ),
-                "area_rasters": (
+                "area": (
                     ["iteration", "y", "x"], 
                     np.full(data_shape, np.nan, dtype=np.float64)
                 ),
-                "elevation_rasters": (
+                "elevation": (
                     ["iteration", "y", "x"], 
                     np.full(data_shape, np.nan, dtype=np.float64)
                 ),
@@ -1204,8 +1204,8 @@ class OCN:
 
         # fill in the dataset with the unwrapped arrays, matching coordinates
         for i, ds_i in ds_out_dict.items():
-            ds.energy_rasters.loc[dict(iteration=i, y=ds_i.y, x=ds_i.x)] = ds_i.energy_rasters
-            ds.area_rasters.loc[dict(iteration=i, y=ds_i.y, x=ds_i.x)] = ds_i.area_rasters
-            ds.elevation_rasters.loc[dict(iteration=i, y=ds_i.y, x=ds_i.x)] = ds_i.elevation_rasters
+            ds.energy.loc[dict(iteration=i, y=ds_i.y, x=ds_i.x)] = ds_i.energy
+            ds.area.loc[dict(iteration=i, y=ds_i.y, x=ds_i.x)] = ds_i.area
+            ds.elevation.loc[dict(iteration=i, y=ds_i.y, x=ds_i.x)] = ds_i.elevation
 
         return ds
