@@ -62,6 +62,8 @@ class TestBasicOCN(unittest.TestCase):
         self.assertEqual(ocn.energy, ocn_copy.energy, "Energies do not match.")
         self.assertEqual(ocn.nroots, ocn_copy.nroots, "Number of roots do not match.")
         self.assertEqual(ocn.wrap, ocn_copy.wrap, "Wrap settings do not match.")
+        self.assertEqual(ocn.gamma, ocn_copy.gamma, "Gamma values do not match.")
+        self.assertEqual(ocn.vertical_exaggeration, ocn_copy.vertical_exaggeration, "Vertical exaggeration values do not match.")
         
         # Check that the internal data arrays are equal
         original_array = ocn.to_numpy()
@@ -186,7 +188,7 @@ class TestBasicOCN(unittest.TestCase):
             self.assertIn('pos', attrs)
             self.assertIn('drained_area', attrs)
             self.assertIn('energy', attrs)
-            self.assertIn('watershed_id', attrs)
+            self.assertIn('elevation', attrs)
 
     def test_periodic_boundaries(self):
         """Test OCN with periodic boundary conditions."""

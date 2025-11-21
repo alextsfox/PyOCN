@@ -20,3 +20,13 @@
 
 # 1.3.20251011
 - fixed a bug where optimization did not work for single-outlet networks
+
+# 1.4.20251029
+- Added convenience functions for parallel execution using multiprocessing
+- Minor bugfixes
+
+# 1.5.20251121
+- Added elevation calculation
+- Removed watershed ID attribute from exported rasters (now includes elevation instead). You can still compute watershed IDs on the graph representation if needed.
+- Updated demo notebook
+- Minor bugfixes

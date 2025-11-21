@@ -1,17 +1,17 @@
 import warnings
 import ctypes
-from typing import Any, Callable, TYPE_CHECKING, Union
-from collections.abc import Generator
+from typing import Any, Callable, TYPE_CHECKING
 from os import PathLike
 from numbers import Number
 from pathlib import Path
 
 import networkx as nx 
 import numpy as np
+import rasterio
 from tqdm import tqdm
 
 from ._statushandler import check_status
-from .utils import simulated_annealing_schedule, net_type_to_dag, unwrap_digraph, assign_subwatersheds
+from .utils import simulated_annealing_schedule, net_type_to_dag, unwrap_digraph
 from . import _libocn_bindings as _bindings
 from . import _flowgrid_convert as fgconv
 
@@ -64,7 +64,7 @@ class OCN:
     to_digraph
         Export the current grid to a NetworkX DiGraph.
     to_numpy
-        Export raster arrays (energy, drained area, watershed_id) as numpy arrays.
+        Export raster arrays (energy, drained area, elevation) as numpy arrays.
     to_xarray
         Export raster arrays as an xarray Dataset (requires xarray).
     to_gtiff
@@ -103,6 +103,8 @@ class OCN:
         Updated each time an optimization method is called.
     rng : int
         the current random state of the internal RNG
+    vertical_exaggeration : float
+        Vertical exaggeration factor for the network. Used when computing elevation.
     
 
     Examples
@@ -124,7 +126,7 @@ class OCN:
     ###########################
     #    CONSTRUCTORS         #
     ###########################
-    def __init__(self, dag: nx.DiGraph, resolution: float=1.0, gamma: float = 0.5, random_state=None, verbosity: int = 0, validate:bool=True, wrap : bool = False):
+    def __init__(self, dag: nx.DiGraph, resolution: float=1.0, gamma: float = 0.5, random_state=None, verbosity: int = 0, validate:bool=True, wrap : bool = False, vertical_exaggeration: float = 1.0):
         """
         Construct an :class:`OCN` from a valid NetworkX ``DiGraph``.
 
@@ -156,8 +158,13 @@ class OCN:
 
         self.__history = np.empty((0, 3), dtype=np.float64)
 
+        if not (isinstance(vertical_exaggeration, Number) and vertical_exaggeration >= 0):
+            raise TypeError(f"vertical_exaggeration must be a number >= 0. Got {type(vertical_exaggeration)}")
+        self.vertical_exaggeration = vertical_exaggeration
+
+
     @classmethod
-    def from_net_type(cls, net_type:str, dims:tuple[int, int], resolution:float=1, gamma : float = 0.5, random_state=None, verbosity:int=0, wrap : bool = False):
+    def from_net_type(cls, net_type:str, dims:tuple[int, int], resolution:float=1, gamma : float = 0.5, random_state=None, verbosity:int=0, wrap : bool = False, vertical_exaggeration: float = 1.0):
         """
         Create an :class:`OCN` from a predefined network type and dimensions.
 
@@ -178,6 +185,8 @@ class OCN:
             Verbosity level (0-2) for underlying library output.
         wrap : bool, default False
             If true, allows wrapping around the edges of the grid (toroidal). If false, no wrapping is applied.
+        vertical_exaggeration : float, default 1.0
+            Vertical exaggeration factor for the network. Used when computing elevation.
 
         Returns
         -------
@@ -200,10 +209,10 @@ class OCN:
             print(" Done.")
         
         # no need to validate inputs when using a predefined net_type. Saves time.
-        return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=False, wrap=wrap)
+        return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=False, wrap=wrap, vertical_exaggeration=vertical_exaggeration)
 
     @classmethod
-    def from_digraph(cls, dag: nx.DiGraph, resolution:float=1, gamma=0.5, random_state=None, verbosity: int = 0, wrap: bool = False):
+    def from_digraph(cls, dag: nx.DiGraph, resolution:float=1, gamma=0.5, random_state=None, verbosity: int = 0, wrap: bool = False, vertical_exaggeration: float = 1.0):
         """
         Create an :class:`OCN` from an existing NetworkX ``DiGraph``.
 
@@ -221,6 +230,8 @@ class OCN:
             Verbosity level (0-2) for underlying library output.
         wrap : bool, default False
             If true, allows wrapping around the edges of the grid (toroidal). If false, no wrapping is applied.
+        vertical_exaggeration : float, default 1.0
+            Vertical exaggeration factor for the network. Used when computing elevation.
 
         Returns
         -------
@@ -265,7 +276,7 @@ class OCN:
         >>> plt.show()
         """
 
-        return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=True, wrap=wrap)
+        return cls(dag, resolution, gamma, random_state, verbosity=verbosity, validate=True, wrap=wrap, vertical_exaggeration=vertical_exaggeration)
 
     ###########################
     #    DUNDER METHODS       #
@@ -307,6 +318,7 @@ class OCN:
         if not cpy_p_c_graph:
             raise MemoryError("Failed to copy FlowGrid_C in OCN.__copy__")
         cpy.__p_c_graph = cpy_p_c_graph
+        cpy.vertical_exaggeration = self.vertical_exaggeration
         return cpy
 
     def __deepcopy__(self, memo) -> "OCN":
@@ -499,15 +511,21 @@ class OCN:
         Returns
         -------
         nx.DiGraph
+        # TODO: implement elevation, length, slope, q
             A DAG with the following node attributes per node:
 
             - ``pos``: ``(row, col)`` grid position
             - ``drained_area``: drained area value
             - ``energy``: cumulative energy at the node
-            - ``watershed_id``: integer watershed ID (roots have watershed id = -1)
+            - ``elevation``: elevation at the node
+
+            and the following edge attributes per edge:
+            - ``length``: length of the edge/link
+            - ``slope``: slope of the edge/link
+            - ``q``: the landscape-forming discharge through the edge/link
+
         """
-        dag = fgconv.to_digraph(self.__p_c_graph.contents)
-        assign_subwatersheds(dag)
+        dag = fgconv.to_digraph(self.__p_c_graph.contents, self.gamma, self.vertical_exaggeration)
 
         node_energies = dict()
 
@@ -520,19 +538,18 @@ class OCN:
 
         return dag
     
-    def to_gtiff(self, west:float, north:float, crs: Any, path:str|PathLike, unwrap:bool=True):
+    def to_gtiff(self, west:float, north:float, crs: Any, path:"str|PathLike|rasterio.io.MemoryFile", unwrap:bool=True):
         """
         Export a raster of the current FlowGrid to a GeoTIFF file
-        using rasterio. The resulting raster has 3 bands: `energy`, `drained_area`, and `watershed_id`.
-        The `watershed_id` band contains integer watershed IDs assigned to each node,
-        with root nodes assigned a value of -1. NA values are either np.nan (for energy and drained_area)
-        or -9999 (for watershed_id).
+        using rasterio. The resulting raster has 3 bands: `energy`, `drained_area`, and `elevation`.
 
-        N.B. This uses the :attr:`resolution` attribute to set pixel size in the raster.
+        Caution
+        -------
+        This uses the :attr:`resolution` attribute to set pixel size in the raster and for computing elevation.
         This function does not check for unit compatibility, so it is up to the user
         to ensure the resolution and CRS units match. By default,
-        the resolution is set to 1.0. Using a CRS with degree units in this case
-        would result in a pixel size of 1 degree, which is likely not what you want.
+        the resolution is set to 1.0 units. Using a lat-long (geographic) CRS may give undesireable results.
+        It is recommended to use a linear (projected) CRS with units of length (e.g., meters) for best results.
 
         Parameters
         ----------
@@ -544,8 +561,8 @@ class OCN:
             to row 0.
         crs : Any
             The crs for the resulting gtiff, passed to `rasterio.open`
-        path : str or Pathlike
-            The output path for the resulting gtiff file.
+        path : str or Pathlike or rasterio.io.MemoryFile
+            The output path for the resulting gtiff file. Can also be rasterio.io.MemoryFile. 
         unwrap : bool, default True
             If True and the current OCN has periodic boundaries, the
             resulting raster will be transformed so connected grid cells 
@@ -566,16 +583,13 @@ class OCN:
         dims = array.shape[1:]
         energy = array[0]
         drained_area = array[1]
-        watershed_id = np.where(np.isnan(array[2]), -9999, array[2])
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            watershed_id = watershed_id.astype(np.int32)
+        elevation = array[2]
 
         transform = from_origin(west, north, self.resolution, self.resolution)
 
-        # Write three bands: 1=energy, 2=drained_area, 3=watershed_id
+        # Write three bands: 1=energy, 2=drained_area, 3=elevation
         with rasterio.open(
-            Path(path),
+            path,
             "w",
             driver="GTiff",
             height=dims[0],
@@ -588,19 +602,19 @@ class OCN:
         ) as dst:
             dst.write(energy, 1)
             dst.write(drained_area, 2)
-            dst.write(watershed_id, 3)
+            dst.write(elevation, 3)
             # Band descriptions (nice to have)
             try:
                 dst.set_band_description(1, "energy")
                 dst.set_band_description(2, "drained_area")
-                dst.set_band_description(3, "watershed_id")
+                dst.set_band_description(3, "elevation")
             except Exception:
                 pass
     
     def to_numpy(self, unwrap:bool=True) -> np.ndarray:
         """
-        Export the current FlowGrid to a numpy array with shape (2, rows, cols).
-        Has two channels: 0=energy, 1=drained_area.
+        Export the current FlowGrid to a numpy array with shape (3, rows, cols).
+        Has three channels: 0=energy, 1=drained_area, 2=elevation.
 
         Parameters
         ----------
@@ -622,13 +636,13 @@ class OCN:
 
         energy = np.full(dims, np.nan)
         drained_area = np.full(dims, np.nan)
-        watershed_id = np.full(dims, np.nan)
+        elevation = np.full(dims, np.nan)
         for node in dag.nodes:
             r, c = dag.nodes[node]['pos']
             energy[r, c] = dag.nodes[node]['energy']
             drained_area[r, c] = dag.nodes[node]['drained_area']
-            watershed_id[r, c] = dag.nodes[node]['watershed_id']
-        return np.stack([energy, drained_area, watershed_id], axis=0)
+            elevation[r, c] = dag.nodes[node]['elevation']
+        return np.stack([energy, drained_area, elevation], axis=0)
 
     def to_xarray(self, unwrap:bool=True) -> "xr.Dataset":
         """
@@ -653,9 +667,9 @@ class OCN:
         -------
         xr.Dataset
          an xarray Dataset with data variables:
-            - `energy_rasters` (np.float64) representing energy at each grid cell
-            - `area_rasters` (np.float64) representing drained area at each grid cell
-            - `watershed_id` (np.int32). NA value is -9999. Roots have value -1. Represents the watershed membership ID for each grid cell.
+            - `energy` (np.float64) representing energy at each grid cell
+            - `area` (np.float64) representing drained area at each grid cell
+            - `elevation` (np.float64) representing elevation at each grid cell
         and coordinates:
             - `y` (float) representing the northing coordinate of each row.
             - `x` (float) representing the easting coordinate of each column.
@@ -686,27 +700,21 @@ class OCN:
 
         energy = np.full(dims, np.nan)
         drained_area = np.full(dims, np.nan)
-        watershed_id = np.full(dims, np.nan)
+        elevation = np.full(dims, np.nan)
         for node in dag.nodes:
             r, c = dag.nodes[node]['pos']
             energy[r, c] = dag.nodes[node]['energy']
             drained_area[r, c] = dag.nodes[node]['drained_area']
-            watershed_id[r, c] = dag.nodes[node]['watershed_id']
-        array_out = np.stack([energy, drained_area, watershed_id], axis=0)
+            elevation[r, c] = dag.nodes[node]['elevation']
+        array_out = np.stack([energy, drained_area, elevation], axis=0)
 
         dims = array_out.shape[1:]
 
-        # replace nan with -9999 for watershed_id since integers can't be nan
-        np.nan_to_num(array_out[2], copy=False, nan=-9999)
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            watershed_id = array_out[2].astype(np.int32)
         return xr.Dataset(
             data_vars={
-                "energy_rasters": (["y", "x"], array_out[0].astype(np.float64)),
-                "area_rasters": (["y", "x"], array_out[1].astype(np.float64)),
-                "watershed_id": (["y", "x"], watershed_id),
+                "energy": (["y", "x"], array_out[0].astype(np.float64)),
+                "area": (["y", "x"], array_out[1].astype(np.float64)),
+                "elevation": (["y", "x"], array_out[2].astype(np.float64)),
             },
             coords={
                 "y": ("y", np.linspace(-row_root, (-row_root + (dims[0]-1)), dims[0])*self.resolution),
@@ -873,9 +881,9 @@ class OCN:
 
         and data variables:
 
-        - `energy_rasters` (np.float64) representing energy at each grid cell
-        - `area_rasters` (np.float64) representing drained area at each grid cell
-        - `watershed_id` (np.int32). NA value is -9999. Roots have value -1. Represents the watershed membership ID for each grid cell. The coordinate (0, 0) is the top-left corner of the grid.
+        - `energy` (np.float64) representing energy at each grid cell
+        - `area` (np.float64) representing drained area at each grid cell
+        - `elevation` (np.float64) representing elevation at each grid cell
 
         If the OCN has a periodic boundary condition, the following changes apply: 
 
@@ -1169,17 +1177,17 @@ class OCN:
         # build an empty dataset
         ds = xr.Dataset(
             data_vars={
-                "energy_rasters": (
+                "energy": (
                     ["iteration", "y", "x"], 
                     np.full(data_shape, np.nan, dtype=np.float64)
                 ),
-                "area_rasters": (
+                "area": (
                     ["iteration", "y", "x"], 
                     np.full(data_shape, np.nan, dtype=np.float64)
                 ),
-                "watershed_id": (
+                "elevation": (
                     ["iteration", "y", "x"], 
-                    np.full(data_shape, -9999, dtype=np.int32)
+                    np.full(data_shape, np.nan, dtype=np.float64)
                 ),
             },
             coords={
@@ -1198,8 +1206,8 @@ class OCN:
 
         # fill in the dataset with the unwrapped arrays, matching coordinates
         for i, ds_i in ds_out_dict.items():
-            ds.energy_rasters.loc[dict(iteration=i, y=ds_i.y, x=ds_i.x)] = ds_i.energy_rasters
-            ds.area_rasters.loc[dict(iteration=i, y=ds_i.y, x=ds_i.x)] = ds_i.area_rasters
-            ds.watershed_id.loc[dict(iteration=i, y=ds_i.y, x=ds_i.x)] = ds_i.watershed_id
+            ds.energy.loc[dict(iteration=i, y=ds_i.y, x=ds_i.x)] = ds_i.energy
+            ds.area.loc[dict(iteration=i, y=ds_i.y, x=ds_i.x)] = ds_i.area
+            ds.elevation.loc[dict(iteration=i, y=ds_i.y, x=ds_i.x)] = ds_i.elevation
 
         return ds
