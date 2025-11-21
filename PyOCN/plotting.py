@@ -104,7 +104,7 @@ def plot_ocn_as_dag(ocn: OCN, attribute: str | None = None, ax=None, norm=None, 
     p = nx.draw_networkx(dag, node_color=node_color, pos=pos, ax=ax, **kwargs)
     return p, ax
 
-def plot_ocn_raster(ocn: OCN, attribute:str='energy', ax=None, **kwargs):
+def plot_ocn_raster(ocn: OCN, attribute:str='elevation', ax=None, **kwargs):
     """
     Plot a raster image of grid cell energies.
 
@@ -112,8 +112,8 @@ def plot_ocn_raster(ocn: OCN, attribute:str='energy', ax=None, **kwargs):
     ----------
     ocn : OCN
         The OCN instance to plot.
-    attribute : str, default 'energy'
-        The node attribute to visualize (e.g., 'energy', 'drained_area').
+    attribute : str, default 'elevation'
+        The node attribute to visualize (e.g., 'energy', 'drained_area', 'elevation').
     ax : matplotlib.axes.Axes, optional
         Target axes. If ``None``, a new figure and axes are created.
     **kwargs
