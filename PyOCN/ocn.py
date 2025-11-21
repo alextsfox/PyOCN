@@ -318,6 +318,7 @@ class OCN:
         if not cpy_p_c_graph:
             raise MemoryError("Failed to copy FlowGrid_C in OCN.__copy__")
         cpy.__p_c_graph = cpy_p_c_graph
+        cpy.vertical_exaggeration = self.vertical_exaggeration
         return cpy
 
     def __deepcopy__(self, memo) -> "OCN":
