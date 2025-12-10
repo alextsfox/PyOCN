@@ -38,5 +38,6 @@
 - fixed a bug in convergence detection.
 - improved convergence detection.
 
-# 1.7.20251220
+# NEXT VERSION
+- reduced install requirements
 - minor bugfixes
