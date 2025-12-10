@@ -30,3 +30,10 @@
 - Removed watershed ID attribute from exported rasters (now includes elevation instead). You can still compute watershed IDs on the graph representation if needed.
 - Updated demo notebook
 - Minor bugfixes
+
+# 1.6.20251210
+- more complete documentation
+- minor bugfixes and improvements
+- n_iterations now defaults to an empirical equation that depends on constant_phase and cooling_rate to achieve more reliable convergence.
+- fixed a bug in convergence detection.
+- improved convergence detection.

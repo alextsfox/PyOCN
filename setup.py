@@ -18,12 +18,28 @@ sources = [
 sources = [str(s) for s in sources]
 
 if sys.platform.startswith(("linux", "darwin")):
-    extra_compile_args = ["-O3", "-flto", "-fPIC", "-std=c99", "-Wall", "-pedantic", "-march=native"]
-    extra_link_args = ["-O3", "-flto"]
+    extra_compile_args = [
+        "-O3",
+        "-flto", 
+        "-fPIC", 
+        "-std=c99", 
+        "-Wall", 
+        "-pedantic", 
+        "-march=native"
+    ]
+    extra_link_args = [
+        "-O3",
+        "-flto"
+    ]
     # Link libm for pow() on Unix
     libraries = ["m"]
 elif sys.platform.startswith("win"):
-    extra_compile_args = ["/O2"]
+    extra_compile_args = [
+        "/O2",
+        "/Ot",
+        "/Oi",
+        "/Oy",
+    ]
     extra_link_args = []
     libraries = []
 else:

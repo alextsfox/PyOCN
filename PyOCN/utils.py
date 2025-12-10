@@ -10,10 +10,11 @@ from itertools import product
 import os
 from typing import Any, Literal, Callable, TYPE_CHECKING, Union
 from numbers import Number
+from functools import partial
+
 import networkx as nx
 import numpy as np
 from tqdm import tqdm
-from functools import partial
 
 import PyOCN._libocn_bindings as _bindings
 from PyOCN._statushandler import check_status
@@ -50,11 +51,11 @@ def net_type_to_dag(net_type:Literal["I", "H", "V", "E"], dims:tuple, pbar: bool
           ::
 
               O  O  O  O  O
-               \  \ | /  /
+               \\  \\ | /  /
               O  O  O  O  O
-               \  \ | /  /
+               \\  \\ | /  /
               O  O  O  O  O
-               \  \ | /  /
+               \\  \\ | /  /
               O--O--X--O--O
 
         - "H":
@@ -192,7 +193,7 @@ def simulated_annealing_schedule(dims: tuple[int, int],E0: float,constant_phase:
 
     .. math::
 
-        T_i = E_0 \exp\left(-\\frac{r\cdot(i - n_0)}{N}\\right),
+        T_i = E_0 \\exp\\left(-\\frac{r\\cdot(i - n_0)}{N}\\right),
 
     where ``E0`` is the initial energy, ``n0`` is the number of iterations in
     the constant phase, ``r`` is the cooling rate,and ``N = rows * cols``.
