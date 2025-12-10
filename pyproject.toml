@@ -14,13 +14,13 @@ dependencies = [
   "numpy>=1.24",  # should check the actual min
   "networkx>=3.1",  # should check the actual min
   "tqdm>=4.44",  # should check the actual min
-  "matplotlib>=3.5",  # should check the actual min
 ]
 
 [project.optional-dependencies]
 raster = [
   "rasterio>=1.3",
   "xarray>=2024.2",  
+  "matplotlib>=3.5",  # should check the actual min
 ]
 
 [project.urls]

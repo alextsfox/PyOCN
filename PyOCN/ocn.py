@@ -7,7 +7,6 @@ from pathlib import Path
 
 import networkx as nx 
 import numpy as np
-import rasterio
 from tqdm import tqdm
 
 from ._statushandler import check_status
@@ -17,6 +16,7 @@ from . import _flowgrid_convert as fgconv
 
 if TYPE_CHECKING:
     import xarray as xr
+    import rasterio
 
 """
 High-level Optimized Channel Network (OCN) interface.
@@ -95,7 +95,7 @@ class OCN:
     gamma : float
         Exponent in the energy model.
     verbosity : int
-        Verbosity level for underlying library output (0-2).
+            Verbosity level (0-2). 0 is silent, 1 prints high-level progress messages, 2 prints detailed logging messages. Can be overridden in methods that support it.
     wrap : bool
         If true, enables periodic boundary conditions on the FlowGrid (read-only property).
     history : np.ndarray
@@ -149,7 +149,7 @@ class OCN:
         self.__p_c_graph = fgconv.from_digraph(  # does most of the work 
             dag, 
             resolution, 
-            verbose=(verbosity > 1), 
+            verbose=(verbosity == 2), 
             validate=validate, 
             wrap=wrap
         )
@@ -181,8 +181,8 @@ class OCN:
             Exponent in the energy model.
         random_state : int | numpy.random.Generator | None, optional
             Seed or generator for RNG seeding.
-        verbosity : int, default 0
-            Verbosity level (0-2) for underlying library output.
+        verbosity : int
+            Verbosity level (0-2). 0 is silent, 1 prints high-level progress messages, 2 prints detailed logging messages. Can be overridden in methods that support it.
         wrap : bool, default False
             If true, allows wrapping around the edges of the grid (toroidal). If false, no wrapping is applied.
         vertical_exaggeration : float, default 1.0
@@ -202,10 +202,10 @@ class OCN:
         ):
             raise ValueError(f"dims must be a tuple of two positive integers, got {dims}")
         
-        if verbosity == 1:
+        if verbosity == 2:
             print(f"Creating {net_type} network DiGraph with dimensions {dims}...", end="")
         dag = net_type_to_dag(net_type, dims)
-        if verbosity == 1:
+        if verbosity == 2:
             print(" Done.")
         
         # no need to validate inputs when using a predefined net_type. Saves time.
@@ -226,8 +226,8 @@ class OCN:
             Exponent in the energy model.
         random_state : int | numpy.random.Generator | None, optional
             Seed or generator for RNG seeding.
-        verbosity : int, default 0
-            Verbosity level (0-2) for underlying library output.
+        verbosity : int
+            Verbosity level (0-2). 0 is silent, 1 prints high-level progress messages, 2 prints detailed logging messages. Can be overridden in methods that support it.
         wrap : bool, default False
             If true, allows wrapping around the edges of the grid (toroidal). If false, no wrapping is applied.
         vertical_exaggeration : float, default 1.0
@@ -386,6 +386,8 @@ class OCN:
 
     @property
     def history(self) -> np.ndarray:
+        """The optimization history as a numpy array of shape (n_iterations, 3).
+        Each row corresponds to an iteration. The columns are iteration index, energy, and temperature."""
         return self.__history
 
     ###########################
@@ -799,7 +801,7 @@ class OCN:
         n_iterations:int=None,
         pbar:bool=False,
         array_reports:int=0,
-        tol:float=None,
+        tol:float | None=None,
         max_iterations_per_loop=10_000,
         unwrap:bool=True,
         calculate_full_energy:bool=False) -> "xr.Dataset | None":
@@ -828,8 +830,9 @@ class OCN:
             from the initial temperature. A value of 1.0 means the temperature is held
             constant for the entire optimization.
         n_iterations : int, optional
-            Total number of iterations. Defaults to ``40 * rows * cols``.
-            Always at least ``energy_reports * 10`` (this should only matter for
+            defaults to ``int((63 * exp(-0.448 * cooling_rate)) * rows * cols * (1 + constant_phase))``, which was empirically found to work well across a range of cooling rates.
+            When ``constant_phase = 1`` and ``constant_phase = 0``, this reduces to ``40 * rows * cols``.
+            Clamped to at least ``energy_reports * 10`` (this should only matter for
             extremely small grids, where ``rows * cols < 256``).
         pbar : bool, default True
             Whether to display a progress bar.
@@ -838,11 +841,10 @@ class OCN:
             If 0 (default), returns None. If >0, returns an xarray.Dataset
             containing the state of the FlowGrid at approximately evenly spaced intervals
             throughout the optimization, including the initial and final states. Requires xarray to be installed. See notes on xarray output for details.
-        tol : float, optional
-            If provided, optimization will stop early if the relative change
-            in energy between reports is less than `tol`. Must be positive.
-            If None (default), no early stopping is performed.
-            Recommended values are in the range 1e-4 to 1e-6.
+        tol : float | None, optional
+            If provided, optimization will stop early if the average relative energy reduction per iteration is less than `tol` for two consecutive checks. Must be positive.
+            If None, no early stopping is performed.
+            Recommended values are in the range 1e-9 to 1e-6 per iteration. A good default is 3.2e-8.
         max_iterations_per_loop: int, optional
             If provided, the number of iterations steps to perform in each "chunk"
             of optimization. Energy and output arrays can be reported no more often
@@ -899,31 +901,31 @@ class OCN:
         The proposal is accepted with the probability
         
         .. math::
-            P(\\text{accept}) = e^{-\Delta E / T},
+            P(\\text{accept}) = e^{-\\Delta E / T},
 
-        where :math:`\Delta E` is the change in energy the change would cause 
+        where :math:`\\Delta E` is the change in energy the change would cause 
         and :math:`T` is the temperature of the network.
 
         The total energy of the system is computed from the drained areas of each grid cell :math:`k` as
 
         .. math::
-            E = \sum_k A_k^\gamma
+            E = \\sum_k A_k^\\gamma
 
         The temperature of the network is governed by a cooling schedule, which is a function of iteration index.
         
-        Note that when :math:`\Delta E < 0`, the move is always accepted.
+        Note that when :math:`\\Delta E < 0`, the move is always accepted.
 
         The cooling schedule used by this method is a piecewise function of iteration index:
         
         .. math::
             T(i) = \\begin{cases}
-                E_0 & i < C N \\
-                E_0 \cdot e^{\;i - C N} & i \ge C N
-            \end{cases}
+                E_0 & i < C N \\\\
+                E_0 \\cdot e^{i - C N} & i \\ge C N
+            \\end{cases}
 
         where :math:`E_0` is the initial energy, :math:`N` is the total number
         of iterations, and :math:`C` is ``constant_phase``. Decreasing-energy
-        moves (:math:`\Delta E < 0`) are always accepted.
+        moves (:math:`\\Delta E < 0`) are always accepted.
 
         Alternative cooling schedules can be implemented using :meth:`fit_custom_cooling`.
         """
@@ -935,7 +937,7 @@ class OCN:
         if cooling_rate is None:
             cooling_rate = 1.0
         if n_iterations is None:
-            n_iterations = 40 * self.dims[0] * self.dims[1]
+            n_iterations = int((63 * np.exp(-0.448 * cooling_rate)) * self.dims[0] * self.dims[1] * (1 + constant_phase))
 
         # create a cooling schedule from arguments
         cooling_func = simulated_annealing_schedule(
@@ -964,7 +966,7 @@ class OCN:
         iteration_start:int=0,
         pbar:bool=False,
         array_reports:int=0,
-        tol:float=None,
+        tol:float | None=None,
         max_iterations_per_loop=10_000,
         unwrap:bool=True,
         calculate_full_energy:bool=False,
@@ -1068,6 +1070,8 @@ class OCN:
             disable=not (pbar or self.verbosity >= 1)
         )
         
+        consecutive_convergence_required = 2
+        consecutive_convergence_tests_passed = 0
         while completed_iterations < n_iterations:
             iterations_this_loop = min(max_iterations_per_loop, n_iterations - completed_iterations)
             anneal_buf[:iterations_this_loop] = cooling_func(
@@ -1110,35 +1114,37 @@ class OCN:
                 END = '\033[0m'
                 T_over_E = anneal_buf[iterations_this_loop - 1]/e_old*100
                 ToE_str = f"{int(np.floor(T_over_E)):02d}.{int((T_over_E - np.floor(T_over_E))*100):02d}%"
-                de_over_E = (e_new - e_old)/e_old*100
-
+                de_over_E = (e_new - e_old)/e_old / iterations_this_loop
                 dEoE_sign = '+' if de_over_E >= 0 else '-'
-                dEoE_integer_part = int(np.floor(np.abs(de_over_E)))
-                dEoE_fractional_part = int((np.abs(de_over_E) - dEoE_integer_part)*100)
-                dEoE_str = f"{dEoE_sign}{dEoE_integer_part:02d}.{dEoE_fractional_part:02d}%"
+                dEoE_str = f"{dEoE_sign}{np.abs(de_over_E):.0e}"
+                
                 if T_over_E > 50: ToE_str = RED + ToE_str + END
                 elif T_over_E > 5: ToE_str = YELLOW + ToE_str + END
                 else: ToE_str = CYAN + ToE_str + END
-                if de_over_E > 1: dEoE_str = RED + dEoE_str + END
-                elif de_over_E > -1: dEoE_str = YELLOW + dEoE_str + END
+                if de_over_E > 1e-7: dEoE_str = RED + dEoE_str + END
+                elif de_over_E > -1e-7: dEoE_str = YELLOW + dEoE_str + END
                 else: dEoE_str = CYAN + dEoE_str + END
 
                 pbar.set_postfix({
                     "E": f"{self.energy:.1e}", 
                     "T/E": ToE_str,
-                    "ΔE/E": dEoE_str,
+                    # "ΔE/E/iter": dEoE_str,
+                    "ΔE/E/iter": dEoE_str,
                 })
                 pbar.update(iterations_this_loop)
 
             # check for convergence if requested
-            if (
-                (tol is not None) 
-                and (e_new <= e_old) 
-                and (abs((e_old - e_new)/e_old) if e_old > 0 else np.inf < tol)
-            ):
-                if self.verbosity > 1:
-                    print("Convergence reached, stopping optimization.")
-                break
+            can_check_convergence = (tol is not None) and (completed_iterations >= 0.333 * n_iterations)
+            improved_score = e_new <= e_old
+            relative_improvement_per_iteration = abs((e_old - e_new) / e_old)/iterations_this_loop if e_old > 0 else np.inf
+            if can_check_convergence and improved_score and (relative_improvement_per_iteration < tol):
+                consecutive_convergence_tests_passed += 1
+                if consecutive_convergence_tests_passed >= consecutive_convergence_required:
+                    if self.verbosity >= 1:
+                        print("Convergence reached, stopping optimization.")
+                    break
+            else:
+                consecutive_convergence_tests_passed = 0
         
         pbar.close()
         

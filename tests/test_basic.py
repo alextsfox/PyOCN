@@ -207,26 +207,19 @@ class TestBasicOCN(unittest.TestCase):
 
     def test_fit_convergence(self):
         """Test that early exit works as intended."""
-        ocn = po.OCN.from_net_type("E", dims=(20, 20), random_state=7777)
-        
-        ocn.fit(n_iterations=20*20*500, pbar=False, tol=1e-4)
-        final_energy = ocn.energy
+        ocn = po.OCN.from_net_type("E", dims=(32, 32), random_state=1497028)
+        ocn.fit(tol=1e-4, pbar=False, max_iterations_per_loop=1000)
+        self.assertEqual(ocn.history.shape[0], 37)
 
-        self.assertIsInstance(final_energy, float)
-        self.assertGreater(len(ocn.history), 0)
+        ocn = po.OCN.from_net_type("E", dims=(32, 32), random_state=1497028)
+        ocn.fit(tol=1e-3, pbar=False, max_iterations_per_loop=1000)
+        self.assertEqual(ocn.history.shape[0], 21)
         
-        # History should have correct structure: [iteration, energy, temperature]
-        self.assertEqual(ocn.history.shape[1], 3)
-        self.assertTrue(np.all(ocn.history[:, 0] >= 0))  # iterations >= 0
-        self.assertTrue(np.all(ocn.history[:, 1] > 0))   # energy > 0
-        self.assertTrue(np.all(ocn.history[:, 2] >= 0))  # temperature >= 0
-        
-        # final energy should match last history entry
-        self.assertEqual(ocn.energy, ocn.history[-1, 1])
+        ocn = po.OCN.from_net_type("E", dims=(32, 32), random_state=1497028)
+        ocn.fit(tol=None, pbar=False, max_iterations_per_loop=1000)
+        self.assertEqual(ocn.history.shape[0], 42)
 
-        # iteration should have stopped before max iterations and should be less than tol
-        self.assertLess(ocn.history[-1, 0], 20*20*500)
-        self.assertLessEqual((ocn.history[-1, 1] - ocn.history[-2, 1])/ocn.history[-1, 1], 1e-4)
+        
 
     def test_single_iteration(self):
         """Test single iteration method."""

@@ -16,13 +16,19 @@ from __future__ import annotations
 from typing import Any, TYPE_CHECKING, Literal
 
 import numpy as np
-import matplotlib.pyplot as plt
 import networkx as nx
 import warnings
+import matplotlib.pyplot as plt
 
 if TYPE_CHECKING:
     from .ocn import OCN
 from .utils import unwrap_digraph
+
+def _get_plt():
+    import importlib
+    if not importlib.util.find_spec("matplotlib"):
+        raise ImportError("matplotlib is required for plotting functions.")
+    return importlib.import_module("matplotlib.pyplot")
 
 def _pos_to_xy(dag: nx.DiGraph, nrows=None) -> dict[Any, tuple[float, float]]:
     """
@@ -88,6 +94,7 @@ def plot_ocn_as_dag(ocn: OCN, attribute: str | None = None, ax=None, norm=None, 
     pos = _pos_to_xy(dag, nrows=ocn.dims[0])
 
     if ax is None:
+        plt = _get_plt()
         _, ax = plt.subplots()
 
     node_color = "C0"
@@ -143,6 +150,7 @@ def plot_ocn_raster(ocn: OCN, attribute:Literal['energy', 'drained_area', 'eleva
         kwargs["cmap"] = "terrain"
         
     if ax is None:
+        plt = _get_plt()
         _, ax = plt.subplots()
 
     im = ax.imshow(array, **kwargs)
@@ -176,6 +184,7 @@ def plot_positional_digraph(dag: nx.DiGraph, ax=None, nrows:int|None=None, **kwa
     pos = _pos_to_xy(dag, nrows)
 
     if ax is None:
+        plt = _get_plt()
         _, ax = plt.subplots()
 
     p = nx.draw_networkx(dag, pos=pos, ax=ax, **kwargs)
