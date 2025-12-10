@@ -18,7 +18,6 @@ from typing import Any, TYPE_CHECKING, Literal
 import numpy as np
 import networkx as nx
 import warnings
-import matplotlib.pyplot as plt
 
 if TYPE_CHECKING:
     from .ocn import OCN
