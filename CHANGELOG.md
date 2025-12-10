@@ -31,7 +31,7 @@
 - Updated demo notebook
 - Minor bugfixes
 
-# NEXT VERSION
+# 1.6.20251210
 - more complete documentation
 - minor bugfixes and improvements
 - n_iterations now defaults to an empirical equation that depends on constant_phase and cooling_rate to achieve more reliable convergence.
