@@ -208,18 +208,16 @@ class TestBasicOCN(unittest.TestCase):
     def test_fit_convergence(self):
         """Test that early exit works as intended."""
         ocn = po.OCN.from_net_type("E", dims=(32, 32), random_state=1497028)
-        ocn.fit(tol=1e-4, pbar=False, max_iterations_per_loop=1000)
+        ocn.fit(tol=1e-4, pbar=False, max_iterations_per_loop=1000, n_iterations=32*32*100)
         self.assertEqual(ocn.history.shape[0], 37)
 
         ocn = po.OCN.from_net_type("E", dims=(32, 32), random_state=1497028)
-        ocn.fit(tol=1e-3, pbar=False, max_iterations_per_loop=1000)
-        self.assertEqual(ocn.history.shape[0], 21)
-        
-        ocn = po.OCN.from_net_type("E", dims=(32, 32), random_state=1497028)
-        ocn.fit(tol=None, pbar=False, max_iterations_per_loop=1000)
-        self.assertEqual(ocn.history.shape[0], 42)
+        ocn.fit(tol=1e-8, pbar=False, max_iterations_per_loop=1000, n_iterations=32*32*100)
+        self.assertEqual(ocn.history.shape[0], 51)
 
-        
+        ocn = po.OCN.from_net_type("E", dims=(32, 32), random_state=1497028)
+        ocn.fit(tol=None, pbar=False, max_iterations_per_loop=1000, n_iterations=32*32*100)
+        self.assertEqual(ocn.history.shape[0], 104)
 
     def test_single_iteration(self):
         """Test single iteration method."""
