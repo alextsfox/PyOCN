@@ -39,4 +39,4 @@ python:
    - method: pip
      path: .
      extra_requirements:
-       - raster  # if you want optional deps available during doc build
+       - analysis  # if you want optional deps available during doc build

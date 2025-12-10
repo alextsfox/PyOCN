@@ -37,3 +37,6 @@
 - n_iterations now defaults to an empirical equation that depends on constant_phase and cooling_rate to achieve more reliable convergence.
 - fixed a bug in convergence detection.
 - improved convergence detection.
+
+# 1.7.20251220
+- minor bugfixes

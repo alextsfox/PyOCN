@@ -16,13 +16,13 @@ Install from PyPI:
 
 .. code-block:: bash
 
-   pip install pyocn
+   pip install PyOCN
 
 Or with optional raster and xarray support:
 
 .. code-block:: bash
 
-   pip install pyocn[raster]
+   pip install "PyOCN[analysis]"
 
 Quick Start
 ===========
