@@ -56,10 +56,10 @@ static inline double compute_energy(FlowGrid *G, double gamma){
     for (linidx_t i = 0; i < (linidx_t)G->dims.row * (linidx_t)G->dims.col; i++){
         energy += pow(G->vertices[i].drained_area, gamma);
     }
-    return energy;
 }
 
 double ocn_compute_energy(FlowGrid *G, double gamma){
+double ocn_compute_energy_density(FlowGrid *G, double gamma){
     return compute_energy(G, gamma);
 }
 
