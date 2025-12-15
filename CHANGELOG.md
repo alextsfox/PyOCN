@@ -39,5 +39,8 @@
 - improved convergence detection.
 
 # NEXT VERSION
+- further improvements to convergence detection
+- better default values for optimization parameters
 - reduced install requirements
 - minor bugfixes
+- improved documentation

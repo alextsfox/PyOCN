@@ -848,7 +848,7 @@ class OCN:
         tol : float | None, optional
             If provided, optimization will stop early if the average relative energy reduction per iteration is less than `tol` for two consecutive checks. Must be positive.
             If None, no early stopping is performed.
-            Recommended values are in the range 1e-9 to 1e-6 per iteration. A good default is 3.2e-8.
+            Recommended values are in the range 1e-8 to 1e-6 per iteration. ``tol = 3.2e-8`` should give similar behavior to the default.
         max_iterations_per_loop: int, optional
             If provided, the number of iterations steps to perform in each "chunk"
             of optimization. Energy and output arrays can be reported no more often
