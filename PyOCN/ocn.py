@@ -2,7 +2,7 @@ import warnings
 import ctypes
 from typing import Any, Callable, TYPE_CHECKING
 from os import PathLike
-from numbers import Number
+from numbers import Number, Integral
 from pathlib import Path
 
 import networkx as nx 
@@ -198,9 +198,10 @@ class OCN:
             raise TypeError(f"dims must be a tuple of two positive integers, got {type(dims)}")
         if not (
             len(dims) == 2 
-            and all(isinstance(d, int) and d > 0 for d in dims)
+            and all(isinstance(d, Integral) and d > 0 for d in dims)
         ):
             raise ValueError(f"dims must be a tuple of two positive integers, got {dims}")
+        dims = (int(dims[0]), int(dims[1]))
         
         if verbosity == 2:
             print(f"Creating {net_type} network DiGraph with dimensions {dims}...", end="")
@@ -830,8 +831,11 @@ class OCN:
             from the initial temperature. A value of 1.0 means the temperature is held
             constant for the entire optimization.
         n_iterations : int, optional
-            defaults to ``int((63 * exp(-0.448 * cooling_rate)) * rows * cols * (1 + constant_phase))``, which was empirically found to work well across a range of cooling rates.
-            When ``constant_phase = 1`` and ``constant_phase = 0``, this reduces to ``40 * rows * cols``.
+            defaults to a value which was empirically found to work well across a range of cooling rates.
+            Accounts for the grid size, cooling rate, and constant phase. 
+            When ``cooling_rate >= 0.5``, the equation is ``n_iterations = (185.3264 * (self.dims[0]*self.dims[1])**0.8375) * (1 + constant_phase)``.
+            When ``cooling_rate < 0.5``, the equation is ``n_iterations = 1.33 * (185.3264 * (self.dims[0]*self.dims[1])**0.8375) * (1 + constant_phase)``.
+            This is similar to the recommendation in Carraro et al (2020) (``dims[0] * dims[1] * 40``), but adjusted based on empirical test results.
             Clamped to at least ``energy_reports * 10`` (this should only matter for
             extremely small grids, where ``rows * cols < 256``).
         pbar : bool, default True
@@ -937,7 +941,10 @@ class OCN:
         if cooling_rate is None:
             cooling_rate = 1.0
         if n_iterations is None:
-            n_iterations = int((63 * np.exp(-0.448 * cooling_rate)) * self.dims[0] * self.dims[1] * (1 + constant_phase))
+            n_iterations_base = 185.3264 * (self.dims[0]*self.dims[1])**0.8375
+            n_iterations_cr_adjusted = n_iterations_base if cooling_rate >= 0.5 else 1.33 * n_iterations_base
+            n_iterations_cp_adjusted = n_iterations_cr_adjusted * (1 + constant_phase)
+            n_iterations = int(n_iterations_cp_adjusted)
 
         # create a cooling schedule from arguments
         cooling_func = simulated_annealing_schedule(
@@ -1070,7 +1077,7 @@ class OCN:
             disable=not (pbar or self.verbosity >= 1)
         )
         
-        consecutive_convergence_required = 2
+        consecutive_convergence_required = 3
         consecutive_convergence_tests_passed = 0
         while completed_iterations < n_iterations:
             iterations_this_loop = min(max_iterations_per_loop, n_iterations - completed_iterations)
@@ -1134,7 +1141,7 @@ class OCN:
                 pbar.update(iterations_this_loop)
 
             # check for convergence if requested
-            can_check_convergence = (tol is not None) and (completed_iterations >= 0.333 * n_iterations)
+            can_check_convergence = tol is not None
             improved_score = e_new <= e_old
             relative_improvement_per_iteration = abs((e_old - e_new) / e_old)/iterations_this_loop if e_old > 0 else np.inf
             if can_check_convergence and improved_score and (relative_improvement_per_iteration < tol):
